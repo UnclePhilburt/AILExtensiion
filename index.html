@@ -13,6 +13,17 @@
         <p id="status">Waiting for lead...</p>
       </header>
 
+      <section class="bridgeSetup" id="bridgeSetup">
+        <label for="bridgeUrl">Bridge URL</label>
+        <input id="bridgeUrl" placeholder="http://192.168.1.169:8787">
+        <label for="bridgeToken">Token</label>
+        <input id="bridgeToken" placeholder="Token from bridge server">
+        <button id="saveBridge" type="button">Connect</button>
+        <p>
+          The hosted page is only the UI shell. Live lead data still comes from your local bridge or a future approved backend.
+        </p>
+      </section>
+
       <section id="leadCard" class="leadCard empty">
         Send a lead from the Brave extension.
       </section>
@@ -32,4 +43,3 @@
     <script src="app.js"></script>
   </body>
 </html>
-
