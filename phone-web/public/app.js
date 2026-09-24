@@ -10,25 +10,26 @@ const savedBridgeToken = localStorage.getItem("impact.bridgeToken") || "";
 bridgeUrlInput.value = params.get("bridge") || savedBridgeUrl || location.origin;
 bridgeTokenInput.value = params.get("token") || savedBridgeToken || "";
 
+persistBridgeSettings();
+
 saveBridgeButton.addEventListener("click", () => {
   localStorage.setItem("impact.bridgeUrl", bridgeUrlInput.value.trim());
   localStorage.setItem("impact.bridgeToken", bridgeTokenInput.value.trim());
   refreshLead();
 });
 
-if (!bridgeTokenInput.value.trim()) {
-  statusEl.textContent = "Missing bridge token in URL.";
-} else {
-  refreshLead();
-  setInterval(refreshLead, 2500);
-}
+bridgeUrlInput.addEventListener("input", persistBridgeSettings);
+bridgeTokenInput.addEventListener("input", persistBridgeSettings);
+
+refreshLead();
+setInterval(refreshLead, 2500);
 
 async function refreshLead() {
   try {
     const bridgeUrl = bridgeUrlInput.value.trim().replace(/\/$/, "");
     const token = bridgeTokenInput.value.trim();
     if (!bridgeUrl || !token) {
-      statusEl.textContent = "Bridge URL and token required.";
+      statusEl.textContent = "Bridge URL and token required once. Then updates are automatic.";
       return;
     }
 
@@ -44,6 +45,11 @@ async function refreshLead() {
   } catch (error) {
     statusEl.textContent = error.message;
   }
+}
+
+function persistBridgeSettings() {
+  localStorage.setItem("impact.bridgeUrl", bridgeUrlInput.value.trim());
+  localStorage.setItem("impact.bridgeToken", bridgeTokenInput.value.trim());
 }
 
 function renderLead(lead, updatedAt) {
