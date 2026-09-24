@@ -15,8 +15,14 @@ let displayedLeadKey = "";
 
 const savedBridgeUrl = localStorage.getItem("impact.bridgeUrl") || "";
 const savedBridgeToken = localStorage.getItem("impact.bridgeToken") || "";
-bridgeUrlInput.value = params.get("bridge") || savedBridgeUrl || location.origin;
-bridgeTokenInput.value = params.get("token") || savedBridgeToken || "";
+const localToken = document.querySelector('meta[name="impact-bridge-token"]')?.content;
+bridgeUrlInput.value = localToken ? location.origin : params.get("bridge") || savedBridgeUrl || location.origin;
+bridgeTokenInput.value = localToken ? decodeURIComponent(localToken) : params.get("token") || savedBridgeToken || "";
+if (localToken) {
+  document.querySelector("#bridgeSetup").hidden = true;
+  // Remove obsolete pairing parameters from bookmarks copied from this page.
+  history.replaceState(null, "", location.pathname);
+}
 
 persistBridgeSettings();
 
