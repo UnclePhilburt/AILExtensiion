@@ -93,7 +93,7 @@ async function init() {
   selectorConfigInput.value = JSON.stringify(result[STORAGE_KEYS.selectorConfig] || DEFAULT_SELECTOR_CONFIG, null, 2);
   bridgeUrlInput.value = result[STORAGE_KEYS.bridgeUrl] || "http://127.0.0.1:8787";
   bridgeTokenInput.value = result[STORAGE_KEYS.bridgeToken] || "";
-  connectionMode.value = result['impact.connectionMode'] || (bridgeTokenInput.value ? 'local' : 'cloud');
+  connectionMode.value = result['impact.connectionMode'] || 'cloud';
   document.querySelector('#localSettings').hidden = connectionMode.value !== 'local';
   autoPublishInput.checked = result[STORAGE_KEYS.autoPublish] !== false;
   lastPickedOutput.textContent = result["impact.lastPickedElement"]
@@ -123,6 +123,8 @@ async function saveOptions() {
 }
 
 async function resetDefaults() {
+  connectionMode.value = 'cloud';
+  document.querySelector('#localSettings').hidden = true;
   allowedOriginsInput.value = DEFAULT_ALLOWED_ORIGINS.join("\n");
   selectorConfigInput.value = JSON.stringify(DEFAULT_SELECTOR_CONFIG, null, 2);
   bridgeUrlInput.value = "http://127.0.0.1:8787";

@@ -188,9 +188,9 @@ server.listen(PORT, HOST, () => {
   console.log("IMPACT phone bridge running.");
   console.log(`Bridge URL for extension Options: ${localBridge}`);
   console.log(`Bridge token for extension Options: ${TOKEN}`);
-  console.log("Phone URLs on this Wi-Fi:");
+  console.log("Optional Local mode phone URLs on this Wi-Fi (choose Local in extension Options):");
   for (const address of getLanAddresses()) {
-    console.log(`  http://${address}:${PORT}/`);
+    console.log(`  http://${address}:${PORT}/?mode=local`);
   }
 });
 }

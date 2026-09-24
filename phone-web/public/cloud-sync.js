@@ -3,11 +3,10 @@ import { client } from './auth-runtime.js';
 export const PHONE_URL = 'https://unclephilburt.github.io/AILExtensiion/';
 export async function cloudEnabled() {
   if (globalThis.chrome?.runtime?.id) {
-    const settings = await chrome.storage.local.get(['impact.connectionMode','impact.bridgeToken']);
-    // Preserve existing local installations until the user switches in Options.
-    return settings['impact.connectionMode'] ? settings['impact.connectionMode'] === 'cloud' : !settings['impact.bridgeToken'];
+    const settings = await chrome.storage.local.get('impact.connectionMode');
+    return settings['impact.connectionMode'] !== 'local';
   }
-  return !document.querySelector('meta[name="impact-bridge-token"]') && !new URLSearchParams(location.search).has('bridge');
+  return new URLSearchParams(location.search).get('mode') !== 'local';
 }
 export async function cloudUser() {
   const { data, error } = await client.auth.getSession();

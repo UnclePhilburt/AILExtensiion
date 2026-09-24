@@ -25,6 +25,9 @@ let busy = false;
 
 document.querySelector('#back').href = isExtension ? '../options/options.html' : './';
 document.querySelector('#continue').href = isExtension ? '../options/options.html' : './';
+if (!isExtension && new URLSearchParams(location.search).get('mode') === 'local') {
+  document.querySelector('#back').href = document.querySelector('#continue').href = './?mode=local';
+}
 function say(text, error = false) { message.textContent = text; message.classList.toggle('error', error); }
 function render(session) {
   const signedIn = Boolean(session?.user);

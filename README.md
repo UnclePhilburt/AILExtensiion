@@ -22,9 +22,10 @@ files in the same folder and clicking Reload in the browser's extensions page.
 
 ## Existing local installation
 
-Local bridge settings are preserved. Run `Start Phone Companion.cmd` on Windows
-with Node.js installed, use the printed phone URL on the same network, and sign
-in on both devices. In Options choose Cloud only after database setup is done.
+Cloud is the default on both devices. To deliberately use Local mode, select it
+in extension Options, run `Start Phone Companion.cmd` on Windows with Node.js
+installed, and open the printed local phone URL on the same network. Sign in
+on both devices. Old bridge tokens alone do not switch the app back to Local.
 For debugging, use Options > Debug tools.
 
 ## Data and access

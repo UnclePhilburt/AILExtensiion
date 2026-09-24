@@ -34,8 +34,9 @@ No admin/service-role key is needed in the extension or website.
 
 ## Verify before inviting the team
 
-- Load the new extension. Existing installations: Options > Connection method
-  > Cloud > Save, then refresh IMPACT. New installations default to Cloud.
+- Reload the extension, refresh IMPACT and open the hosted phone page. Both
+  default to Cloud, including installations with an old bridge token. Only an
+  explicitly saved Local choice overrides the extension default.
 - Sign in on the hosted phone page using the same approved account.
 - First test with a sample lead/workflow in an authorized test environment.
   Verify live lead delivery, navigation, phone call registration and results.
@@ -61,7 +62,8 @@ No admin/service-role key is needed in the extension or website.
   membership at least every five seconds. Also remove/revoke Auth access as needed.
 - To update, build and send the same Get Started URL; users replace the existing
   extension folder contents and click Reload. Keep the folder path the same.
-- Existing local mode remains available if cloud setup is not ready.
+- Local mode remains available explicitly: choose Local in extension Options
+  and use the computer bridge URL with `?mode=local` on the phone.
 - Customer data is stored in Supabase in Cloud mode. Review project backups,
   retention and organization requirements before team rollout.
 

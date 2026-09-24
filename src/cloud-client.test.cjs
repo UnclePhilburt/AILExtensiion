@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-test('cloud mode preserves local installs and refuses offline phone commands', async () => {
+test('cloud is the default even with an old bridge token and refuses offline phone commands', async () => {
   let settings = {}, sent;
   const context = vm.createContext({
     chrome:{runtime:{id:'test'},storage:{local:{get:async()=>settings}}},
@@ -14,9 +14,16 @@ test('cloud mode preserves local installs and refuses offline phone commands', a
   vm.runInContext(source,context);
   assert.equal(await context.cloudEnabled(),true);
   settings={'impact.bridgeToken':'local-token'};
+  assert.equal(await context.cloudEnabled(),true);
+  settings['impact.connectionMode']='local';
   assert.equal(await context.cloudEnabled(),false);
   settings['impact.connectionMode']='cloud';
   assert.equal(await context.cloudEnabled(),true);
+  context.chrome = undefined;
+  context.location = {search:'?bridge=http://old-bridge'};
+  assert.equal(await context.cloudEnabled(),true);
+  context.location.search = '?mode=local';
+  assert.equal(await context.cloudEnabled(),false);
   await assert.rejects(context.cloudSend(null,{type:'next'}),/offline/);
   assert.equal(sent,undefined);
   const now=new Date().toISOString();
