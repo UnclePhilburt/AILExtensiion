@@ -82,26 +82,41 @@ function receiveBridgeLead(lead, updatedAt) {
   renderLead(displayedLead, updatedAt, displayedLead === bridgeLead ? "bridge" : "local");
 }
 
-function showNextLead() {
-  if (!displayedLead?.nextLead?.available) {
-    return;
-  }
-
-  previousLeads.push(displayedLead);
-  displayedLead = displayedLead.nextLead;
-  displayedLeadKey = getLeadKey(displayedLead);
-  renderLead(displayedLead, null, "local");
+async function showNextLead() {
+  await sendComputerCommand("next");
 }
 
-function showPreviousLead() {
-  const previous = previousLeads.pop();
-  if (!previous) {
-    return;
-  }
+async function showPreviousLead() {
+  await sendComputerCommand("previous");
+}
 
-  displayedLead = previous;
-  displayedLeadKey = getLeadKey(displayedLead);
-  renderLead(displayedLead, null, displayedLead === bridgeLead ? "bridge" : "local");
+async function sendComputerCommand(type) {
+  try {
+    const bridgeUrl = bridgeUrlInput.value.trim().replace(/\/$/, "");
+    const token = bridgeTokenInput.value.trim();
+    if (!bridgeUrl || !token) {
+      statusEl.textContent = "Bridge URL and token required.";
+      return;
+    }
+
+    const response = await fetch(`${bridgeUrl}/api/command?token=${encodeURIComponent(token)}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ type })
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || `HTTP ${response.status}`);
+    }
+
+    statusEl.textContent = type === "next"
+      ? "Advancing IMPACT on computer..."
+      : "Moving IMPACT back on computer...";
+  } catch (error) {
+    statusEl.textContent = error.message;
+  }
 }
 
 function renderLead(lead, updatedAt, source) {
@@ -171,8 +186,8 @@ function renderNextLead(nextLead) {
 }
 
 function updateNavButtons() {
-  previousLeadButton.disabled = previousLeads.length === 0;
-  nextLeadButton.disabled = !displayedLead?.nextLead?.available;
+  previousLeadButton.disabled = !displayedLead?.available;
+  nextLeadButton.disabled = !displayedLead?.available;
 }
 
 function getLeadKey(lead) {
