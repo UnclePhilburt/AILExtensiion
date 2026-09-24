@@ -568,11 +568,11 @@
       }
 
       if (command.type === "next") {
-        clickLeadNavigationButton("down");
+        await clickLeadNavigationButton("down");
       }
 
       if (command.type === "previous") {
-        clickLeadNavigationButton("up");
+        await clickLeadNavigationButton("up");
       }
     } catch (_error) {
       // Command polling must never interrupt IMPACT.
@@ -581,10 +581,17 @@
     }
   }
 
-  function clickLeadNavigationButton(direction) {
-    const button = findLeadNavigationButton(direction);
+  async function clickLeadNavigationButton(direction, waitMs = 3000) {
+    // Commands are polled right after a page load, sometimes before IMPACT has
+    // rendered its arrow buttons. Wait briefly instead of dropping the command.
+    const deadline = Date.now() + waitMs;
+    let button = findLeadNavigationButton(direction);
+    while (!button && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      button = findLeadNavigationButton(direction);
+    }
     if (button) button.click();
-    else chrome.runtime.sendMessage({ type: "impact/commandResult", message: `IMPACT's ${direction === "up" ? "Previous" : "Next"} button is unavailable. Open the lead on your computer and try again.` });
+    else await chrome.runtime.sendMessage({ type: "impact/commandResult", message: `IMPACT's ${direction === "up" ? "Previous" : "Next"} button is unavailable. Open the lead on your computer and try again.` });
   }
 
   function clickLeadCallButton(command) {
@@ -1374,7 +1381,10 @@
 
   function getCurrentLeadId() {
     try {
-      return new URL(location.href).searchParams.get("LeadId") || "";
+      // IMPACT uses both LeadId= and leadid= in its URLs.
+      const params = new URL(location.href).searchParams;
+      for (const [name, value] of params) if (name.toLowerCase() === "leadid" && value) return value;
+      return "";
     } catch (_error) {
       return "";
     }
