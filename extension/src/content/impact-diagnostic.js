@@ -9,6 +9,7 @@
     allowedOrigins: "impact.allowedOrigins",
     selectorConfig: "impact.selectorConfig",
     autoPublish: "impact.autoPublish",
+    inboxQueue: "impact.inboxQueue",
     lastSnapshot: "impact.lastSnapshot"
   };
 
@@ -45,6 +46,7 @@
   async function getSnapshot() {
     const config = await getSelectorConfig();
     const allowed = await isOriginAllowed();
+    const inboxQueue = allowed ? await syncInboxQueueFromPage() : null;
     const localLeadPreview = allowed ? collectLocalLeadPreview() : null;
     const prefetchedNextLead = localLeadPreview?.available ? await prefetchNextLead() : null;
     if (localLeadPreview?.available && prefetchedNextLead) {
@@ -60,6 +62,7 @@
       leadPageDetected: allowed && matchesLeadPageHints(config),
       localLeadPreview,
       prefetchedNextLead,
+      inboxQueue,
       fields: allowed ? readConfiguredFields(config) : [],
       pageSignals: allowed ? collectPageSignals() : collectMinimalPageSignals(),
       warnings: []
@@ -167,6 +170,7 @@
         .slice(0, 10)
         .map((element) => sanitizeText(element.innerText || element.textContent || "")),
       detailCandidates: collectDetailCandidates(),
+      inboxQueue: collectInboxQueueSummary(),
       nextLeadCandidates: collectNextLeadCandidates()
     };
   }
@@ -193,7 +197,8 @@
   }
 
   async function prefetchNextLead() {
-    const candidates = collectNextLeadCandidates();
+    const queueCandidate = await getNextInboxQueueCandidate();
+    const candidates = [queueCandidate, ...collectNextLeadCandidates()].filter(Boolean);
     const candidate = candidates.find((nextCandidate) => nextCandidate.url && nextCandidate.canPrefetch);
     if (!candidate?.url) {
       return {
@@ -278,6 +283,95 @@
     return dedupeCandidates(candidates);
   }
 
+  async function syncInboxQueueFromPage() {
+    if (!location.pathname.includes("/Lead/Inbox")) {
+      return null;
+    }
+
+    const queue = collectInboxLeadQueue();
+    if (queue.length) {
+      await chrome.storage.local.set({
+        [STORAGE_KEYS.inboxQueue]: {
+          capturedAt: new Date().toISOString(),
+          url: scrubCurrentUrl(),
+          leads: queue
+        }
+      });
+    }
+
+    return {
+      capturedAt: new Date().toISOString(),
+      count: queue.length,
+      first: queue[0]?.safePath || "",
+      second: queue[1]?.safePath || ""
+    };
+  }
+
+  function collectInboxLeadQueue() {
+    const seen = new Set();
+    return Array.from(document.querySelectorAll('a[href*="/Lead/InboxDetail?LeadId="]'))
+      .map((element, index) => {
+        const url = toSameOriginUrl(element.getAttribute("href") || "");
+        if (!url || !url.pathname.includes("/Lead/InboxDetail")) {
+          return null;
+        }
+
+        const leadId = url.searchParams.get("LeadId") || "";
+        if (!leadId || seen.has(leadId)) {
+          return null;
+        }
+
+        seen.add(leadId);
+        return {
+          order: index,
+          leadId,
+          url: url.href,
+          safePath: `${url.pathname}?LeadId=[redacted]`,
+          text: redactCustomerText(element.innerText || element.textContent || "").slice(0, 80),
+          selector: buildSelector(element)
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function collectInboxQueueSummary() {
+    const queue = collectInboxLeadQueue();
+    return {
+      count: queue.length,
+      first: queue[0]?.safePath || "",
+      second: queue[1]?.safePath || ""
+    };
+  }
+
+  async function getNextInboxQueueCandidate() {
+    const currentLeadId = getCurrentLeadId();
+    if (!currentLeadId) {
+      return null;
+    }
+
+    const result = await chrome.storage.local.get(STORAGE_KEYS.inboxQueue);
+    const queue = result[STORAGE_KEYS.inboxQueue]?.leads || [];
+    const currentIndex = queue.findIndex((lead) => lead.leadId === currentLeadId);
+    if (currentIndex === -1 || currentIndex >= queue.length - 1) {
+      return null;
+    }
+
+    const nextLead = queue[currentIndex + 1];
+    return {
+      url: nextLead.url,
+      safePath: nextLead.safePath,
+      canPrefetch: true,
+      prefetchNote: "Safe direct detail URL from saved inbox queue.",
+      selector: nextLead.selector,
+      text: nextLead.text,
+      confidence: 120,
+      action: {
+        source: "savedInboxQueue",
+        order: String(nextLead.order)
+      }
+    };
+  }
+
   function getNextCandidateConfidence(text, element) {
     const combined = `${text} ${element.getAttribute("aria-label") || ""} ${element.getAttribute("title") || ""}`.toLowerCase();
     if (combined.includes("next") || combined.includes("down") || combined.includes("keyboard_arrow_down")) {
@@ -303,6 +397,8 @@
   function startAutoPublishWatcher() {
     window.setTimeout(runAutoPublishCheck, 1000);
     window.setInterval(runAutoPublishCheck, 2500);
+    window.setTimeout(syncInboxQueueFromPage, 1000);
+    window.setInterval(syncInboxQueueFromPage, 5000);
 
     const observer = new MutationObserver(() => {
       window.clearTimeout(autoPublishTimer);
@@ -781,6 +877,14 @@
     try {
       const url = new URL(value);
       return `${url.origin}${url.pathname}${url.search ? "?..." : ""}`;
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  function getCurrentLeadId() {
+    try {
+      return new URL(location.href).searchParams.get("LeadId") || "";
     } catch (_error) {
       return "";
     }

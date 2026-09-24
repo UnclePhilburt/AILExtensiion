@@ -4,6 +4,7 @@ export const STORAGE_KEYS = {
   bridgeUrl: "impact.bridgeUrl",
   bridgeToken: "impact.bridgeToken",
   autoPublish: "impact.autoPublish",
+  inboxQueue: "impact.inboxQueue",
   logs: "impact.logs",
   lastSnapshot: "impact.lastSnapshot"
 };
