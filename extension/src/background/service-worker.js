@@ -78,11 +78,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function getPhoneCommand(senderTab) {
-  // Only the active lead tab may consume commands. Inbox/background tabs must
-  // never take a command and silently discard it because they cannot navigate.
-  const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  if (!senderTab?.id || senderTab.id !== activeTab?.id ||
-      !/^https:\/\/mobile\.impact\.ailife\.com\/Lead\/(InboxDetail|WhatHappend|SetAppointment)(?:[?#]|$)/.test(activeTab.url || "")) {
+  // The content script only polls while its page is visible. Do not ask Chrome
+  // for the "last focused" browser tab here: opening the extension popup can
+  // briefly change that answer and make the command wait until the popup is
+  // opened again. Validate the requesting IMPACT page instead.
+  if (!senderTab?.id ||
+      !/^https:\/\/mobile\.impact\.ailife\.com\/Lead\/(InboxDetail|WhatHappend|SetAppointment)(?:[?#]|$)/.test(senderTab.url || "")) {
     return { command: null };
   }
   if (await cloudEnabled()) return takeCloudCommand();
