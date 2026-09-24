@@ -526,7 +526,7 @@
             clickVirtualAppointmentDay(command);
             message = "Virtual appointment day selected. Choose a time on your phone.";
           } else {
-            clickVirtualAppointmentSlot(command);
+            await clickVirtualAppointmentSlot(command);
             message = "Virtual appointment time selected in IMPACT.";
           }
         } catch (error) {
@@ -722,16 +722,26 @@
     headers[0].click();
   }
 
-  function clickVirtualAppointmentSlot(command) {
+  async function clickVirtualAppointmentSlot(command) {
     validateVirtualAppointmentCommand(command);
     const panel = document.getElementById(String(command.dayId || ""));
     const time = sanitizeText(command.time || "");
-    if (!panel || !time || !/\bin\b/.test(panel.className || "")) throw new Error("Select the appointment day first, then choose its time.");
+    if (!panel || !time) throw new Error("That appointment time is no longer available. Refresh the phone.");
+    if (!/\bin\b/.test(panel.className || "")) {
+      const headers = Array.from(document.querySelectorAll('.setappoinment a[href^="#"]'))
+        .filter((element) => (element.getAttribute("href") || "").slice(1) === panel.id)
+        .filter((element) => element.getClientRects().length && element.getAttribute("aria-disabled") !== "true");
+      if (headers.length !== 1) throw new Error("That appointment day is no longer available. Refresh the phone.");
+      headers[0].click();
+      await new Promise((resolve) => window.setTimeout(resolve, 120));
+    }
     const slots = Array.from(panel.querySelectorAll(".appointmentslot"))
       .filter((element) => appointmentSlotLabel(sanitizeText(element.innerText || element.textContent || "")) === time)
       .filter((element) => element.getClientRects().length && element.getAttribute("aria-disabled") !== "true");
     if (slots.length !== 1) throw new Error("That appointment time is no longer available. Refresh the phone.");
-    slots[0].click();
+    const target = slots[0].querySelector("a, button, input, [role='button'], [onclick]") || slots[0];
+    if (target.disabled || target.getAttribute("aria-disabled") === "true") throw new Error("That appointment time is unavailable in IMPACT.");
+    target.click();
   }
 
   function submitCallResult(command, choice) {

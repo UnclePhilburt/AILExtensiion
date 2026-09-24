@@ -32,7 +32,9 @@ export async function publishCloud(lead) {
 }
 export async function takeCloudCommand() {
   if (busy || Date.now() < nextPoll) return {command:null};
-  busy = true; nextPoll = Date.now() + 3000;
+  // Phone controls should feel immediate; the cloud command queue is still
+  // bounded and command IDs make repeated taps safe.
+  busy = true; nextPoll = Date.now() + 600;
   try {
     await ready();
     if (Date.now() - lastHeartbeat > 10000) {
