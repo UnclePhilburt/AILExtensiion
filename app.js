@@ -30,6 +30,9 @@ const useCloud = await cloudEnabled();
 let currentCloudState = null, stopCloudWatch = null, cloudReadBusy = false, lastCloudResult = '', lastPhoneTouch = 0;
 let cloudGeneration = 0;
 let selectedAppointmentDay = "";
+// Previous/Next stay locked until the phone sees the lead IMPACT moved to, so a
+// tap can never be sent with the old lead while the phone is still catching up.
+let navPending = null;
 
 const savedBridgeUrl = localStorage.getItem("impact.bridgeUrl") || "";
 const savedBridgeToken = localStorage.getItem("impact.bridgeToken") || "";
@@ -125,7 +128,7 @@ async function connectLiveUpdates() {
         if (!data || !signedIn || stream !== leadEvents) continue;
         if (frame.includes('event: auth-required')) throw new Error('Your account session expired. Sign in again.');
         const payload = JSON.parse(data.slice(6));
-        if (frame.includes('event: command-result')) statusEl.textContent = payload.message;
+        if (frame.includes('event: command-result')) { statusEl.textContent = payload.message; clearNavigationPending(); }
         else { eventsConnected = true; receiveBridgeLead(payload.lead, payload.updatedAt); }
       }
     }
@@ -179,7 +182,7 @@ async function refreshCloud() {
     if (!isOnline(state?.desktop_seen)) statusEl.textContent = 'Open IMPACT on your computer to connect.';
     if (state?.result?.at && state.result.at !== lastCloudResult) {
       lastCloudResult = state.result.at;
-      if (Date.now() - Date.parse(state.result.at) < 15000) statusEl.textContent = state.result.message;
+      if (Date.now() - Date.parse(state.result.at) < 15000) { statusEl.textContent = state.result.message; clearNavigationPending(); }
     }
     if (Date.now() - lastPhoneTouch > 10000) { lastPhoneTouch = Date.now(); await cloudTouchPhone(); }
   } catch (error) {
@@ -199,6 +202,7 @@ function receiveBridgeLead(lead, updatedAt) {
     displayedLead = null;
     displayedLeadKey = "";
     previousLeads = [];
+    navPending = null;
     renderLead(null, updatedAt, "bridge");
     return;
   }
@@ -210,6 +214,7 @@ function receiveBridgeLead(lead, updatedAt) {
     displayedLeadKey = nextKey;
     previousLeads = [];
     selectedAppointmentDay = "";
+    navPending = null;
   }
 
   // Preload and contact updates can arrive without changing the lead's identity.
@@ -219,26 +224,55 @@ function receiveBridgeLead(lead, updatedAt) {
 }
 
 async function showNextLead() {
-  await sendComputerCommand("next");
+  await sendNavigation("next");
 }
 
 async function showPreviousLead() {
-  await sendComputerCommand("previous");
+  await sendNavigation("previous");
+}
+
+function navigationPending() {
+  if (navPending && Date.now() > navPending.until) navPending = null;
+  return Boolean(navPending);
+}
+
+function clearNavigationPending() {
+  if (!navPending) return;
+  navPending = null;
+  updateNavButtons();
+}
+
+async function sendNavigation(type) {
+  if (!displayedLead?.available || navigationPending()) return;
+  const pending = { until: Date.now() + 10000 };
+  navPending = pending;
+  updateNavButtons();
+  const sent = await sendComputerCommand(type);
+  if (navPending !== pending) return;
+  if (!sent) {
+    navPending = null;
+    updateNavButtons();
+    if (useCloud) void refreshCloud();
+    return;
+  }
+  // Pick up the new lead promptly even if the live update is slow.
+  for (const delay of [700, 1800, 4000]) setTimeout(() => { if (navPending === pending) void refreshLead(); }, delay);
+  setTimeout(() => { if (navPending === pending) clearNavigationPending(); }, 10100);
 }
 
 async function sendComputerCommand(type, details = {}) {
-  if (!signedIn) return;
+  if (!signedIn) return false;
   try {
     if (useCloud) {
       await cloudSend(currentCloudState, {type, leadId: displayedLead?.leadId, ...details});
-      statusEl.textContent = type === 'call' ? 'Call sent to IMPACT.' : type === 'virtual-appointment' ? 'Opening Virtual Appointment in IMPACT…' : type === 'virtual-appointment-day' ? 'Selecting that day in IMPACT…' : type === 'virtual-appointment-slot' ? 'Setting that appointment in IMPACT…' : 'Action sent to your computer…';
-      return;
+      statusEl.textContent = type === 'call' ? 'Call sent to IMPACT.' : type === 'virtual-appointment' ? 'Opening Virtual Appointment in IMPACT…' : type === 'virtual-appointment-day' ? 'Selecting that day in IMPACT…' : type === 'virtual-appointment-slot' ? 'Setting that appointment in IMPACT…' : type === 'previous' ? 'Moving IMPACT back on computer…' : type === 'next' ? 'Advancing IMPACT on computer…' : 'Action sent to your computer…';
+      return true;
     }
     const bridgeUrl = bridgeUrlInput.value.trim().replace(/\/$/, "");
     const token = bridgeTokenInput.value.trim();
     if (!bridgeUrl || !token) {
       statusEl.textContent = "Bridge URL and token required.";
-      return;
+      return false;
     }
 
     const response = await fetch(`${bridgeUrl}/api/command?token=${encodeURIComponent(token)}`, {
@@ -258,8 +292,12 @@ async function sendComputerCommand(type, details = {}) {
     statusEl.textContent = type === "virtual-appointment" ? "Opening Virtual Appointment in IMPACT..." : type === "virtual-appointment-day" ? "Selecting that day in IMPACT..." : type === "virtual-appointment-slot" ? "Setting that appointment in IMPACT..." : type === "refused-appointment" ? "Opening Refused Appointment in IMPACT..." : type === "no-answer" ? "Sending No Answer to IMPACT..." : type === "call" ? `Call ${details.phoneType} sent to IMPACT.` : type === "next"
       ? "Advancing IMPACT on computer..."
       : "Moving IMPACT back on computer...";
+    return true;
   } catch (error) {
-    statusEl.textContent = error.message;
+    statusEl.textContent = /lead changed/i.test(error.message) && ["next", "previous"].includes(type)
+      ? "Your phone was still catching up to IMPACT. Check the lead shown and tap again."
+      : error.message;
+    return false;
   }
 }
 
@@ -340,8 +378,9 @@ function updateNavButtons() {
   noAnswerButton.disabled = !callStarted || !displayedLead?.leadId;
   virtualAppointmentButton.disabled = !callStarted || !displayedLead?.leadId || Boolean(displayedLead?.appointmentOptions);
   refusedAppointmentButton.disabled = !callStarted || !displayedLead?.leadId;
-  previousLeadButton.disabled = !displayedLead?.available;
-  nextLeadButton.disabled = !displayedLead?.available;
+  const navLocked = !displayedLead?.available || navigationPending();
+  previousLeadButton.disabled = navLocked;
+  nextLeadButton.disabled = navLocked;
 }
 
 function renderAppointmentPicker(lead) {
