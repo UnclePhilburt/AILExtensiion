@@ -144,7 +144,7 @@ test('the phone lead card shows heads-up chips above the details and hides them 
     setAttribute(name,value){this.attributes[name]=value;},addEventListener(name,fn){this.listeners[name]=fn;}});
   const el=selector=>{if(!elements.has(selector))elements.set(selector,make());return elements.get(selector);};
   let authChanged;
-  const lead={available:true,leadId:'test-a',leadName:'Fictional A',requestType:'Sample request',language:'English',callHistory:realLead,phones:[{label:'Mobile',number:'555-0100',dialHref:'#sample-call'}]};
+  const lead={available:true,leadId:'test-a',leadName:'Fictional A',requestType:'Sample request',language:'English',email:'fictional@example.test',callHistory:realLead,phones:[{label:'Mobile',number:'555-0100',dialHref:'#sample-call'}]};
   let state={lead,desktop_seen:new Date().toISOString(),lead_updated_at:new Date().toISOString(),device_id:'test-computer'};
   class FakeDate extends Date{constructor(...a){super(...(a.length?a:[now]));} static now(){return now;}}
   const context=vm.createContext({
@@ -161,6 +161,7 @@ test('the phone lead card shows heads-up chips above the details and hides them 
   await new Promise(setImmediate);
   const card=el('#leadCard').children;
   const names=card.map(c=>c.className||c.textContent);
+  assert.equal(card.some(c=>c.children?.[0]?.textContent==='Language'),false,'English is omitted to keep the lead card compact');
   const headsUp=card.find(c=>String(c.className).includes('headsUp'));
   assert.ok(headsUp,'heads-up section rendered');
   assert.ok(names.findIndex(name=>String(name).includes('headsUp'))<names.indexOf('detail'),'shown before the contact details');
@@ -176,4 +177,7 @@ test('the phone lead card shows heads-up chips above the details and hides them 
   state={...state,lead:{...lead,leadId:'test-b',callHistory:[]}};
   await app.refreshCloud();
   assert.equal(el('#leadCard').children.some(c=>String(c.className).includes('headsUp')),false);
+  state={...state,lead:{...lead,leadId:'test-d',language:'Spanish',callHistory:[]}};
+  await app.refreshCloud();
+  assert.equal(el('#leadCard').children.some(c=>c.children?.[0]?.textContent==='Language'),true,'a non-English language remains visible');
 });
