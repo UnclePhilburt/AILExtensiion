@@ -541,6 +541,7 @@
   function clickLeadNavigationButton(direction) {
     const button = findLeadNavigationButton(direction);
     if (button) button.click();
+    else chrome.runtime.sendMessage({ type: "impact/commandResult", message: `IMPACT's ${direction === "up" ? "Previous" : "Next"} button is unavailable. Open the lead on your computer and try again.` });
   }
 
   function clickLeadCallButton(command) {
@@ -690,10 +691,12 @@
 
   function findLeadNavigationButton(direction) {
     const iconName = direction === "down" ? "keyboard_arrow_down" : "keyboard_arrow_up";
-    return Array.from(document.querySelectorAll("button i, button .material-icons"))
-      .filter((element) => sanitizeText(element.innerText || element.textContent || "") === iconName)
-      .map((element) => element.closest("button"))
-      .find((button) => button && !button.disabled && button.getAttribute("aria-disabled") !== "true" && button.getClientRects().length > 0);
+    const route = direction === "down" ? "/Lead/MoveNext" : "/Lead/MovePrevious";
+    const buttons = Array.from(document.querySelectorAll("button"))
+      .filter((button) => !button.disabled && button.getAttribute("aria-disabled") !== "true" && button.getClientRects().length > 0);
+    // Match IMPACT's existing navigation action even when its icon markup changes.
+    return buttons.find((button) => (button.getAttribute("onclick") || "").includes(`${route}?`))
+      || buttons.find((button) => sanitizeText(button.innerText || button.textContent || "") === iconName);
   }
 
   async function runAutoPublishCheck() {

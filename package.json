@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "build:auth": "node scripts/build-auth.cjs",
-    "test": "node --test phone-web/live-bridge.test.cjs src/account.test.cjs"
+    "test": "node --test phone-web/*.test.cjs src/*.test.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.1"
