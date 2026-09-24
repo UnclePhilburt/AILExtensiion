@@ -793,22 +793,24 @@
   }
 
   function findCandidateUrl(element) {
-    const rawValues = [
-      element.getAttribute("href"),
-      element.getAttribute("formaction"),
-      element.getAttribute("data-href"),
-      element.getAttribute("data-url"),
-      element.getAttribute("data-link"),
-      element.getAttribute("onclick")
-    ].filter(Boolean);
+    const attributes = [
+      ["href", element.getAttribute("href")],
+      ["formaction", element.getAttribute("formaction")],
+      ["data-href", element.getAttribute("data-href")],
+      ["data-url", element.getAttribute("data-url")],
+      ["data-link", element.getAttribute("data-link")],
+      ["onclick", element.getAttribute("onclick")]
+    ].filter(([, value]) => value);
 
-    for (const value of rawValues) {
-      const directUrl = toSameOriginUrl(value);
-      if (isLeadNavigationPath(directUrl?.pathname || "")) {
-        return directUrl;
+    for (const [name, value] of attributes) {
+      if (name !== "onclick") {
+        const directUrl = toSameOriginUrl(value);
+        if (isLeadNavigationPath(directUrl?.pathname || "")) {
+          return directUrl;
+        }
       }
 
-      const embeddedPath = String(value).match(/\/Lead\/(?:InboxDetail|MoveNext)[^'" )]*/i)?.[0];
+      const embeddedPath = String(value).match(/\/Lead\/(?:InboxDetail|MoveNext)[^'")\s;]*/i)?.[0];
       if (embeddedPath) {
         const embeddedUrl = toSameOriginUrl(embeddedPath);
         if (embeddedUrl && isLeadNavigationPath(embeddedUrl.pathname)) {
