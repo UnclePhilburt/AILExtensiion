@@ -4,7 +4,10 @@
 <header><p class="eyebrow">IMPACT COMPANION</p><h1>Make yourself at home.</h1><p class="hint">Connection settings, your account, and tools when you need them.</p></header>
 <nav aria-label="Options sections"><button data-panel="connection" aria-pressed="true">Connection</button><button data-panel="account" aria-pressed="false">Account</button><button data-panel="debug" aria-pressed="false">Debug tools</button></nav>
 <div id="connection" class="panel">
+<section><h2>Connection method</h2><label for="connectionMode">Connect through</label><select id="connectionMode"><option value="cloud">Cloud — no bridge required</option><option value="local">Local bridge — existing setup</option></select><p class="hint">Cloud uses your account to connect your computer and phone over the internet. Use one active computer per account.</p></section>
+<div id="localSettings">
 <section><h2>Computer connection</h2><p class="hint">The extension connects to the bridge running on this computer.</p><label for="bridgeUrl">Bridge address</label><input id="bridgeUrl" placeholder="http://127.0.0.1:8787"><label for="bridgeToken">Bridge token</label><input id="bridgeToken" type="password" autocomplete="off" placeholder="Token from your phone companion"><p class="hint">Your phone and extension also need to be signed in to the same account.</p></section>
+</div>
 <section class="checkboxRow"><input id="autoPublish" type="checkbox"><label for="autoPublish">Automatically sync my phone</label></section>
 </div>
 <div id="account" class="panel" hidden><section><h2>Your account</h2><p id="accountEmail"></p><p class="hint">Use this account on your phone too. You stay signed in until you sign out.</p><a class="buttonLink" href="../account/account.html">Manage account & sign out →</a></section></div>

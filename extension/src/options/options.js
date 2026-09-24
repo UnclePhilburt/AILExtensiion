@@ -27,6 +27,8 @@ const statusOutput = document.querySelector("#status");
 const lastPickedOutput = document.querySelector("#lastPicked");
 const saveButton = document.querySelector("#save");
 const resetButton = document.querySelector("#reset");
+const connectionMode = document.querySelector('#connectionMode');
+connectionMode.addEventListener('change', () => { document.querySelector('#localSettings').hidden = connectionMode.value !== 'local'; });
 
 init();
 void refreshDebugTabs();
@@ -84,12 +86,15 @@ async function init() {
     STORAGE_KEYS.bridgeToken,
     STORAGE_KEYS.autoPublish,
     "impact.lastPickedElement"
+    , "impact.connectionMode"
   ]);
 
   allowedOriginsInput.value = (result[STORAGE_KEYS.allowedOrigins] || DEFAULT_ALLOWED_ORIGINS).join("\n");
   selectorConfigInput.value = JSON.stringify(result[STORAGE_KEYS.selectorConfig] || DEFAULT_SELECTOR_CONFIG, null, 2);
   bridgeUrlInput.value = result[STORAGE_KEYS.bridgeUrl] || "http://127.0.0.1:8787";
   bridgeTokenInput.value = result[STORAGE_KEYS.bridgeToken] || "";
+  connectionMode.value = result['impact.connectionMode'] || (bridgeTokenInput.value ? 'local' : 'cloud');
+  document.querySelector('#localSettings').hidden = connectionMode.value !== 'local';
   autoPublishInput.checked = result[STORAGE_KEYS.autoPublish] !== false;
   lastPickedOutput.textContent = result["impact.lastPickedElement"]
     ? JSON.stringify(result["impact.lastPickedElement"], null, 2)
@@ -103,6 +108,7 @@ async function saveOptions() {
     validateSelectorConfig(selectorConfig);
 
     await chrome.storage.local.set({
+      'impact.connectionMode': connectionMode.value,
       [STORAGE_KEYS.allowedOrigins]: allowedOrigins,
       [STORAGE_KEYS.selectorConfig]: selectorConfig,
       [STORAGE_KEYS.bridgeUrl]: parseBridgeUrl(bridgeUrlInput.value),
@@ -110,7 +116,7 @@ async function saveOptions() {
       [STORAGE_KEYS.autoPublish]: autoPublishInput.checked
     });
 
-    setStatus("Saved.");
+    setStatus("Saved. Refresh your IMPACT tab to apply the connection change.");
   } catch (error) {
     setStatus(`Could not save: ${error.message}`, true);
   }

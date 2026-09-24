@@ -9,6 +9,8 @@
     "@supabase/supabase-js": "2.117.1"
   },
   "devDependencies": {
-    "esbuild": "0.28.2"
+    "@electric-sql/pglite": "^0.3.14",
+    "esbuild": "0.28.2",
+    "qrcode": "^1.5.4"
   }
 }

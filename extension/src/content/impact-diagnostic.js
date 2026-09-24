@@ -15,6 +15,7 @@
 
   let pickerState = null;
   let lastAutoPublishFingerprint = "";
+  let lastAutoPublishAt = 0;
   let autoPublishTimer = null;
   let commandPollBusy = false;
   let nextLeadCache = null;
@@ -22,6 +23,7 @@
   let autoPublishBusy = false;
   let resultDialogsBeforeSubmit = new WeakSet();
   chrome.storage.onChanged.addListener((changes) => {
+    if (changes['impact.connectionMode']) lastAutoPublishFingerprint = '';
     if (changes['impact.supabase.session']) {
       lastAutoPublishFingerprint = '';
       nextLeadCache = null;
@@ -32,6 +34,9 @@
         sessionStorage.removeItem('impact.pendingResultAdvance');
       }
     }
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') { lastAutoPublishFingerprint = ''; void runAutoPublishCheck(); }
   });
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -507,6 +512,10 @@
       if (!command?.type) {
         return;
       }
+      if (command.leadId && ["next", "previous"].includes(command.type) && command.leadId !== getCurrentLeadId()) {
+        await chrome.runtime.sendMessage({ type: "impact/commandResult", message: "Navigation skipped because the lead changed. Try again on the current lead." });
+        return;
+      }
 
       if (["no-answer", "refused-appointment"].includes(command.type)) {
         let message;
@@ -769,7 +778,7 @@
         nextLeadCandidate: lead.nextLead?.candidate?.safePath || ""
       });
 
-      if (fingerprint === lastAutoPublishFingerprint) {
+      if (fingerprint === lastAutoPublishFingerprint && Date.now() - lastAutoPublishAt < 30000) {
         return;
       }
 
@@ -779,6 +788,7 @@
       });
       if (response?.ok && (!response.result?.skipped || response.result.reason === "duplicate lead payload")) {
         lastAutoPublishFingerprint = fingerprint;
+        lastAutoPublishAt = Date.now();
       }
   }
 

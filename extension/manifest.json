@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "IMPACT Companion",
-  "version": "0.1.0",
-  "description": "Read-only diagnostic helper for documenting an authorized IMPACT CRM workflow.",
+  "version": "0.2.0",
+  "description": "Connect your IMPACT lead workflow to your phone: contact details, navigation, call registration and call results.",
   "action": {
     "default_title": "IMPACT Companion",
     "default_popup": "src/popup/popup.html"

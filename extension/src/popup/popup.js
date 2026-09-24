@@ -1,6 +1,7 @@
 import { client, accessToken } from '../shared/auth-runtime.js';
 import { parseBridgeUrl } from '../shared/bridge-config.js';
 import { STORAGE_KEYS } from '../shared/storage-keys.js';
+import { cloudEnabled, cloudState, isOnline, PHONE_URL } from '../shared/cloud-sync.js';
 const $ = selector => document.querySelector(selector);
 let session = null;
 let checking = false;
@@ -17,6 +18,7 @@ function renderSession(next) {
 async function accountPage() { await chrome.tabs.create({url:chrome.runtime.getURL('src/account/account.html')}); window.close(); }
 $('#manageLogin').addEventListener('click', accountPage);
 $('#manageAccount').addEventListener('click', accountPage);
+$('#openPhone').addEventListener('click', () => chrome.tabs.create({url:PHONE_URL}));
 $('#openOptions').addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
   if (tab?.id) await chrome.storage.session.set({'impact.debugTabId':tab.id});
@@ -45,12 +47,23 @@ async function refreshStatus() {
     const [active] = await chrome.tabs.query({active:true,currentWindow:true});
     const onImpact = Boolean(active?.url?.startsWith('https://mobile.impact.ailife.com/Lead/'));
     $('#impactState').textContent = onImpact ? 'Open and ready' : 'Select an IMPACT tab';
+    const useCloud = await cloudEnabled();
+    $('#connectionLabel').textContent = useCloud ? 'Cloud connection' : 'Computer bridge';
+    $('#phoneSetup').hidden = !useCloud;
+    let status;
+    if (useCloud) {
+      const state = await cloudState();
+      const local = await chrome.storage.local.get('impact.deviceId');
+      if (isOnline(state?.desktop_seen) && state.device_id !== local['impact.deviceId']) throw new Error('Another computer is connected. Close IMPACT there and wait 45 seconds.');
+      status = {phoneConnected:isOnline(state?.phone_seen),updatedAt:state?.lead_updated_at};
+    } else {
     const settings = await chrome.storage.local.get([STORAGE_KEYS.bridgeUrl,STORAGE_KEYS.bridgeToken]);
     const bridgeUrl = parseBridgeUrl(settings[STORAGE_KEYS.bridgeUrl]);
     if (!settings[STORAGE_KEYS.bridgeToken]) throw new Error('Set up the bridge connection in Options.');
     const response = await fetch(`${bridgeUrl}/api/status`, {headers:{Authorization:`Bearer ${await accessToken()}`,'x-bridge-token':settings[STORAGE_KEYS.bridgeToken]},signal:AbortSignal.timeout(10000)});
-    const status = await response.json();
+    status = await response.json();
     if (!response.ok) throw new Error(status.error || 'The bridge did not respond.');
+    }
     if (session?.user.id !== accountId) return;
     $('#bridgeState').textContent = 'Connected';
     $('#phoneState').textContent = status.phoneConnected ? 'Connected' : 'Not connected';
@@ -63,7 +76,7 @@ async function refreshStatus() {
   } catch (error) {
     $('#bridgeState').textContent = 'Not connected'; $('#phoneState').textContent = 'Unavailable'; $('#lastUpdate').textContent = '—';
     $('#connectionCard').dataset.state = 'offline'; $('#connectionTitle').textContent = 'Connection needed';
-    $('#connectionHint').textContent = error.name==='TimeoutError' || error instanceof TypeError ? 'Start the phone companion on this computer, then check Options.' : error.message;
+    $('#connectionHint').textContent = error.name==='TimeoutError' || error instanceof TypeError ? 'Cannot reach your connection. Check your internet and connection settings.' : error.message;
     $('#updatePhone').disabled = true;
   } finally { checking = false; }
 }

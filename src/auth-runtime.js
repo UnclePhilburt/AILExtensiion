@@ -6,6 +6,7 @@ const storage = extension ? {
   async removeItem(key) { await chrome.storage.local.remove(key); }
 } : localStorage;
 export const client = createClient('https://uawladqdbbbgddqtdjoi.supabase.co', 'sb_publishable_s2BgUBxX6_6gAGazndtaHQ_xaR6pHp3', {
+  global: { fetch: (url, options) => fetch(url, { ...options, ...(String(url).includes('/rpc/companion_send') ? {keepalive:true} : {}) }) },
   auth: { storage, storageKey: 'impact.supabase.session', persistSession: true, autoRefreshToken: true, detectSessionInUrl: !extension }
 });
 export async function accessToken() {

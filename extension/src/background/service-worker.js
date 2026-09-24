@@ -1,8 +1,11 @@
 import { LOG_LIMIT, STORAGE_KEYS } from "../shared/storage-keys.js";
 import { parseBridgeUrl } from "../shared/bridge-config.js";
 import { accessToken } from "../shared/auth-runtime.js";
+import { cloudEnabled } from '../shared/cloud-sync.js';
+import { publishCloud, takeCloudCommand, reportCloudResult } from './cloud-desktop.js';
 
 let lastAutoPublishFingerprint = "";
+let lastAutoPublishAt = 0;
 chrome.storage.onChanged.addListener((changes) => {
   if (changes['impact.supabase.session']) {
     lastAutoPublishFingerprint = '';
@@ -42,7 +45,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === "impact/autoPublishLead") {
-    autoPublishLead(message.lead)
+    autoPublishLead(message.lead, sender.tab)
       .then((result) => sendResponse({ ok: true, result }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
@@ -73,6 +76,7 @@ async function getPhoneCommand(senderTab) {
       !/^https:\/\/mobile\.impact\.ailife\.com\/Lead\/(InboxDetail|WhatHappend)(?:[?#]|$)/.test(activeTab.url || "")) {
     return { command: null };
   }
+  if (await cloudEnabled()) return takeCloudCommand();
   const result = await chrome.storage.local.get([
     STORAGE_KEYS.bridgeUrl,
     STORAGE_KEYS.bridgeToken
@@ -99,6 +103,7 @@ async function getPhoneCommand(senderTab) {
 }
 
 async function reportCommandResult(message) {
+  if (await cloudEnabled()) return reportCloudResult(message);
   const settings = await chrome.storage.local.get([STORAGE_KEYS.bridgeUrl, STORAGE_KEYS.bridgeToken]);
   const response = await fetch(`${parseBridgeUrl(settings[STORAGE_KEYS.bridgeUrl])}/api/command/result`, {
     method: "POST", signal: AbortSignal.timeout(8000),
@@ -108,7 +113,9 @@ async function reportCommandResult(message) {
   if (!response.ok) throw new Error("Could not report command result.");
 }
 
-async function autoPublishLead(lead) {
+async function autoPublishLead(lead, senderTab) {
+  const [active] = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+  if (!senderTab?.id || senderTab.id !== active?.id) return {skipped:true,reason:'inactive tab'};
   const result = await chrome.storage.local.get(STORAGE_KEYS.autoPublish);
   const autoPublish = result[STORAGE_KEYS.autoPublish] !== false;
 
@@ -118,13 +125,15 @@ async function autoPublishLead(lead) {
 
   const fingerprint = makeLeadFingerprint(lead);
   const bearer = await accessToken();
-  if (`${bearer}:${fingerprint}` === lastAutoPublishFingerprint) {
+  const refreshAfter = await cloudEnabled() ? 30000 : 900000;
+  if (`${bearer}:${fingerprint}` === lastAutoPublishFingerprint && Date.now() - lastAutoPublishAt < refreshAfter) {
     return { skipped: true, reason: "duplicate lead payload" };
   }
 
   try {
     const result = await publishLead(lead, { eventName: "bridge.leadAutoPublished" });
     lastAutoPublishFingerprint = `${bearer}:${fingerprint}`;
+    lastAutoPublishAt = Date.now();
     return result;
   } catch (error) {
     await appendLocalLog("warn", "bridge.autoPublishFailed", {
@@ -138,6 +147,7 @@ async function publishLead(lead, options = {}) {
   if (!lead?.available) {
     throw new Error("No lead payload available to send.");
   }
+  if (await cloudEnabled()) return publishCloud(lead);
 
   const result = await chrome.storage.local.get([
     STORAGE_KEYS.bridgeUrl,

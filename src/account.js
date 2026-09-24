@@ -24,6 +24,7 @@ let completingInvite = ['invite', 'recovery'].includes(originalHash.get('type'))
 let busy = false;
 
 document.querySelector('#back').href = isExtension ? '../options/options.html' : './';
+document.querySelector('#continue').href = isExtension ? '../options/options.html' : './';
 function say(text, error = false) { message.textContent = text; message.classList.toggle('error', error); }
 function render(session) {
   const signedIn = Boolean(session?.user);
@@ -75,6 +76,12 @@ passwordForm.addEventListener('submit', event => {
 });
 document.querySelector('#signOut').addEventListener('click', () => void run(async () => {
   const { data } = await client.auth.getSession();
+  if (data.session) {
+    // Remove the shared snapshot and pending actions when ending a work session.
+    // A still-open signed-in computer may publish fresh data again.
+    try { await client.from('companion_sync').delete().eq('user_id',data.session.user.id).abortSignal(AbortSignal.timeout(3000)); }
+    catch { /* Signing out must also work while offline. */ }
+  }
   const bridgeSettings = isExtension ? await chrome.storage.local.get(['impact.bridgeUrl', 'impact.bridgeToken']) : null;
   const bridgeUrl = isExtension ? (bridgeSettings['impact.bridgeUrl'] || 'http://127.0.0.1:8787') : localStorage.getItem('impact.bridgeUrl');
   const bridgeToken = isExtension ? bridgeSettings['impact.bridgeToken'] : localStorage.getItem('impact.bridgeToken');

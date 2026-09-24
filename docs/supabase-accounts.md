@@ -27,7 +27,7 @@ or service-role key belongs in this repository, browser code, or GitHub Pages.
 - Forgot password sends a recovery link to the hosted account page.
 - Sign out affects this device only.
 
-## Current scope
+## Local mode
 
 Both the phone and extension require sign-in. Every bridge API request must
 include an account bearer token, which the bridge verifies with Supabase Auth
@@ -39,9 +39,9 @@ the bridge, clears the account's cached lead/commands, and closes its streams.
 The phone and extension must use the same account. Signing in to GitHub Pages
 does not sign in to the separate local phone URL; browser sessions are scoped
 to each origin. The local bridge needs internet access for verification and
-fails closed when it cannot verify a session. No lead data is uploaded to
-Supabase. A future cloud bridge still needs authenticated storage and row-level
-security. This update secures the local bridge, not a hosted multi-user backend.
+fails closed when it cannot verify a session. In Local mode no lead data is
+uploaded to Supabase. Cloud mode uses authenticated storage, row-level security,
+and administrator-approved membership. See [cloud setup](cloud-setup.md).
 
 ## Build and publish
 
