@@ -562,6 +562,7 @@
           await log("info", "phone.callControlClicked", { phoneType: command.phoneType });
         } catch (error) {
           await log("warn", "phone.callControlFailed", { reason: error.message });
+          await chrome.runtime.sendMessage({ type: "impact/commandResult", message: error.message });
         }
         return;
       }
@@ -742,6 +743,8 @@
     const target = slots[0].querySelector("a, button, input, [role='button'], [onclick]") || slots[0];
     if (target.disabled || target.getAttribute("aria-disabled") === "true") throw new Error("That appointment time is unavailable in IMPACT.");
     target.click();
+    // The next phone call belongs to the next lead, not this appointment page.
+    sessionStorage.removeItem("impact.virtualAppointmentContext");
   }
 
   function submitCallResult(command, choice) {
