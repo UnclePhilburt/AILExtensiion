@@ -48,6 +48,8 @@ button:not(:disabled):active,.callLink:active { transform: translateY(1px); filt
 .resultHeading { grid-column: 1 / -1; margin-bottom: 5px; }
 .resultHeading .eyebrow { color: #678373; }
 .resultHeading h2 { font-size: 21px; letter-spacing: -.4px; margin-top: 5px; }
+.pendingCallNotice { display: grid; gap: 12px; padding: 18px 20px; background: #fff7e8; border: 1px solid #ecd3a4; border-radius: 18px; color: #5b4418; font-size: 14px; line-height: 1.5; }
+.pendingCallNotice button { min-height: 44px; justify-self: start; padding: 8px 18px; }
 #noAnswer:not(:disabled) { border-color: #a8c3b3; background: #fff; }
 .bridgeSetup { display: grid; gap: 9px; padding: 22px; background: #fff; border: 1px solid #dce6df; border-radius: 18px; }
 .bridgeSetup label { font-size: 12px; font-weight: 650; color: #52695e; }
