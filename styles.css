@@ -147,6 +147,18 @@ h1 {
   gap: 10px;
 }
 
+.navControls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.navControls button {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: white;
+}
+
 button {
   min-height: 54px;
   border: 1px solid #cbd5e1;
