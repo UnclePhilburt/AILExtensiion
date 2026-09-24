@@ -41,3 +41,40 @@ test('phone cloud flow shows live leads, collapses history for a call and clears
   assert.equal(el('#callResults').hidden,true);
   assert.equal(redirected,'account.html?next=workspace.html');
 });
+
+test('phone locks Previous/Next until the moved-to lead arrives, so stale taps are not sent', async()=>{
+  const elements=new Map();
+  const make=()=>({children:[],listeners:{},value:'',hidden:false,open:true,disabled:false,
+    append(...items){this.children.push(...items);},replaceChildren(...items){this.children=items;},
+    setAttribute(){},addEventListener(name,fn){this.listeners[name]=fn;}});
+  const el=selector=>{if(!elements.has(selector))elements.set(selector,make());return elements.get(selector);};
+  let authChanged; const sent=[];
+  const lead={available:true,leadId:'test-a',leadName:'Fictional A',phones:[]};
+  let state={lead,desktop_seen:new Date().toISOString(),lead_updated_at:new Date().toISOString(),device_id:'test-computer'};
+  const context=vm.createContext({
+    client:{auth:{onAuthStateChange:fn=>{authChanged=fn;}}}, cloudEnabled:async()=>true,
+    cloudState:async()=>state,cloudTouchPhone:async()=>{}, cloudSend:async(s,c)=>{sent.push(c);},
+    watchCloud:async()=>()=>{},visibleLead:s=>s?.lead,isOnline:()=>true,
+    document:{querySelector:selector=>selector.startsWith('meta')?null:el(selector),createElement:make,addEventListener(){}},
+    localStorage:{getItem:()=>null,setItem(){}},location:{search:'',origin:'https://example.test',replace(){}},
+    URLSearchParams, Date, setInterval(){},setTimeout(){}, console
+  });
+  const source=fs.readFileSync(path.join(__dirname,'../phone-web/public/app.js'),'utf8').replace(/^import .*;\r?\n/gm,'');
+  const app=await vm.runInContext(`(async()=>{${source}\nreturn {refreshCloud};})()`,context);
+  authChanged('SIGNED_IN',{user:{id:'test-user'}});
+  await new Promise(setImmediate);
+  assert.equal(el('#previousLead').disabled,false);
+  await el('#nextLead').listeners.click();
+  assert.deepEqual(sent.map(c=>[c.type,c.leadId]),[['next','test-a']]);
+  assert.equal(el('#previousLead').disabled,true);
+  await el('#previousLead').listeners.click();
+  assert.equal(sent.length,1,'a Previous tap while the phone still shows the old lead is not sent');
+  state={...state,lead:{...lead,leadId:'test-b',leadName:'Fictional B'}};
+  await app.refreshCloud();
+  assert.equal(el('#previousLead').disabled,false);
+  await el('#previousLead').listeners.click();
+  assert.deepEqual([sent.at(-1).type,sent.at(-1).leadId],['previous','test-b']);
+  state={...state,result:{message:'Navigation skipped because the lead changed.',at:new Date().toISOString()}};
+  await app.refreshCloud();
+  assert.equal(el('#previousLead').disabled,false,'a result from the computer unlocks the buttons');
+});
