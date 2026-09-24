@@ -1,5 +1,6 @@
 import { client, accessToken } from './auth-runtime.js';
 import { cloudEnabled, cloudState, cloudTouchPhone, cloudSend, watchCloud, visibleLead, isOnline } from './cloud-sync.js';
+import { NETWORK_MESSAGE, SIGN_IN_MESSAGE, RESULT_COMMANDS, checkBeforeSend, isStateFresh, isAuthFailure, isNetworkFailure, friendlySendError, withTimeout } from './phone-actions.js';
 import { createPendingCall, readPendingCall, writePendingCall, pendingCallDecision, markPendingCallResult, isCallResultCommand } from './pending-call.js';
 const statusEl = document.querySelector("#status");
 const leadCard = document.querySelector("#leadCard");
@@ -19,6 +20,7 @@ const appointmentHint = document.querySelector("#appointmentHint");
 const pendingCallNotice = document.querySelector("#pendingCallNotice");
 const pendingCallText = document.querySelector("#pendingCallText");
 const dismissPendingCallButton = document.querySelector("#dismissPendingCall");
+const actionFeedback = document.querySelector("#actionFeedback");
 const params = new URLSearchParams(location.search);
 
 let bridgeLead = null;
@@ -31,7 +33,12 @@ let calledLeadKey = "";
 let signedIn = false;
 let historyLeadKey = "";
 const useCloud = await cloudEnabled();
-let currentCloudState = null, stopCloudWatch = null, cloudReadBusy = false, lastCloudResult = '', lastPhoneTouch = 0;
+let currentCloudState = null, stopCloudWatch = null, cloudReadBusy = 0, lastCloudResult = '', lastPhoneTouch = 0;
+// When the phone last fetched cloud state and when the page was last hidden.
+// Phone browsers pause timers and live updates in the background, so a tap right
+// after coming back must not trust state fetched before the phone went away.
+let lastCloudFetchAt = 0, lastHiddenAt = 0, lastResumeAt = 0;
+let awaitingResultSince = 0, feedbackTimer = null;
 let cloudGeneration = 0;
 let selectedAppointmentDay = "";
 // Previous/Next stay locked until the phone sees the lead IMPACT moved to, so a
@@ -96,8 +103,36 @@ client.auth.onAuthStateChange((_event, session) => {
 // Poll only as a fallback while the live connection is unavailable.
 setInterval(() => { if (signedIn && (useCloud || !eventsConnected)) refreshLead(); }, useCloud ? 5000 : 2500);
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) connectLiveUpdates();
+  if (document.hidden) lastHiddenAt = Date.now();
+  else resumePage();
 });
+// pageshow covers pages restored from the back/forward cache; focus and online
+// cover returning from another app or regaining signal.
+globalThis.addEventListener?.("pagehide", () => { lastHiddenAt = Date.now(); });
+globalThis.addEventListener?.("pageshow", () => resumePage());
+globalThis.addEventListener?.("focus", () => resumePage());
+globalThis.addEventListener?.("online", () => resumePage(true));
+
+function resumePage(force = false) {
+  if (!signedIn || document.hidden) return;
+  if (!force && Date.now() - lastResumeAt < 1500) return;
+  lastResumeAt = Date.now();
+  // Let the Supabase client refresh an access token that expired while away.
+  void client.auth.getSession?.().catch?.(() => {});
+  // Locks such as Previous/Next expire by time; re-evaluate them right away.
+  updateNavButtons();
+  void connectLiveUpdates();
+}
+
+function showFeedback(message, kind = "info", ms = 9000) {
+  if (!message) return;
+  statusEl.textContent = message;
+  actionFeedback.textContent = message;
+  actionFeedback.className = `actionFeedback ${kind}`;
+  actionFeedback.hidden = false;
+  globalThis.clearTimeout?.(feedbackTimer);
+  feedbackTimer = setTimeout(() => { actionFeedback.hidden = true; }, ms);
+}
 
 async function connectLiveUpdates() {
   if (!signedIn) return;
@@ -143,7 +178,7 @@ async function connectLiveUpdates() {
         if (!data || !signedIn || stream !== leadEvents) continue;
         if (frame.includes('event: auth-required')) throw new Error('Your account session expired. Sign in again.');
         const payload = JSON.parse(data.slice(6));
-        if (frame.includes('event: command-result')) { statusEl.textContent = payload.message; clearNavigationPending(); }
+        if (frame.includes('event: command-result')) receiveComputerResult(payload.message);
         else { eventsConnected = true; receiveBridgeLead(payload.lead, payload.updatedAt); }
       }
     }
@@ -186,23 +221,88 @@ async function refreshLead() {
 }
 
 async function refreshCloud() {
-  if (!signedIn || cloudReadBusy) return;
-  cloudReadBusy = true;
+  if (!signedIn) return;
+  // A read started before the phone went to sleep can stay pending for a long
+  // time. Don't let it block fresh reads forever.
+  if (cloudReadBusy && Date.now() - cloudReadBusy < 15000) return;
+  const startedAt = Date.now();
+  cloudReadBusy = startedAt;
   const generation = cloudGeneration;
   try {
     const state = await cloudState();
     if (!signedIn || generation !== cloudGeneration) return;
-    currentCloudState = state;
-    receiveBridgeLead(visibleLead(state), state?.lead_updated_at);
-    if (!isOnline(state?.desktop_seen)) statusEl.textContent = 'Open IMPACT on your computer to connect.';
-    if (state?.result?.at && state.result.at !== lastCloudResult) {
-      lastCloudResult = state.result.at;
-      if (Date.now() - Date.parse(state.result.at) < 15000) { statusEl.textContent = state.result.message; clearNavigationPending(); }
-    }
+    applyCloudState(state, startedAt);
     if (Date.now() - lastPhoneTouch > 10000) { lastPhoneTouch = Date.now(); await cloudTouchPhone(); }
   } catch (error) {
+    if (!signedIn || generation !== cloudGeneration || startedAt < lastCloudFetchAt) return;
+    if (isNetworkFailure(error.message) && currentCloudState) {
+      // Signal is often still coming back right after the phone wakes. Keep the
+      // lead on screen; the next poll or tap fetches again.
+      statusEl.textContent = "Reconnecting…";
+      return;
+    }
     currentCloudState = null; receiveBridgeLead(null, null); statusEl.textContent = error.message;
-  } finally { cloudReadBusy = false; }
+  } finally { if (cloudReadBusy === startedAt) cloudReadBusy = 0; }
+}
+
+function applyCloudState(state, startedAt) {
+  // Never let an older response overwrite a newer one.
+  if (startedAt < lastCloudFetchAt) return false;
+  lastCloudFetchAt = startedAt;
+  currentCloudState = state;
+  receiveBridgeLead(visibleLead(state), state?.lead_updated_at);
+  if (!isOnline(state?.desktop_seen)) statusEl.textContent = 'Open IMPACT on your computer to connect.';
+  else if (!visibleLead(state)) {
+    statusEl.textContent = "Your computer is connected but hasn't sent a lead recently.";
+    leadCard.textContent = "Your computer is connected, but IMPACT hasn't sent a current lead. Open the lead in IMPACT on your computer." +
+      (pendingCall ? ` Your call to ${pendingCall.leadName || "your last lead"} is saved.` : "");
+  }
+  const result = state?.result;
+  if (result?.at && result.at !== lastCloudResult) {
+    lastCloudResult = result.at;
+    // result.at comes from the computer's clock, so also accept a result that
+    // shows up while the phone is waiting for one.
+    const awaiting = awaitingResultSince && Date.now() - awaitingResultSince < 60000;
+    if (awaiting || Date.now() - Date.parse(result.at) < 15000) { receiveComputerResult(result.message); }
+  }
+  return true;
+}
+
+function receiveComputerResult(message) {
+  awaitingResultSince = 0;
+  showFeedback(message, /skipped|not |no longer|unavailable|could not|couldn't|expired|failed|needs|disabled|open |check /i.test(message) ? "error" : "info");
+  clearNavigationPending();
+}
+
+// Cloud state for a send: reuse it only if it was fetched after the phone
+// last came back from the background and is only a few seconds old.
+async function stateForSend() {
+  if (currentCloudState && isStateFresh(lastCloudFetchAt, lastHiddenAt, Date.now())) return currentCloudState;
+  const startedAt = Date.now();
+  await ensureSession();
+  const state = await withTimeout(cloudState(), 10000, NETWORK_MESSAGE);
+  if (!signedIn) throw new Error(SIGN_IN_MESSAGE);
+  applyCloudState(state, startedAt);
+  return state;
+}
+
+async function ensureSession() {
+  try {
+    const { data } = await withTimeout(client.auth.getSession(), 10000, NETWORK_MESSAGE);
+    if (data?.session) return;
+  } catch (error) {
+    if (isNetworkFailure(error.message)) throw new Error(NETWORK_MESSAGE);
+  }
+  if (!(await refreshSessionNow())) throw new Error(SIGN_IN_MESSAGE);
+}
+
+async function refreshSessionNow() {
+  try {
+    const { data } = await withTimeout(client.auth.refreshSession(), 10000, NETWORK_MESSAGE);
+    return Boolean(data?.session);
+  } catch (_error) {
+    return false;
+  }
 }
 
 function persistBridgeSettings() {
@@ -273,7 +373,9 @@ function dismissPendingCall() {
 async function sendCallResult(type, details = {}) {
   const call = pendingCall;
   if (!call?.leadId || !displayedLead?.available || call.leadKey !== getLeadKey(displayedLead)) {
-    statusEl.textContent = "Tap Call on this lead first, then choose the result.";
+    showFeedback(displayedLead?.available && !call
+      ? "Tap Call on this lead first, then choose the result."
+      : "This result belongs to a different lead than the one on screen. Check the lead and try again.", "error");
     return false;
   }
   const sent = await sendComputerCommand(type, { ...details, leadId: call.leadId });
@@ -301,7 +403,8 @@ function clearNavigationPending() {
 }
 
 async function sendNavigation(type) {
-  if (!displayedLead?.available || navigationPending()) return;
+  if (!displayedLead?.available) { showFeedback("No lead is showing yet. Open IMPACT on your computer.", "error"); return; }
+  if (navigationPending()) { showFeedback("Still waiting for IMPACT to move. One moment…"); return; }
   const pending = { until: Date.now() + 10000 };
   navPending = pending;
   updateNavButtons();
@@ -315,25 +418,42 @@ async function sendNavigation(type) {
   }
   // Pick up the new lead promptly even if the live update is slow.
   for (const delay of [700, 1800, 4000]) setTimeout(() => { if (navPending === pending) void refreshLead(); }, delay);
-  setTimeout(() => { if (navPending === pending) clearNavigationPending(); }, 10100);
+  setTimeout(() => {
+    if (navPending !== pending) return;
+    clearNavigationPending();
+    if (!document.hidden) showFeedback(`IMPACT didn't move to the ${type === "next" ? "next" : "previous"} lead. Check IMPACT on your computer, then try again.`, "error");
+  }, 10100);
 }
 
 async function sendComputerCommand(type, details = {}) {
-  if (!signedIn) return false;
+  if (!signedIn) { showFeedback("You're signed out. Sign in again to continue.", "error"); return false; }
   try {
     if (useCloud) {
-      await cloudSend(currentCloudState, {type, leadId: displayedLead?.leadId, ...details});
-      statusEl.textContent = type === 'call' ? 'Call sent to IMPACT.' : type === 'virtual-appointment' ? 'Opening Virtual Appointment in IMPACT…' : type === 'virtual-appointment-day' ? 'Selecting that day in IMPACT…' : type === 'virtual-appointment-slot' ? 'Setting that appointment in IMPACT…' : type === 'previous' ? 'Moving IMPACT back on computer…' : type === 'next' ? 'Advancing IMPACT on computer…' : 'Action sent to your computer…';
+      const command = { type, leadId: displayedLead?.leadId, ...details };
+      const state = await stateForSend();
+      const problem = checkBeforeSend(state, command, Date.now());
+      if (problem) throw new Error(problem);
+      // The same id on a retry lets the server ignore a duplicate.
+      const id = crypto.randomUUID();
+      try {
+        await withTimeout(cloudSend(state, command, id), 12000, NETWORK_MESSAGE);
+      } catch (error) {
+        if (!isAuthFailure(error.message)) throw error;
+        if (!(await refreshSessionNow())) throw new Error(SIGN_IN_MESSAGE);
+        await withTimeout(cloudSend(state, command, id), 12000, NETWORK_MESSAGE);
+      }
+      showFeedback(type === 'call' ? 'Call sent to IMPACT.' : type === 'virtual-appointment' ? 'Opening Virtual Appointment in IMPACT…' : type === 'virtual-appointment-day' ? 'Selecting that day in IMPACT…' : type === 'virtual-appointment-slot' ? 'Setting that appointment in IMPACT…' : type === 'refused-appointment' ? 'Sending Refused Appointment to IMPACT…' : type === 'no-answer' ? 'Sending No Answer to IMPACT…' : type === 'previous' ? 'Moving IMPACT back on computer…' : type === 'next' ? 'Advancing IMPACT on computer…' : 'Action sent to your computer…', "info", 4000);
+      expectComputerResult(type);
       return true;
     }
     const bridgeUrl = bridgeUrlInput.value.trim().replace(/\/$/, "");
     const token = bridgeTokenInput.value.trim();
     if (!bridgeUrl || !token) {
-      statusEl.textContent = "Bridge URL and token required.";
+      showFeedback("Bridge URL and token required.", "error");
       return false;
     }
 
-    const response = await fetch(`${bridgeUrl}/api/command?token=${encodeURIComponent(token)}`, {
+    const response = await withTimeout(fetch(`${bridgeUrl}/api/command?token=${encodeURIComponent(token)}`, {
       method: "POST",
       keepalive: true,
       headers: {
@@ -341,22 +461,33 @@ async function sendComputerCommand(type, details = {}) {
         "content-type": "application/json"
       },
       body: JSON.stringify({ type, ...details })
-    });
+    }), 12000, NETWORK_MESSAGE);
     const payload = await response.json();
     if (!response.ok || !payload.ok) {
       throw new Error(payload.error || `HTTP ${response.status}`);
     }
 
-    statusEl.textContent = type === "virtual-appointment" ? "Opening Virtual Appointment in IMPACT..." : type === "virtual-appointment-day" ? "Selecting that day in IMPACT..." : type === "virtual-appointment-slot" ? "Setting that appointment in IMPACT..." : type === "refused-appointment" ? "Opening Refused Appointment in IMPACT..." : type === "no-answer" ? "Sending No Answer to IMPACT..." : type === "call" ? `Call ${details.phoneType} sent to IMPACT.` : type === "next"
+    showFeedback(type === "virtual-appointment" ? "Opening Virtual Appointment in IMPACT..." : type === "virtual-appointment-day" ? "Selecting that day in IMPACT..." : type === "virtual-appointment-slot" ? "Setting that appointment in IMPACT..." : type === "refused-appointment" ? "Opening Refused Appointment in IMPACT..." : type === "no-answer" ? "Sending No Answer to IMPACT..." : type === "call" ? `Call ${details.phoneType} sent to IMPACT.` : type === "next"
       ? "Advancing IMPACT on computer..."
-      : "Moving IMPACT back on computer...";
+      : "Moving IMPACT back on computer...", "info", 4000);
+    if (eventsConnected) expectComputerResult(type);
     return true;
   } catch (error) {
-    statusEl.textContent = /lead changed/i.test(error.message) && ["next", "previous"].includes(type)
-      ? "Your phone was still catching up to IMPACT. Check the lead shown and tap again."
-      : error.message;
+    showFeedback(friendlySendError(error.message, type), "error");
     return false;
   }
+}
+
+// The computer reports back after every call result. If nothing arrives, the
+// command most likely expired unseen (IMPACT tab closed, hidden or asleep).
+function expectComputerResult(type) {
+  if (!RESULT_COMMANDS.includes(type)) return;
+  const since = Date.now();
+  awaitingResultSince = since;
+  setTimeout(() => {
+    if (awaitingResultSince !== since || document.hidden) return;
+    showFeedback("Your computer hasn't confirmed that yet. Make sure the IMPACT tab is open and in front on your computer, then tap again if nothing happened.", "error", 15000);
+  }, 16000);
 }
 
 function renderLead(lead, updatedAt, source) {
@@ -364,7 +495,9 @@ function renderLead(lead, updatedAt, source) {
   renderAppointmentPicker(lead);
   if (!lead?.available) {
     leadCard.className = "leadCard empty";
-    leadCard.textContent = "Send a lead from the Brave extension.";
+    leadCard.textContent = pendingCall
+      ? `Waiting for your computer. Your call to ${pendingCall.leadName || "your last lead"} is saved, and the result buttons will come back when IMPACT reconnects.`
+      : "Send a lead from the Brave extension.";
     updateNavButtons();
     statusEl.textContent = "No current lead.";
     return;

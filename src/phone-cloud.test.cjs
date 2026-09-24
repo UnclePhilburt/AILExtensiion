@@ -4,6 +4,7 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
 // app.js imports these helpers; the tests strip imports, so load them into each context.
+const phoneActionsSource=require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/phone-actions.js'),'utf8').replace(/^export /gm,'');
 const pendingCallSource=fs.readFileSync(path.join(__dirname,'../phone-web/public/pending-call.js'),'utf8').replace(/^export /gm,'');
 test('phone cloud flow shows live leads, collapses history for a call and clears on logout', async()=>{
   const elements=new Map();
@@ -20,9 +21,9 @@ test('phone cloud flow shows live leads, collapses history for a call and clears
     watchCloud:async()=>()=>{},visibleLead:s=>s?.lead,isOnline:()=>true,
     document:{querySelector:selector=>selector.startsWith('meta')?null:el(selector),createElement:make,addEventListener(){}},
     localStorage:{getItem:()=>null,setItem(){}},location:{search:'',origin:'https://example.test',replace:url=>{redirected=url;}},
-    URLSearchParams, Date, setInterval(){},setTimeout(){}, console
+    URLSearchParams, Date, crypto:require('node:crypto'), setInterval(){},setTimeout(){}, console
   });
-  vm.runInContext(pendingCallSource,context);
+  vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context);
   const source=fs.readFileSync(path.join(__dirname,'../phone-web/public/app.js'),'utf8').replace(/^import .*;\r?\n/gm,'');
   const app=await vm.runInContext(`(async()=>{${source}\nreturn {refreshCloud,receiveBridgeLead};})()`,context);
   authChanged('SIGNED_IN',{user:{id:'test-user'}});
@@ -60,9 +61,9 @@ test('phone locks Previous/Next until the moved-to lead arrives, so stale taps a
     watchCloud:async()=>()=>{},visibleLead:s=>s?.lead,isOnline:()=>true,
     document:{querySelector:selector=>selector.startsWith('meta')?null:el(selector),createElement:make,addEventListener(){}},
     localStorage:{getItem:()=>null,setItem(){}},location:{search:'',origin:'https://example.test',replace(){}},
-    URLSearchParams, Date, setInterval(){},setTimeout(){}, console
+    URLSearchParams, Date, crypto:require('node:crypto'), setInterval(){},setTimeout(){}, console
   });
-  vm.runInContext(pendingCallSource,context);
+  vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context);
   const source=fs.readFileSync(path.join(__dirname,'../phone-web/public/app.js'),'utf8').replace(/^import .*;\r?\n/gm,'');
   const app=await vm.runInContext(`(async()=>{${source}\nreturn {refreshCloud};})()`,context);
   authChanged('SIGNED_IN',{user:{id:'test-user'}});

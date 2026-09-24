@@ -17,6 +17,11 @@ Real phone/Brave call handoff still needs the user's end-to-end check.
 3. Paste and run `supabase/migrations/002_retention.sql` once. Verify the
    `companion-retention` job succeeds in Supabase Cron. This clears live
    snapshots after 30 minutes (plus up to one minute until the next run).
+   Also run `003_invited_access.sql`, `004_team_admin.sql` and
+   `005_keep_lead_fresh_during_calls.sql` in order. 005 keeps the current
+   lead from expiring while IMPACT sits on "Call - What Happened?" and the
+   computer is still checking in. The 30-minute cleanup now counts from when
+   the computer last checked in.
 4. Invite each account under Authentication > Users. Disable public signup.
    Set the Site URL and allowed redirect to
    `https://unclephilburt.github.io/AILExtensiion/account.html`.
