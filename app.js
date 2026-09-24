@@ -1,5 +1,6 @@
 const statusEl = document.querySelector("#status");
 const leadCard = document.querySelector("#leadCard");
+const nextLeadCard = document.querySelector("#nextLeadCard");
 const bridgeUrlInput = document.querySelector("#bridgeUrl");
 const bridgeTokenInput = document.querySelector("#bridgeToken");
 const saveBridgeButton = document.querySelector("#saveBridge");
@@ -56,6 +57,7 @@ function renderLead(lead, updatedAt) {
   if (!lead?.available) {
     leadCard.className = "leadCard empty";
     leadCard.textContent = "Send a lead from the Brave extension.";
+    renderNextLead(null);
     statusEl.textContent = "No current lead.";
     return;
   }
@@ -82,6 +84,38 @@ function renderLead(lead, updatedAt) {
     phoneList.append(link);
   }
   leadCard.append(phoneList);
+  renderNextLead(lead.nextLead);
+}
+
+function renderNextLead(nextLead) {
+  nextLeadCard.replaceChildren();
+
+  if (!nextLead?.available) {
+    nextLeadCard.className = "leadCard empty";
+    nextLeadCard.textContent = "No preloaded next lead yet.";
+    return;
+  }
+
+  nextLeadCard.className = "leadCard nextLead";
+  const title = document.createElement("h2");
+  title.textContent = "Preloaded Next";
+  nextLeadCard.append(title);
+
+  appendDetailTo(nextLeadCard, "Name", nextLead.leadName);
+  appendDetailTo(nextLeadCard, "Language", nextLead.language);
+  appendDetailTo(nextLeadCard, "Email", nextLead.email);
+  appendDetailTo(nextLeadCard, "Address", nextLead.address);
+
+  const phoneList = document.createElement("div");
+  phoneList.className = "phoneList";
+  for (const phone of nextLead.phones || []) {
+    const link = document.createElement("a");
+    link.className = "callLink secondaryCall";
+    link.href = phone.dialHref;
+    link.textContent = `Call Next ${phone.label}: ${phone.number}`;
+    phoneList.append(link);
+  }
+  nextLeadCard.append(phoneList);
 }
 
 function appendDetail(label, value) {
@@ -93,4 +127,15 @@ function appendDetail(label, value) {
   row.className = "detail";
   row.textContent = `${label}: ${value}`;
   leadCard.append(row);
+}
+
+function appendDetailTo(parent, label, value) {
+  if (!value) {
+    return;
+  }
+
+  const row = document.createElement("div");
+  row.className = "detail";
+  row.textContent = `${label}: ${value}`;
+  parent.append(row);
 }
