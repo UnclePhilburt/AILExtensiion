@@ -1,5 +1,6 @@
 import { client, accessToken } from './auth-runtime.js';
 import { cloudEnabled, cloudState, cloudTouchPhone, cloudSend, watchCloud, visibleLead, isOnline } from './cloud-sync.js';
+import { createPendingCall, readPendingCall, writePendingCall, pendingCallDecision, markPendingCallResult, isCallResultCommand } from './pending-call.js';
 const statusEl = document.querySelector("#status");
 const leadCard = document.querySelector("#leadCard");
 const bridgeUrlInput = document.querySelector("#bridgeUrl");
@@ -15,6 +16,9 @@ const appointmentPicker = document.querySelector("#appointmentPicker");
 const appointmentDays = document.querySelector("#appointmentDays");
 const appointmentTimes = document.querySelector("#appointmentTimes");
 const appointmentHint = document.querySelector("#appointmentHint");
+const pendingCallNotice = document.querySelector("#pendingCallNotice");
+const pendingCallText = document.querySelector("#pendingCallText");
+const dismissPendingCallButton = document.querySelector("#dismissPendingCall");
 const params = new URLSearchParams(location.search);
 
 let bridgeLead = null;
@@ -33,6 +37,11 @@ let selectedAppointmentDay = "";
 // Previous/Next stay locked until the phone sees the lead IMPACT moved to, so a
 // tap can never be sent with the old lead while the phone is still catching up.
 let navPending = null;
+// The call the rep started from this phone, kept in localStorage per user so a
+// page reload (common when the phone switches to the dialer) keeps the
+// "How did it go?" controls for the lead that was called.
+let currentUserId = "";
+let pendingCall = null;
 
 const savedBridgeUrl = localStorage.getItem("impact.bridgeUrl") || "";
 const savedBridgeToken = localStorage.getItem("impact.bridgeToken") || "";
@@ -60,12 +69,18 @@ bridgeUrlInput.addEventListener("input", persistBridgeSettings);
 bridgeTokenInput.addEventListener("input", persistBridgeSettings);
 previousLeadButton.addEventListener("click", showPreviousLead);
 nextLeadButton.addEventListener("click", showNextLead);
-noAnswerButton.addEventListener("click", () => sendComputerCommand("no-answer", { leadId: displayedLead?.leadId }));
-virtualAppointmentButton.addEventListener("click", () => sendComputerCommand("virtual-appointment", { leadId: displayedLead?.leadId }));
-refusedAppointmentButton.addEventListener("click", () => sendComputerCommand("refused-appointment", { leadId: displayedLead?.leadId }));
+noAnswerButton.addEventListener("click", () => sendCallResult("no-answer"));
+virtualAppointmentButton.addEventListener("click", () => sendCallResult("virtual-appointment"));
+refusedAppointmentButton.addEventListener("click", () => sendCallResult("refused-appointment"));
+dismissPendingCallButton.addEventListener("click", dismissPendingCall);
 
 client.auth.onAuthStateChange((_event, session) => {
   signedIn = Boolean(session);
+  const userId = signedIn ? String(session.user?.id || "") : "";
+  if (userId !== currentUserId) {
+    currentUserId = userId;
+    pendingCall = userId ? readPendingCall(localStorage, userId, Date.now()) : null;
+  }
   if (!signedIn) {
     cloudGeneration++; stopCloudWatch?.(); stopCloudWatch = null; currentCloudState = null;
     leadEvents?.abort();
@@ -198,7 +213,10 @@ function persistBridgeSettings() {
 function receiveBridgeLead(lead, updatedAt) {
   bridgeLead = lead;
   if (!lead?.available) {
+    // Keep the saved call: the lead is often only briefly unavailable (computer
+    // reconnecting, page reload still loading) and comes back unchanged.
     calledLeadKey = "";
+    renderPendingCallReminder(null);
     displayedLead = null;
     displayedLeadKey = "";
     previousLeads = [];
@@ -209,7 +227,6 @@ function receiveBridgeLead(lead, updatedAt) {
 
   const nextKey = getLeadKey(lead);
   if (!displayedLead || nextKey !== displayedLeadKey) {
-    calledLeadKey = "";
     displayedLead = lead;
     displayedLeadKey = nextKey;
     previousLeads = [];
@@ -219,8 +236,49 @@ function receiveBridgeLead(lead, updatedAt) {
 
   // Preload and contact updates can arrive without changing the lead's identity.
   displayedLead = lead;
+  applyPendingCall(nextKey);
 
   renderLead(displayedLead, updatedAt, displayedLead === bridgeLead ? "bridge" : "local");
+}
+
+function setPendingCall(record) {
+  pendingCall = record;
+  if (currentUserId) writePendingCall(localStorage, currentUserId, record);
+}
+
+function applyPendingCall(leadKey) {
+  const decision = pendingCallDecision(pendingCall, leadKey, Date.now());
+  if (decision.clear) setPendingCall(null);
+  calledLeadKey = decision.calledLeadKey;
+  renderPendingCallReminder(decision.reminder);
+}
+
+function renderPendingCallReminder(record) {
+  pendingCallNotice.hidden = !record;
+  if (!record) return;
+  const time = new Date(record.startedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const name = record.leadName || "your last lead";
+  pendingCallText.textContent = `No result was sent for your ${time} call to ${name}. IMPACT is on a different lead now. To log it from the phone, go back to ${name} in IMPACT. Otherwise log it on your computer and dismiss this.`;
+}
+
+function dismissPendingCall() {
+  setPendingCall(null);
+  calledLeadKey = "";
+  renderPendingCallReminder(null);
+  updateNavButtons();
+  renderAppointmentPicker(displayedLead);
+}
+
+// Results always go to the lead that was called, never just whatever lead is on screen.
+async function sendCallResult(type, details = {}) {
+  const call = pendingCall;
+  if (!call?.leadId || !displayedLead?.available || call.leadKey !== getLeadKey(displayedLead)) {
+    statusEl.textContent = "Tap Call on this lead first, then choose the result.";
+    return false;
+  }
+  const sent = await sendComputerCommand(type, { ...details, leadId: call.leadId });
+  if (sent && isCallResultCommand(type) && pendingCall === call) setPendingCall(markPendingCallResult(call, Date.now()));
+  return sent;
 }
 
 async function showNextLead() {
@@ -355,6 +413,8 @@ function renderLead(lead, updatedAt, source) {
     link.append(icon, content);
     link.addEventListener("click", () => {
       calledLeadKey = getLeadKey(lead);
+      setPendingCall(createPendingCall({ leadKey: calledLeadKey, leadId: lead.leadId, leadName: lead.leadName, phoneLabel: phone.label, now: Date.now() }));
+      renderPendingCallReminder(null);
       document.querySelector("#callHistory").open = false;
       updateNavButtons();
       renderAppointmentPicker(displayedLead);
@@ -406,7 +466,7 @@ function renderAppointmentPicker(lead) {
       if (day.id === selectedAppointmentDay && ready) return;
       selectedAppointmentDay = day.id;
       renderAppointmentPicker(displayedLead);
-      void sendComputerCommand("virtual-appointment-day", { leadId: lead.leadId, dayId: day.id });
+      void sendCallResult("virtual-appointment-day", { dayId: day.id });
     });
     appointmentDays.append(button);
   }
@@ -415,8 +475,8 @@ function renderAppointmentPicker(lead) {
     button.type = "button";
     button.textContent = time;
     button.disabled = !ready || !lead.leadId;
-    button.addEventListener("click", () => void sendComputerCommand("virtual-appointment-slot", {
-      leadId: lead.leadId, dayId: selectedDay.id, time
+    button.addEventListener("click", () => void sendCallResult("virtual-appointment-slot", {
+      dayId: selectedDay.id, time
     }));
     appointmentTimes.append(button);
   }
@@ -426,7 +486,8 @@ function renderCallHistory(lead) {
   const card = document.querySelector("#callHistory");
   const entries = document.querySelector("#historyEntries");
   const key = lead?.available ? getLeadKey(lead) : "";
-  if (key !== historyLeadKey) card.open = true;
+  // Start collapsed when returning to a lead that is mid-call (e.g. after a reload).
+  if (key !== historyLeadKey) card.open = !(key && key === calledLeadKey);
   historyLeadKey = key;
   card.hidden = !lead?.available;
   entries.replaceChildren();

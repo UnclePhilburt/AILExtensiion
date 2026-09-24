@@ -3,6 +3,8 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
+// app.js imports these helpers; the tests strip imports, so load them into each context.
+const pendingCallSource=fs.readFileSync(path.join(__dirname,'../phone-web/public/pending-call.js'),'utf8').replace(/^export /gm,'');
 test('phone cloud flow shows live leads, collapses history for a call and clears on logout', async()=>{
   const elements=new Map();
   const make=()=>({children:[],listeners:{},value:'',hidden:false,open:true,
@@ -20,6 +22,7 @@ test('phone cloud flow shows live leads, collapses history for a call and clears
     localStorage:{getItem:()=>null,setItem(){}},location:{search:'',origin:'https://example.test',replace:url=>{redirected=url;}},
     URLSearchParams, Date, setInterval(){},setTimeout(){}, console
   });
+  vm.runInContext(pendingCallSource,context);
   const source=fs.readFileSync(path.join(__dirname,'../phone-web/public/app.js'),'utf8').replace(/^import .*;\r?\n/gm,'');
   const app=await vm.runInContext(`(async()=>{${source}\nreturn {refreshCloud,receiveBridgeLead};})()`,context);
   authChanged('SIGNED_IN',{user:{id:'test-user'}});
@@ -59,6 +62,7 @@ test('phone locks Previous/Next until the moved-to lead arrives, so stale taps a
     localStorage:{getItem:()=>null,setItem(){}},location:{search:'',origin:'https://example.test',replace(){}},
     URLSearchParams, Date, setInterval(){},setTimeout(){}, console
   });
+  vm.runInContext(pendingCallSource,context);
   const source=fs.readFileSync(path.join(__dirname,'../phone-web/public/app.js'),'utf8').replace(/^import .*;\r?\n/gm,'');
   const app=await vm.runInContext(`(async()=>{${source}\nreturn {refreshCloud};})()`,context);
   authChanged('SIGNED_IN',{user:{id:'test-user'}});
