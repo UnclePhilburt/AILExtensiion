@@ -5,8 +5,8 @@ const snapshotOutput = document.querySelector("#snapshotOutput");
 const leadPreview = document.querySelector("#leadPreview");
 const phoneStatus = document.querySelector("#phoneStatus");
 const logOutput = document.querySelector("#logOutput");
+const updatePhoneButton = document.querySelector("#updatePhone");
 const runDiagnosticButton = document.querySelector("#runDiagnostic");
-const sendToPhoneButton = document.querySelector("#sendToPhone");
 const pickElementButton = document.querySelector("#pickElement");
 const openOptionsButton = document.querySelector("#openOptions");
 const clearLogsButton = document.querySelector("#clearLogs");
@@ -36,20 +36,10 @@ runDiagnosticButton.addEventListener("click", async () => {
   });
 });
 
-sendToPhoneButton.addEventListener("click", async () => {
-  await withBusy(sendToPhoneButton, async () => {
-    const lead = currentLeadPreview || (await getFreshLeadPreview());
-    const response = await chrome.runtime.sendMessage({
-      type: "impact/publishLead",
-      lead
-    });
-
-    if (!response.ok) {
-      throw new Error(response.error || "Could not send lead to phone.");
-    }
-
-    phoneStatus.textContent = "Sent current lead to phone bridge.";
-    await loadLogs();
+updatePhoneButton.addEventListener("click", async () => {
+  await withBusy(updatePhoneButton, async () => {
+    const lead = await getFreshLeadPreview();
+    await publishLeadToPhone(lead);
   });
 });
 
@@ -112,6 +102,20 @@ async function getFreshLeadPreview() {
   renderLeadPreview(response.snapshot.localLeadPreview);
   currentLeadPreview = response.snapshot.localLeadPreview;
   return currentLeadPreview;
+}
+
+async function publishLeadToPhone(lead) {
+  const response = await chrome.runtime.sendMessage({
+    type: "impact/publishLead",
+    lead
+  });
+
+  if (!response.ok) {
+    throw new Error(response.error || "Could not send lead to phone.");
+  }
+
+  phoneStatus.textContent = `Phone updated at ${new Date().toLocaleTimeString()}.`;
+  await loadLogs();
 }
 
 function renderLeadPreview(preview) {
@@ -184,6 +188,7 @@ async function withBusy(button, callback) {
     await callback();
   } catch (error) {
     snapshotOutput.textContent = `Error: ${error.message}`;
+    phoneStatus.textContent = error.message;
   } finally {
     button.disabled = false;
     button.textContent = original;

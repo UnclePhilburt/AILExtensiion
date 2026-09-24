@@ -48,6 +48,13 @@ header p {
   gap: 8px;
 }
 
+.primaryAction {
+  grid-column: span 2;
+  min-height: 46px;
+  background: #16a34a;
+  border-color: #16a34a;
+}
+
 button {
   min-height: 38px;
   border: 1px solid #1d4ed8;
