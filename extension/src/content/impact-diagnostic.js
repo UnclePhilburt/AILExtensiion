@@ -23,6 +23,7 @@
   let autoPublishBusy = false;
   let lastAppointmentOptionsFingerprint = "";
   let resultDialogsBeforeSubmit = new WeakSet();
+  const dismissedQuietHoursDialogs = new WeakSet();
   chrome.storage.onChanged.addListener((changes) => {
     if (changes['impact.connectionMode']) lastAutoPublishFingerprint = '';
     if (changes['impact.supabase.session']) {
@@ -68,6 +69,32 @@
   startAutoPublishWatcher();
   startPhoneCommandWatcher();
   window.setInterval(finishResultAdvance, 150);
+  startQuietHoursDialogWatcher();
+
+  // IMPACT shows this notice for Union / Association leads after 8 PM. It is
+  // informational, but the modal blocks every Companion command until closed.
+  // Dismiss only this exact notice; appointment and call-result dialogs stay
+  // under the rep's control.
+  function startQuietHoursDialogWatcher() {
+    const check = () => dismissQuietHoursDialogs();
+    check();
+    new MutationObserver(check).observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  function dismissQuietHoursDialogs() {
+    const dialogs = Array.from(document.querySelectorAll('[role="dialog"], .bootbox, .modal, .ui-dialog'))
+      .filter((dialog) => dialog.getClientRects().length && !dismissedQuietHoursDialogs.has(dialog));
+    for (const dialog of dialogs) {
+      const text = sanitizeText(dialog.innerText || dialog.textContent || "");
+      if (!/do\s+not\s+(?:knock|visit).{0,100}\b8\s*(?::\s*00)?\s*(?:p\.?m\.?|pm)\b/i.test(text)) continue;
+      const close = Array.from(dialog.querySelectorAll('button, input[type="button"], input[type="submit"], .close'))
+        .find((button) => /^(ok|close|×)$/i.test(sanitizeText(button.value || button.innerText || button.textContent || "")));
+      if (!close || close.disabled || close.getAttribute("aria-disabled") === "true") continue;
+      dismissedQuietHoursDialogs.add(dialog);
+      close.click();
+      void log("info", "quietHoursNotice.dismissed", {});
+    }
+  }
 
   async function getSnapshot({ includeNextLead = true } = {}) {
     if (!(await chrome.runtime.sendMessage({ type: 'impact/authStatus' }))?.ok) throw new Error('Sign in through extension Options first.');
