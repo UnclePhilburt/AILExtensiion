@@ -1,4 +1,12 @@
 :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #203536; background: #eff3f1; -webkit-font-smoothing: antialiased; }
+.historyCard { background: #fff; border: 1px solid #dce6df; border-radius: 20px; padding: 20px 22px; min-width: 0; }
+.historyCard summary { cursor: pointer; font-size: 17px; font-weight: 700; color: #214c39; padding: 4px 0; }
+#historyCount { color: #73847e; font-size: 13px; font-weight: 500; }
+.historyHint { color: #73847e; font-size: 12px; line-height: 1.5; margin: 10px 0 18px; }
+#historyEntries { list-style: none; padding: 0 0 0 9px; margin: 0; }
+#historyEntries li { position: relative; border-left: 2px solid #dceae1; padding: 0 0 20px 19px; font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; white-space: pre-line; }
+#historyEntries li::before { content: ""; position: absolute; left: -5px; top: 7px; width: 8px; height: 8px; border-radius: 50%; background: #71a58c; }
+#historyEntries li:last-child { padding-bottom: 0; }
 * { box-sizing: border-box; }
 body { margin: 0; background: linear-gradient(#123b3a 0 275px, #eff3f1 275px); min-height: 100vh; }
 [hidden] { display: none !important; }

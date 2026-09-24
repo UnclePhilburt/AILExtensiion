@@ -181,6 +181,7 @@ function makeLeadFingerprint(lead) {
     leadName: lead?.leadName || "",
     leadId: lead?.leadId || "",
     requestType: lead?.requestType || "",
+    callHistory: lead?.callHistory || [],
     language: lead?.language || "",
     email: lead?.email || "",
     address: lead?.address || "",

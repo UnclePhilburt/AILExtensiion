@@ -213,6 +213,7 @@
       leadName: extractLeadName(text),
       leadId: root === document ? getCurrentLeadId() : "",
       requestType: collectRequestType(panel),
+      callHistory: collectCallHistory(panel),
       language: extractSimpleLabel(text, "Language"),
       email: extractEmail(text),
       address: extractAddress(text),
@@ -226,6 +227,16 @@
     // Read the actual value: request types are not a fixed list.
     const cell = panel.querySelector("#myTabContentJust div:nth-of-type(4) > table.table-bordered > tbody > tr:nth-of-type(2) > td");
     return sanitizeText(cell?.innerText || cell?.textContent || "");
+  }
+
+  function collectCallHistory(panel) {
+    const sections = Array.from(panel.querySelectorAll("#myTabContentJust .inner-schedule"));
+    const history = sections.find(section => /\bStatus\b/i.test(section.textContent || ""));
+    if (!history) return [];
+    // textContent also includes older entries hidden by IMPACT's Show More control.
+    const text = sanitizeText(history.textContent || "")
+      .replace(/Show (?:Less|More)\s*\.{0,3}/gi, "").replace(/^\s*Status\s*:?[\s]*/i, "").trim();
+    return text ? text.split(/(?<=\bby [^.]{1,100}\.)\s+(?=[A-Z])/).map(value => value.trim()).filter(Boolean) : [];
   }
 
   async function prefetchNextLead() {
@@ -747,6 +758,7 @@
         leadName: lead.leadName,
         leadId: lead.leadId,
         requestType: lead.requestType,
+        callHistory: lead.callHistory,
         language: lead.language,
         email: lead.email,
         address: lead.address,

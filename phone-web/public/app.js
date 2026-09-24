@@ -19,6 +19,7 @@ let leadEvents = null;
 let eventsConnected = false;
 let calledLeadKey = "";
 let signedIn = false;
+let historyLeadKey = "";
 
 const savedBridgeUrl = localStorage.getItem("impact.bridgeUrl") || "";
 const savedBridgeToken = localStorage.getItem("impact.bridgeToken") || "";
@@ -210,6 +211,7 @@ async function sendComputerCommand(type, details = {}) {
 }
 
 function renderLead(lead, updatedAt, source) {
+  renderCallHistory(lead);
   if (!lead?.available) {
     leadCard.className = "leadCard empty";
     leadCard.textContent = "Send a lead from the Brave extension.";
@@ -261,6 +263,7 @@ function renderLead(lead, updatedAt, source) {
     link.append(icon, content);
     link.addEventListener("click", () => {
       calledLeadKey = getLeadKey(lead);
+      document.querySelector("#callHistory").open = false;
       updateNavButtons();
       // Keep native tel: navigation in the user's tap, while the small command
       // continues sending if the phone browser moves into the dialer.
@@ -283,6 +286,23 @@ function updateNavButtons() {
   refusedAppointmentButton.disabled = !callStarted || !displayedLead?.leadId;
   previousLeadButton.disabled = !displayedLead?.available;
   nextLeadButton.disabled = !displayedLead?.available;
+}
+
+function renderCallHistory(lead) {
+  const card = document.querySelector("#callHistory");
+  const entries = document.querySelector("#historyEntries");
+  const key = lead?.available ? getLeadKey(lead) : "";
+  if (key !== historyLeadKey) card.open = true;
+  historyLeadKey = key;
+  card.hidden = !lead?.available;
+  entries.replaceChildren();
+  const history = Array.isArray(lead?.callHistory) ? lead.callHistory : [];
+  document.querySelector("#historyCount").textContent = history.length ? `(${history.length})` : "";
+  for (const entry of history.length ? history : ["No previous activity found on this lead."]) {
+    const item = document.createElement("li");
+    item.textContent = entry;
+    entries.append(item);
+  }
 }
 
 function getLeadKey(lead) {

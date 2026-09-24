@@ -47,6 +47,11 @@
         <button type="button" disabled>Bad Number</button>
         <button type="button" disabled>Notes</button>
       </section>
+      <details id="callHistory" class="historyCard" open hidden>
+        <summary>Previous activity <span id="historyCount"></span></summary>
+        <p class="historyHint">Call results and appointments recorded in IMPACT</p>
+        <ol id="historyEntries"></ol>
+      </details>
     </main>
     <script type="module" src="app.js"></script>
   </body>
