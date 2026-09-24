@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>IMPACT Companion Options</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>IMPACT Companion Options</h1>
+        <p>Configure only the IMPACT origins and selectors you have verified yourself.</p>
+      </header>
+
+      <section>
+        <label for="allowedOrigins">Allowed IMPACT origins</label>
+        <textarea id="allowedOrigins" spellcheck="false" rows="4" placeholder="https://impact.example.com"></textarea>
+        <p class="hint">One origin per line. Use the exact scheme and host from the IMPACT address bar.</p>
+      </section>
+
+      <section>
+        <label for="selectorConfig">Selector configuration</label>
+        <textarea id="selectorConfig" spellcheck="false" rows="18"></textarea>
+        <p class="hint">Keep selectors here so IMPACT HTML changes do not get tangled into app logic.</p>
+      </section>
+
+      <section>
+        <label for="bridgeUrl">Phone bridge URL</label>
+        <input id="bridgeUrl" spellcheck="false" placeholder="http://127.0.0.1:8787">
+        <p class="hint">Use localhost on the computer running Brave. The phone opens the Wi-Fi URL printed by the bridge server.</p>
+      </section>
+
+      <section>
+        <label for="bridgeToken">Phone bridge token</label>
+        <input id="bridgeToken" spellcheck="false" autocomplete="off" placeholder="Paste token from bridge server">
+        <p class="hint">This keeps random devices on your Wi-Fi from reading the current lead page.</p>
+      </section>
+
+      <section>
+        <div class="row">
+          <button id="save" type="button">Save</button>
+          <button id="reset" type="button" class="secondary">Reset Defaults</button>
+        </div>
+        <p id="status" role="status"></p>
+      </section>
+
+      <section>
+        <h2>Last Picked Element</h2>
+        <pre id="lastPicked">No element picked yet.</pre>
+      </section>
+    </main>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>IMPACT Diagnostic</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <h1>IMPACT Diagnostic</h1>
+        <p id="tabStatus">Checking tab...</p>
+      </header>
+
+      <section class="actions">
+        <button id="runDiagnostic" type="button">Run Diagnostic</button>
+        <button id="sendToPhone" type="button">Send to Phone</button>
+        <button id="pickElement" type="button">Pick Element</button>
+        <button id="openOptions" type="button">Options</button>
+      </section>
+
+      <section>
+        <h2>Local Lead Preview</h2>
+        <p id="phoneStatus" class="phoneStatus">Phone bridge not used yet.</p>
+        <div id="leadPreview" class="leadPreview">Run diagnostic on a lead detail page.</div>
+      </section>
+
+      <section>
+        <h2>Snapshot</h2>
+        <pre id="snapshotOutput">No snapshot yet.</pre>
+      </section>
+
+      <section>
+        <div class="sectionTitle">
+          <h2>Logs</h2>
+          <button id="clearLogs" type="button" class="secondary">Clear</button>
+        </div>
+        <pre id="logOutput">No logs yet.</pre>
+      </section>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

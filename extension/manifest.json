@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "IMPACT Companion Diagnostic",
+  "version": "0.1.0",
+  "description": "Read-only diagnostic helper for documenting an authorized IMPACT CRM workflow.",
+  "action": {
+    "default_title": "IMPACT Diagnostic",
+    "default_popup": "src/popup/popup.html"
+  },
+  "background": {
+    "service_worker": "src/background/service-worker.js",
+    "type": "module"
+  },
+  "options_page": "src/options/options.html",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:8787/*",
+    "http://localhost:8787/*"
+  ]
+}
