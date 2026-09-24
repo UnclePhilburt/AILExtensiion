@@ -4,4 +4,5 @@ node_modules/
 .env
 .env.*
 phone-web/.bridge-token
+release/
 
