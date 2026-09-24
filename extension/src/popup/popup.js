@@ -48,9 +48,9 @@ async function refreshStatus() {
     const settings = await chrome.storage.local.get([STORAGE_KEYS.bridgeUrl,STORAGE_KEYS.bridgeToken]);
     const bridgeUrl = parseBridgeUrl(settings[STORAGE_KEYS.bridgeUrl]);
     if (!settings[STORAGE_KEYS.bridgeToken]) throw new Error('Set up the bridge connection in Options.');
-    const response = await fetch(`${bridgeUrl}/api/status`, {headers:{Authorization:`Bearer ${await accessToken()}`,'x-bridge-token':settings[STORAGE_KEYS.bridgeToken]},signal:AbortSignal.timeout(5000)});
-    if (!response.ok) throw new Error(response.status===401?'Sign in again to verify your connection.':'The bridge did not respond.');
+    const response = await fetch(`${bridgeUrl}/api/status`, {headers:{Authorization:`Bearer ${await accessToken()}`,'x-bridge-token':settings[STORAGE_KEYS.bridgeToken]},signal:AbortSignal.timeout(10000)});
     const status = await response.json();
+    if (!response.ok) throw new Error(status.error || 'The bridge did not respond.');
     if (session?.user.id !== accountId) return;
     $('#bridgeState').textContent = 'Connected';
     $('#phoneState').textContent = status.phoneConnected ? 'Connected' : 'Not connected';

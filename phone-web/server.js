@@ -33,7 +33,7 @@ return http.createServer(async (req, res) => {
       if (revokedTokens.has(tokenHash)) { sendJson(res, 401, { ok: false, error: 'Session signed out.' }); return; }
       let user;
       try { user = await verifyUser(authToken); }
-      catch { sendJson(res, 401, { ok: false, error: "Account session is invalid or could not be verified. Sign in again." }); return; }
+      catch (error) { sendJson(res, error.statusCode || 401, { ok: false, error: error.statusCode ? error.message : "Account session is invalid. Sign in again." }); return; }
       if (!users.has(user.id)) users.set(user.id, { currentLead: null, updatedAt: null, commands: [], leadSubscribers: new Set(), commandWaiters: new Set() });
       state = users.get(user.id);
       res.bridgeState = state;
