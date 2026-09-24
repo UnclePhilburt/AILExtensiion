@@ -1,4 +1,5 @@
 import { client, accessToken } from './auth-runtime.js';
+import { cloudEnabled, cloudState, cloudTouchPhone, cloudSend, watchCloud, visibleLead, isOnline } from './cloud-sync.js';
 const statusEl = document.querySelector("#status");
 const leadCard = document.querySelector("#leadCard");
 const bridgeUrlInput = document.querySelector("#bridgeUrl");
@@ -20,6 +21,9 @@ let eventsConnected = false;
 let calledLeadKey = "";
 let signedIn = false;
 let historyLeadKey = "";
+const useCloud = await cloudEnabled();
+let currentCloudState = null, stopCloudWatch = null, cloudReadBusy = false, lastCloudResult = '', lastPhoneTouch = 0;
+let cloudGeneration = 0;
 
 const savedBridgeUrl = localStorage.getItem("impact.bridgeUrl") || "";
 const savedBridgeToken = localStorage.getItem("impact.bridgeToken") || "";
@@ -31,6 +35,7 @@ if (localToken) {
   // Remove obsolete pairing parameters from bookmarks copied from this page.
   history.replaceState(null, "", location.pathname);
 }
+if (useCloud) document.querySelector('#bridgeSetup').hidden = true;
 
 persistBridgeSettings();
 
@@ -50,6 +55,7 @@ refusedAppointmentButton.addEventListener("click", () => sendComputerCommand("re
 client.auth.onAuthStateChange((_event, session) => {
   signedIn = Boolean(session);
   if (!signedIn) {
+    cloudGeneration++; stopCloudWatch?.(); stopCloudWatch = null; currentCloudState = null;
     leadEvents?.abort();
     leadEvents = null;
     eventsConnected = false;
@@ -61,13 +67,24 @@ client.auth.onAuthStateChange((_event, session) => {
   }
 });
 // Poll only as a fallback while the live connection is unavailable.
-setInterval(() => { if (signedIn && !eventsConnected) refreshLead(); }, 2500);
+setInterval(() => { if (signedIn && (useCloud || !eventsConnected)) refreshLead(); }, useCloud ? 5000 : 2500);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) connectLiveUpdates();
 });
 
 async function connectLiveUpdates() {
   if (!signedIn) return;
+  if (useCloud) {
+    const generation = ++cloudGeneration;
+    stopCloudWatch?.(); stopCloudWatch = null;
+    try {
+      const stop = await watchCloud(() => { void refreshCloud(); });
+      if (!signedIn || generation !== cloudGeneration) { stop(); return; }
+      stopCloudWatch = stop;
+      await refreshCloud();
+    } catch (error) { statusEl.textContent = error.message; }
+    return;
+  }
   leadEvents?.abort();
   eventsConnected = false;
   const bridgeUrl = bridgeUrlInput.value.trim().replace(/\/$/, "");
@@ -117,6 +134,7 @@ async function connectLiveUpdates() {
 
 async function refreshLead() {
   if (!signedIn) return;
+  if (useCloud) return refreshCloud();
   try {
     const bridgeUrl = bridgeUrlInput.value.trim().replace(/\/$/, "");
     const token = bridgeTokenInput.value.trim();
@@ -138,6 +156,26 @@ async function refreshLead() {
   } catch (error) {
     statusEl.textContent = error.message;
   }
+}
+
+async function refreshCloud() {
+  if (!signedIn || cloudReadBusy) return;
+  cloudReadBusy = true;
+  const generation = cloudGeneration;
+  try {
+    const state = await cloudState();
+    if (!signedIn || generation !== cloudGeneration) return;
+    currentCloudState = state;
+    receiveBridgeLead(visibleLead(state), state?.lead_updated_at);
+    if (!isOnline(state?.desktop_seen)) statusEl.textContent = 'Open IMPACT on your computer to connect.';
+    if (state?.result?.at && state.result.at !== lastCloudResult) {
+      lastCloudResult = state.result.at;
+      if (Date.now() - Date.parse(state.result.at) < 15000) statusEl.textContent = state.result.message;
+    }
+    if (Date.now() - lastPhoneTouch > 10000) { lastPhoneTouch = Date.now(); await cloudTouchPhone(); }
+  } catch (error) {
+    currentCloudState = null; receiveBridgeLead(null, null); statusEl.textContent = error.message;
+  } finally { cloudReadBusy = false; }
 }
 
 function persistBridgeSettings() {
@@ -181,6 +219,11 @@ async function showPreviousLead() {
 async function sendComputerCommand(type, details = {}) {
   if (!signedIn) return;
   try {
+    if (useCloud) {
+      await cloudSend(currentCloudState, {type, leadId: displayedLead?.leadId, ...details});
+      statusEl.textContent = type === 'call' ? 'Call sent to IMPACT.' : 'Action sent to your computer…';
+      return;
+    }
     const bridgeUrl = bridgeUrlInput.value.trim().replace(/\/$/, "");
     const token = bridgeTokenInput.value.trim();
     if (!bridgeUrl || !token) {
