@@ -16,6 +16,7 @@
   let pickerState = null;
   let lastAutoPublishFingerprint = "";
   let autoPublishTimer = null;
+  let commandPollBusy = false;
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === "impact/getSnapshot") {
@@ -42,6 +43,7 @@
   });
 
   startAutoPublishWatcher();
+  startPhoneCommandWatcher();
 
   async function getSnapshot() {
     const config = await getSelectorConfig();
@@ -419,6 +421,47 @@
         runAutoPublishCheck();
       }
     }, 1000);
+  }
+
+  function startPhoneCommandWatcher() {
+    window.setInterval(pollPhoneCommand, 1000);
+  }
+
+  async function pollPhoneCommand() {
+    if (commandPollBusy || !location.origin.includes("mobile.impact.ailife.com")) {
+      return;
+    }
+
+    commandPollBusy = true;
+    try {
+      const response = await chrome.runtime.sendMessage({ type: "impact/getPhoneCommand" });
+      const command = response?.result?.command;
+      if (!command?.type) {
+        return;
+      }
+
+      if (command.type === "next") {
+        clickLeadNavigationButton("down");
+      }
+
+      if (command.type === "previous") {
+        clickLeadNavigationButton("up");
+      }
+    } catch (_error) {
+      // Command polling must never interrupt IMPACT.
+    } finally {
+      commandPollBusy = false;
+    }
+  }
+
+  function clickLeadNavigationButton(direction) {
+    const iconName = direction === "down" ? "keyboard_arrow_down" : "keyboard_arrow_up";
+    const icon = Array.from(document.querySelectorAll("button i, button .material-icons"))
+      .find((element) => sanitizeText(element.innerText || element.textContent || "") === iconName);
+    const button = icon?.closest("button");
+    if (button) {
+      button.click();
+    }
   }
 
   async function runAutoPublishCheck() {

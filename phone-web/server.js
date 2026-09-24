@@ -11,6 +11,7 @@ const PUBLIC_DIR = path.join(__dirname, "public");
 
 let currentLead = null;
 let updatedAt = null;
+let commands = [];
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -41,6 +42,34 @@ const server = http.createServer(async (req, res) => {
         ok: true,
         lead: currentLead,
         updatedAt
+      });
+      return;
+    }
+
+    if (url.pathname === "/api/command" && req.method === "POST") {
+      requireToken(req, url);
+      const body = await readJson(req);
+      if (!["next", "previous"].includes(body?.type)) {
+        sendJson(res, 400, { ok: false, error: "Unsupported command." });
+        return;
+      }
+
+      const command = {
+        id: crypto.randomUUID(),
+        type: body.type,
+        requestedAt: new Date().toISOString()
+      };
+      commands.push(command);
+      commands = commands.slice(-20);
+      sendJson(res, 200, { ok: true, command });
+      return;
+    }
+
+    if (url.pathname === "/api/command/next" && req.method === "GET") {
+      requireToken(req, url);
+      sendJson(res, 200, {
+        ok: true,
+        command: commands.shift() || null
       });
       return;
     }
@@ -148,4 +177,3 @@ function getLanAddresses() {
     .filter((network) => network && network.family === "IPv4" && !network.internal)
     .map((network) => network.address);
 }
-

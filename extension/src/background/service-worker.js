@@ -36,8 +36,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "impact/getPhoneCommand") {
+    getPhoneCommand()
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
   return false;
 });
+
+async function getPhoneCommand() {
+  const result = await chrome.storage.local.get([
+    STORAGE_KEYS.bridgeUrl,
+    STORAGE_KEYS.bridgeToken
+  ]);
+  const bridgeUrl = result[STORAGE_KEYS.bridgeUrl] || "http://127.0.0.1:8787";
+  const bridgeToken = result[STORAGE_KEYS.bridgeToken] || "";
+
+  if (!bridgeToken) {
+    return { command: null };
+  }
+
+  const response = await fetch(`${bridgeUrl.replace(/\/$/, "")}/api/command/next?token=${encodeURIComponent(bridgeToken)}`, {
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    throw new Error(`Bridge command poll failed: HTTP ${response.status}`);
+  }
+
+  return response.json();
+}
 
 async function autoPublishLead(lead) {
   const result = await chrome.storage.local.get(STORAGE_KEYS.autoPublish);
