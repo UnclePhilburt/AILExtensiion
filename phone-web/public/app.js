@@ -4,7 +4,14 @@ const nextLeadCard = document.querySelector("#nextLeadCard");
 const bridgeUrlInput = document.querySelector("#bridgeUrl");
 const bridgeTokenInput = document.querySelector("#bridgeToken");
 const saveBridgeButton = document.querySelector("#saveBridge");
+const previousLeadButton = document.querySelector("#previousLead");
+const nextLeadButton = document.querySelector("#nextLead");
 const params = new URLSearchParams(location.search);
+
+let bridgeLead = null;
+let displayedLead = null;
+let previousLeads = [];
+let displayedLeadKey = "";
 
 const savedBridgeUrl = localStorage.getItem("impact.bridgeUrl") || "";
 const savedBridgeToken = localStorage.getItem("impact.bridgeToken") || "";
@@ -21,6 +28,8 @@ saveBridgeButton.addEventListener("click", () => {
 
 bridgeUrlInput.addEventListener("input", persistBridgeSettings);
 bridgeTokenInput.addEventListener("input", persistBridgeSettings);
+previousLeadButton.addEventListener("click", showPreviousLead);
+nextLeadButton.addEventListener("click", showNextLead);
 
 refreshLead();
 setInterval(refreshLead, 2500);
@@ -42,7 +51,7 @@ async function refreshLead() {
       throw new Error(payload.error || `HTTP ${response.status}`);
     }
 
-    renderLead(payload.lead, payload.updatedAt);
+    receiveBridgeLead(payload.lead, payload.updatedAt);
   } catch (error) {
     statusEl.textContent = error.message;
   }
@@ -53,16 +62,63 @@ function persistBridgeSettings() {
   localStorage.setItem("impact.bridgeToken", bridgeTokenInput.value.trim());
 }
 
-function renderLead(lead, updatedAt) {
+function receiveBridgeLead(lead, updatedAt) {
+  bridgeLead = lead;
+  if (!lead?.available) {
+    displayedLead = null;
+    displayedLeadKey = "";
+    previousLeads = [];
+    renderLead(null, updatedAt, "bridge");
+    return;
+  }
+
+  const nextKey = getLeadKey(lead);
+  if (!displayedLead || nextKey !== displayedLeadKey) {
+    displayedLead = lead;
+    displayedLeadKey = nextKey;
+    previousLeads = [];
+  }
+
+  renderLead(displayedLead, updatedAt, displayedLead === bridgeLead ? "bridge" : "local");
+}
+
+function showNextLead() {
+  if (!displayedLead?.nextLead?.available) {
+    return;
+  }
+
+  previousLeads.push(displayedLead);
+  displayedLead = displayedLead.nextLead;
+  displayedLeadKey = getLeadKey(displayedLead);
+  renderLead(displayedLead, null, "local");
+}
+
+function showPreviousLead() {
+  const previous = previousLeads.pop();
+  if (!previous) {
+    return;
+  }
+
+  displayedLead = previous;
+  displayedLeadKey = getLeadKey(displayedLead);
+  renderLead(displayedLead, null, displayedLead === bridgeLead ? "bridge" : "local");
+}
+
+function renderLead(lead, updatedAt, source) {
   if (!lead?.available) {
     leadCard.className = "leadCard empty";
     leadCard.textContent = "Send a lead from the Brave extension.";
     renderNextLead(null);
+    updateNavButtons();
     statusEl.textContent = "No current lead.";
     return;
   }
 
-  statusEl.textContent = updatedAt ? `Updated ${new Date(updatedAt).toLocaleTimeString()}` : "Lead loaded.";
+  statusEl.textContent = updatedAt
+    ? `Updated ${new Date(updatedAt).toLocaleTimeString()}`
+    : source === "local"
+      ? "Loaded from phone preload."
+      : "Lead loaded.";
   leadCard.className = "leadCard";
   leadCard.replaceChildren();
 
@@ -85,6 +141,7 @@ function renderLead(lead, updatedAt) {
   }
   leadCard.append(phoneList);
   renderNextLead(lead.nextLead);
+  updateNavButtons();
 }
 
 function renderNextLead(nextLead) {
@@ -111,6 +168,20 @@ function renderNextLead(nextLead) {
     : "Preloaded in background";
 
   nextLeadCard.append(label, meta);
+}
+
+function updateNavButtons() {
+  previousLeadButton.disabled = previousLeads.length === 0;
+  nextLeadButton.disabled = !displayedLead?.nextLead?.available;
+}
+
+function getLeadKey(lead) {
+  return [
+    lead?.leadName || "",
+    lead?.email || "",
+    lead?.address || "",
+    (lead?.phones || []).map((phone) => phone.number).join("|")
+  ].join("::");
 }
 
 function appendDetail(label, value) {
