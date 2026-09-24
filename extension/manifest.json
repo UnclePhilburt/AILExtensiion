@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "IMPACT Companion Diagnostic",
+  "name": "IMPACT Companion",
   "version": "0.1.0",
   "description": "Read-only diagnostic helper for documenting an authorized IMPACT CRM workflow.",
   "action": {
-    "default_title": "IMPACT Diagnostic",
+    "default_title": "IMPACT Companion",
     "default_popup": "src/popup/popup.html"
   },
   "background": {

@@ -1,61 +1,18 @@
 <!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>IMPACT Companion Options</title>
-    <link rel="stylesheet" href="options.css">
-  </head>
-  <body>
-    <main>
-      <header>
-        <h1>IMPACT Companion Options</h1>
-        <p><a href="../account/account.html">Sign in / Manage your account</a></p>
-        <p>Configure only the IMPACT origins and selectors you have verified yourself.</p>
-      </header>
-
-      <section>
-        <label for="allowedOrigins">Allowed IMPACT origins</label>
-        <textarea id="allowedOrigins" spellcheck="false" rows="4" placeholder="https://impact.example.com"></textarea>
-        <p class="hint">One origin per line. Use the exact scheme and host from the IMPACT address bar.</p>
-      </section>
-
-      <section>
-        <label for="selectorConfig">Selector configuration</label>
-        <textarea id="selectorConfig" spellcheck="false" rows="18"></textarea>
-        <p class="hint">Keep selectors here so IMPACT HTML changes do not get tangled into app logic.</p>
-      </section>
-
-      <section>
-        <label for="bridgeUrl">Phone bridge URL</label>
-        <input id="bridgeUrl" spellcheck="false" placeholder="http://127.0.0.1:8787">
-        <p class="hint">Use localhost on the computer running Brave. The phone opens the Wi-Fi URL printed by the bridge server.</p>
-      </section>
-
-      <section>
-        <label for="bridgeToken">Phone bridge token</label>
-        <input id="bridgeToken" spellcheck="false" autocomplete="off" placeholder="Paste token from bridge server">
-        <p class="hint">This keeps random devices on your Wi-Fi from reading the current lead page.</p>
-      </section>
-
-      <section class="checkboxRow">
-        <input id="autoPublish" type="checkbox">
-        <label for="autoPublish">Automatically update phone when the IMPACT lead detail page changes</label>
-      </section>
-
-      <section>
-        <div class="row">
-          <button id="save" type="button">Save</button>
-          <button id="reset" type="button" class="secondary">Reset Defaults</button>
-        </div>
-        <p id="status" role="status"></p>
-      </section>
-
-      <section>
-        <h2>Last Picked Element</h2>
-        <pre id="lastPicked">No element picked yet.</pre>
-      </section>
-    </main>
-    <script type="module" src="options.js"></script>
-  </body>
-</html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>IMPACT Companion · Options</title><link rel="stylesheet" href="options.css"></head>
+<body><main hidden>
+<header><p class="eyebrow">IMPACT COMPANION</p><h1>Make yourself at home.</h1><p class="hint">Connection settings, your account, and tools when you need them.</p></header>
+<nav aria-label="Options sections"><button data-panel="connection" aria-pressed="true">Connection</button><button data-panel="account" aria-pressed="false">Account</button><button data-panel="debug" aria-pressed="false">Debug tools</button></nav>
+<div id="connection" class="panel">
+<section><h2>Computer connection</h2><p class="hint">The extension connects to the bridge running on this computer.</p><label for="bridgeUrl">Bridge address</label><input id="bridgeUrl" placeholder="http://127.0.0.1:8787"><label for="bridgeToken">Bridge token</label><input id="bridgeToken" type="password" autocomplete="off" placeholder="Token from your phone companion"><p class="hint">Your phone and extension also need to be signed in to the same account.</p></section>
+<section class="checkboxRow"><input id="autoPublish" type="checkbox"><label for="autoPublish">Automatically sync my phone</label></section>
+</div>
+<div id="account" class="panel" hidden><section><h2>Your account</h2><p id="accountEmail"></p><p class="hint">Use this account on your phone too. You stay signed in until you sign out.</p><a class="buttonLink" href="../account/account.html">Manage account & sign out →</a></section></div>
+<div id="debug" class="panel" hidden>
+<section><h2>Inspect IMPACT</h2><p class="hint">These tools are for troubleshooting. Diagnostic output may contain lead details.</p><label for="debugTab">IMPACT tab</label><select id="debugTab"></select><div class="row"><button id="runDiagnostic">Run diagnostic</button><button id="pickElement" class="secondary">Pick element</button><button id="refreshTabs" class="secondary">Refresh tabs</button></div><pre id="snapshotOutput">No diagnostic run yet.</pre></section>
+<section><h2>Last picked element</h2><pre id="lastPicked">No element picked yet.</pre></section>
+<section><div class="row"><h2>Activity log</h2><button id="loadLogs" class="secondary">Refresh</button><button id="clearLogs" class="secondary">Clear</button></div><pre id="logOutput">Select Refresh to load logs.</pre></section>
+<details><summary>Advanced page configuration</summary><section><label for="allowedOrigins">Allowed IMPACT origins</label><textarea id="allowedOrigins" rows="3" spellcheck="false"></textarea><label for="selectorConfig">Selector configuration</label><textarea id="selectorConfig" rows="15" spellcheck="false"></textarea><button id="reset" class="secondary">Restore defaults in editor</button></section></details>
+</div>
+<footer><button id="save">Save settings</button><p id="status" role="status"></p></footer>
+</main><script type="module" src="options.js"></script></body></html>

@@ -1,44 +1,26 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>IMPACT Diagnostic</title>
-    <link rel="stylesheet" href="popup.css">
-  </head>
-  <body>
-    <main class="shell">
-      <header>
-        <h1>IMPACT Diagnostic</h1>
-        <p id="tabStatus">Checking tab...</p>
-      </header>
-
-      <section class="actions">
-        <button id="updatePhone" type="button" class="primaryAction">Update Phone</button>
-        <button id="runDiagnostic" type="button">Diagnostics</button>
-        <button id="pickElement" type="button">Pick Element</button>
-        <button id="openOptions" type="button">Options</button>
-      </section>
-
-      <section>
-        <h2>Local Lead Preview</h2>
-        <p id="phoneStatus" class="phoneStatus">Open a lead detail page, then press Update Phone.</p>
-        <div id="leadPreview" class="leadPreview">Run diagnostic on a lead detail page.</div>
-      </section>
-
-      <section>
-        <h2>Snapshot</h2>
-        <pre id="snapshotOutput">No snapshot yet.</pre>
-      </section>
-
-      <section>
-        <div class="sectionTitle">
-          <h2>Logs</h2>
-          <button id="clearLogs" type="button" class="secondary">Clear</button>
-        </div>
-        <pre id="logOutput">No logs yet.</pre>
-      </section>
-    </main>
-    <script type="module" src="popup.js"></script>
-  </body>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>IMPACT Companion</title><link rel="stylesheet" href="popup.css"></head>
+<body><main class="shell">
+  <header><span class="brandMark" aria-hidden="true">i.</span><div><strong>IMPACT</strong><span class="brandSub">COMPANION</span></div><span class="version">PHONE CONNECT</span></header>
+  <p id="loading" class="muted">Checking your account…</p>
+  <section id="login" hidden>
+    <p class="eyebrow">WELCOME BACK</p><h1>Ready when you are.</h1><p class="intro">Sign in to connect IMPACT to your phone.</p>
+    <form id="loginForm">
+      <label for="email">Email address</label><input id="email" type="email" autocomplete="username" placeholder="you@example.com" required>
+      <label for="password">Password</label><input id="password" type="password" autocomplete="current-password" placeholder="Your password" required>
+      <button id="signIn" type="submit" class="primary">Sign in <span aria-hidden="true">→</span></button>
+    </form>
+    <button id="manageLogin" class="textButton">Forgot password or accepting an invitation?</button>
+  </section>
+  <section id="dashboard" hidden>
+    <div class="sectionHeading"><div><p class="eyebrow">YOUR WORKSPACE</p><h1>Your connection.</h1></div><button id="openOptions" class="smallButton">Options</button></div>
+    <div id="connectionCard" class="connectionCard" data-state="checking"><div class="connectionTitle"><span class="statusDot" aria-hidden="true"></span><h2 id="connectionTitle">Checking connection</h2></div><p id="connectionHint">Checking your computer and phone…</p></div>
+    <dl class="statusList"><div><dt>Computer bridge</dt><dd id="bridgeState">Checking…</dd></div><div><dt>Phone page</dt><dd id="phoneState">Checking…</dd></div><div><dt>IMPACT tab</dt><dd id="impactState">Checking…</dd></div><div><dt>Last update</dt><dd id="lastUpdate">—</dd></div></dl>
+    <button id="updatePhone" class="primary">Sync phone now <span aria-hidden="true">↗</span></button>
+    <p class="footnote">Updates run automatically while IMPACT is open.</p>
+    <footer><span id="accountEmail"></span><button id="manageAccount" class="textButton">Account</button></footer>
+  </section>
+  <p id="message" role="status" aria-live="polite"></p>
+</main><script type="module" src="popup.js"></script></body>
 </html>

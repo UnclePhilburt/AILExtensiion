@@ -34,9 +34,13 @@ test('live lead delivery, reconnect snapshot, and immediate command delivery', {
     assert.equal((await request('/api/events')).status, 401);
     assert.equal((await request('/api/current-lead?token=test-only', { headers: { Authorization: '' } })).status, 401);
     assert.equal((await request('/api/current-lead?token=test-only', { headers: { Authorization: 'Bearer invalid' } })).status, 401);
+    assert.equal((await (await request('/api/status?token=test-only')).json()).phoneConnected, false);
     const stream = await request('/api/events?token=test-only');
     const reader = stream.body.getReader();
     assert.match(new TextDecoder().decode((await reader.read()).value), /"lead":null/);
+    const connectedStatus = await (await request('/api/status?token=test-only')).json();
+    assert.equal(connectedStatus.phoneConnected, true);
+    assert.equal('lead' in connectedStatus, false, 'Dashboard status does not expose lead details');
     const started = performance.now();
     await post('/api/current-lead', { lead: { available: true, leadName: 'Fictional test lead' } });
     assert.match(new TextDecoder().decode((await reader.read()).value), /Fictional test lead/);

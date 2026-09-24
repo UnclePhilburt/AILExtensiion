@@ -48,6 +48,10 @@ return http.createServer(async (req, res) => {
       }
     }
     const { leadSubscribers, commandWaiters } = state || {};
+    if (url.pathname === '/api/status' && req.method === 'GET') {
+      sendJson(res, 200, { ok: true, phoneConnected: leadSubscribers.size > 0, updatedAt: state.updatedAt });
+      return;
+    }
 
     if (url.pathname === "/api/current-lead" && req.method === "POST") {
       requireToken(req, url);

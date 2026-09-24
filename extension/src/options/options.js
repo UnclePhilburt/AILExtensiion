@@ -1,6 +1,22 @@
 import { DEFAULT_ALLOWED_ORIGINS, DEFAULT_SELECTOR_CONFIG } from "../shared/selector-config.js";
 import { STORAGE_KEYS } from "../shared/storage-keys.js";
 import { parseBridgeUrl } from "../shared/bridge-config.js";
+import { client, accessToken } from '../shared/auth-runtime.js';
+
+try { await accessToken(); } catch { location.replace('../account/account.html'); throw new Error('Sign-in required'); }
+document.querySelector('main').hidden = false;
+const { data: accountData } = await client.auth.getSession();
+document.querySelector('#accountEmail').textContent = accountData.session?.user?.email || '';
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes['impact.supabase.session'] && !changes['impact.supabase.session'].newValue) location.replace('../account/account.html');
+  if (changes['impact.lastPickedElement']) document.querySelector('#lastPicked').textContent = JSON.stringify(changes['impact.lastPickedElement'].newValue, null, 2);
+});
+for (const button of document.querySelectorAll('nav button')) {
+  button.addEventListener('click', () => {
+    for (const panel of document.querySelectorAll('.panel')) panel.hidden = panel.id !== button.dataset.panel;
+    for (const tab of document.querySelectorAll('nav button')) tab.setAttribute('aria-pressed', String(tab === button));
+  });
+}
 
 const allowedOriginsInput = document.querySelector("#allowedOrigins");
 const selectorConfigInput = document.querySelector("#selectorConfig");
@@ -13,6 +29,49 @@ const saveButton = document.querySelector("#save");
 const resetButton = document.querySelector("#reset");
 
 init();
+void refreshDebugTabs();
+document.querySelector('#refreshTabs').addEventListener('click', refreshDebugTabs);
+document.querySelector('#runDiagnostic').addEventListener('click', event => runDebug(event.currentTarget, 'impact/getSnapshot'));
+document.querySelector('#pickElement').addEventListener('click', event => runDebug(event.currentTarget, 'impact/startPicker'));
+document.querySelector('#loadLogs').addEventListener('click', loadDebugLogs);
+document.querySelector('#clearLogs').addEventListener('click', async () => {
+  await chrome.runtime.sendMessage({type:'impact/clearLogs'});
+  await loadDebugLogs();
+});
+
+async function refreshDebugTabs() {
+  const tabs = await chrome.tabs.query({url:'https://mobile.impact.ailife.com/*'});
+  const saved = await chrome.storage.session.get('impact.debugTabId');
+  const select = document.querySelector('#debugTab');
+  select.replaceChildren();
+  for (const tab of tabs) {
+    const option = document.createElement('option');
+    option.value = String(tab.id);
+    option.textContent = `${tab.title || 'IMPACT'} (tab ${tab.id})`;
+    select.append(option);
+    if (tab.id === saved['impact.debugTabId']) option.selected = true;
+  }
+}
+async function runDebug(button, type) {
+  button.disabled = true;
+  try {
+    const tabId = Number(document.querySelector('#debugTab').value);
+    if (!tabId) throw new Error('Open IMPACT and refresh the tab list first.');
+    await chrome.scripting.executeScript({target:{tabId},files:['src/content/selector-config.js','src/content/impact-diagnostic.js']});
+    if (type === 'impact/startPicker') await chrome.tabs.update(tabId,{active:true});
+    const response = await chrome.tabs.sendMessage(tabId,{type});
+    if (!response?.ok) throw new Error(response?.error || 'IMPACT did not respond.');
+    if (response.snapshot) document.querySelector('#snapshotOutput').textContent = JSON.stringify(response.snapshot,null,2);
+    setStatus(type === 'impact/startPicker' ? 'Select an element in IMPACT, then return to Debug tools.' : 'Diagnostic complete.');
+  } catch (error) { setStatus(error.message,true); }
+  finally { button.disabled = false; }
+}
+async function loadDebugLogs() {
+  try {
+    const response = await chrome.runtime.sendMessage({type:'impact/getLogs'});
+    document.querySelector('#logOutput').textContent = JSON.stringify(response.logs || [],null,2);
+  } catch (error) { setStatus(error.message,true); }
+}
 
 saveButton.addEventListener("click", saveOptions);
 resetButton.addEventListener("click", resetDefaults);
