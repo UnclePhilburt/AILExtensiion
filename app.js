@@ -8,6 +8,7 @@ const saveBridgeButton = document.querySelector("#saveBridge");
 const previousLeadButton = document.querySelector("#previousLead");
 const nextLeadButton = document.querySelector("#nextLead");
 const noAnswerButton = document.querySelector("#noAnswer");
+const virtualAppointmentButton = document.querySelector("#virtualAppointment");
 const refusedAppointmentButton = document.querySelector("#refusedAppointment");
 const callResults = document.querySelector("#callResults");
 const params = new URLSearchParams(location.search);
@@ -52,6 +53,7 @@ bridgeTokenInput.addEventListener("input", persistBridgeSettings);
 previousLeadButton.addEventListener("click", showPreviousLead);
 nextLeadButton.addEventListener("click", showNextLead);
 noAnswerButton.addEventListener("click", () => sendComputerCommand("no-answer", { leadId: displayedLead?.leadId }));
+virtualAppointmentButton.addEventListener("click", () => sendComputerCommand("virtual-appointment", { leadId: displayedLead?.leadId }));
 refusedAppointmentButton.addEventListener("click", () => sendComputerCommand("refused-appointment", { leadId: displayedLead?.leadId }));
 
 client.auth.onAuthStateChange((_event, session) => {
@@ -247,7 +249,7 @@ async function sendComputerCommand(type, details = {}) {
       throw new Error(payload.error || `HTTP ${response.status}`);
     }
 
-    statusEl.textContent = type === "refused-appointment" ? "Opening Refused Appointment in IMPACT..." : type === "no-answer" ? "Sending No Answer to IMPACT..." : type === "call" ? `Call ${details.phoneType} sent to IMPACT.` : type === "next"
+    statusEl.textContent = type === "virtual-appointment" ? "Opening Virtual Appointment in IMPACT..." : type === "refused-appointment" ? "Opening Refused Appointment in IMPACT..." : type === "no-answer" ? "Sending No Answer to IMPACT..." : type === "call" ? `Call ${details.phoneType} sent to IMPACT.` : type === "next"
       ? "Advancing IMPACT on computer..."
       : "Moving IMPACT back on computer...";
   } catch (error) {
@@ -328,6 +330,7 @@ function updateNavButtons() {
   const callStarted = Boolean(displayedLead?.available && calledLeadKey === getLeadKey(displayedLead));
   callResults.hidden = !callStarted;
   noAnswerButton.disabled = !callStarted || !displayedLead?.leadId;
+  virtualAppointmentButton.disabled = !callStarted || !displayedLead?.leadId;
   refusedAppointmentButton.disabled = !callStarted || !displayedLead?.leadId;
   previousLeadButton.disabled = !displayedLead?.available;
   nextLeadButton.disabled = !displayedLead?.available;
