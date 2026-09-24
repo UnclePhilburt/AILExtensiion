@@ -195,7 +195,11 @@
   async function prefetchNextLead() {
     const candidate = collectNextLeadCandidates().find((nextCandidate) => nextCandidate.url);
     if (!candidate?.url) {
-      return null;
+      return {
+        available: false,
+        error: "No fetchable next lead URL found.",
+        candidates: collectNextLeadCandidates()
+      };
     }
 
     try {
@@ -215,6 +219,16 @@
       const html = await response.text();
       const doc = new DOMParser().parseFromString(html, "text/html");
       const lead = collectLocalLeadPreview(doc, candidate.safePath);
+      if (!lead.available) {
+        return {
+          available: false,
+          error: "Fetched next route but could not find #primaryPanel.",
+          candidate,
+          responseUrl: scrubFetchedUrl(response.url),
+          htmlTitle: sanitizeText(doc.title || "")
+        };
+      }
+
       return {
         ...lead,
         prefetchedAt: new Date().toISOString(),
@@ -329,10 +343,7 @@
         return;
       }
 
-      const nextLead = await prefetchNextLead();
-      if (nextLead?.available) {
-        lead.nextLead = nextLead;
-      }
+      lead.nextLead = await prefetchNextLead();
 
       const fingerprint = JSON.stringify({
         url: location.href,
@@ -759,6 +770,15 @@
 
   function scrubCurrentUrl() {
     return `${location.origin}${location.pathname}`;
+  }
+
+  function scrubFetchedUrl(value) {
+    try {
+      const url = new URL(value);
+      return `${url.origin}${url.pathname}${url.search ? "?..." : ""}`;
+    } catch (_error) {
+      return "";
+    }
   }
 
   function toSameOriginUrl(href) {
