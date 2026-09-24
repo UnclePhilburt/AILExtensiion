@@ -47,7 +47,7 @@
     const allowed = await isOriginAllowed();
     const localLeadPreview = allowed ? collectLocalLeadPreview() : null;
     const prefetchedNextLead = localLeadPreview?.available ? await prefetchNextLead() : null;
-    if (localLeadPreview?.available && prefetchedNextLead?.available) {
+    if (localLeadPreview?.available && prefetchedNextLead) {
       localLeadPreview.nextLead = prefetchedNextLead;
     }
     const snapshot = {
@@ -352,7 +352,9 @@
         email: lead.email,
         address: lead.address,
         phones: lead.phones,
-        nextLeadName: lead.nextLead?.leadName || ""
+        nextLeadName: lead.nextLead?.leadName || "",
+        nextLeadError: lead.nextLead?.error || "",
+        nextLeadCandidate: lead.nextLead?.candidate?.safePath || ""
       });
 
       if (fingerprint === lastAutoPublishFingerprint) {
