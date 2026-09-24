@@ -581,7 +581,7 @@ function renderHeadsUp(lead) {
     item.className = `headsUpChip ${chip.tone}${chip.soon ? " soon" : ""}${chip.muted ? " muted" : ""}`;
     const label = document.createElement("span");
     label.className = "headsUpLabel";
-    label.textContent = chip.soon ? `${chip.label} · soon` : chip.label;
+    label.textContent = chip.soon && !/today/i.test(chip.label) ? `${chip.label} · soon` : chip.label;
     const title = document.createElement("strong");
     title.className = "headsUpTitle";
     title.textContent = chip.title;
