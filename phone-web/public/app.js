@@ -1,8 +1,22 @@
 const statusEl = document.querySelector("#status");
 const leadCard = document.querySelector("#leadCard");
-const token = new URLSearchParams(location.search).get("token") || "";
+const bridgeUrlInput = document.querySelector("#bridgeUrl");
+const bridgeTokenInput = document.querySelector("#bridgeToken");
+const saveBridgeButton = document.querySelector("#saveBridge");
+const params = new URLSearchParams(location.search);
 
-if (!token) {
+const savedBridgeUrl = localStorage.getItem("impact.bridgeUrl") || "";
+const savedBridgeToken = localStorage.getItem("impact.bridgeToken") || "";
+bridgeUrlInput.value = params.get("bridge") || savedBridgeUrl || location.origin;
+bridgeTokenInput.value = params.get("token") || savedBridgeToken || "";
+
+saveBridgeButton.addEventListener("click", () => {
+  localStorage.setItem("impact.bridgeUrl", bridgeUrlInput.value.trim());
+  localStorage.setItem("impact.bridgeToken", bridgeTokenInput.value.trim());
+  refreshLead();
+});
+
+if (!bridgeTokenInput.value.trim()) {
   statusEl.textContent = "Missing bridge token in URL.";
 } else {
   refreshLead();
@@ -11,7 +25,14 @@ if (!token) {
 
 async function refreshLead() {
   try {
-    const response = await fetch(`/api/current-lead?token=${encodeURIComponent(token)}`, {
+    const bridgeUrl = bridgeUrlInput.value.trim().replace(/\/$/, "");
+    const token = bridgeTokenInput.value.trim();
+    if (!bridgeUrl || !token) {
+      statusEl.textContent = "Bridge URL and token required.";
+      return;
+    }
+
+    const response = await fetch(`${bridgeUrl}/api/current-lead?token=${encodeURIComponent(token)}`, {
       cache: "no-store"
     });
     const payload = await response.json();
@@ -67,4 +88,3 @@ function appendDetail(label, value) {
   row.textContent = `${label}: ${value}`;
   leadCard.append(row);
 }
-
