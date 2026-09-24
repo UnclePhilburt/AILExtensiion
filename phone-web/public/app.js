@@ -62,7 +62,7 @@ client.auth.onAuthStateChange((_event, session) => {
     leadEvents = null;
     eventsConnected = false;
     receiveBridgeLead(null, null);
-    location.replace(useCloud ? 'account.html' : 'account.html?mode=local');
+    location.replace(useCloud ? 'account.html?next=workspace.html' : 'account.html?next=workspace.html&mode=local');
   } else {
     document.querySelector('main').hidden = false;
     void connectLiveUpdates();

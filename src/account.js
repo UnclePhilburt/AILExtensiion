@@ -23,10 +23,12 @@ const originalHash = new URLSearchParams(location.hash.slice(1));
 let completingInvite = ['invite', 'recovery'].includes(originalHash.get('type'));
 let busy = false;
 
-document.querySelector('#back').href = isExtension ? '../options/options.html' : './';
-document.querySelector('#continue').href = isExtension ? '../options/options.html' : './';
+const requestedNext = new URLSearchParams(location.search).get('next');
+const phoneNext = requestedNext === 'workspace.html' ? 'workspace.html' : './';
+document.querySelector('#back').href = isExtension ? '../options/options.html' : phoneNext;
+document.querySelector('#continue').href = isExtension ? '../options/options.html' : phoneNext;
 if (!isExtension && new URLSearchParams(location.search).get('mode') === 'local') {
-  document.querySelector('#back').href = document.querySelector('#continue').href = './?mode=local';
+  document.querySelector('#back').href = document.querySelector('#continue').href = `${phoneNext}?mode=local`;
 }
 function say(text, error = false) { message.textContent = text; message.classList.toggle('error', error); }
 function render(session) {

@@ -39,5 +39,5 @@ test('phone cloud flow shows live leads, collapses history for a call and clears
   authChanged('SIGNED_OUT',null);
   assert.equal(el('#callHistory').hidden,true);
   assert.equal(el('#callResults').hidden,true);
-  assert.equal(redirected,'account.html');
+  assert.equal(redirected,'account.html?next=workspace.html');
 });
