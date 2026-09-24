@@ -6,7 +6,8 @@ const crypto = require("crypto");
 
 const PORT = Number(process.env.IMPACT_BRIDGE_PORT || 8787);
 const HOST = process.env.IMPACT_BRIDGE_HOST || "0.0.0.0";
-const TOKEN = process.env.IMPACT_BRIDGE_TOKEN || crypto.randomBytes(18).toString("hex");
+const TOKEN_FILE = path.join(__dirname, ".bridge-token");
+const TOKEN = process.env.IMPACT_BRIDGE_TOKEN || getSavedToken();
 const PUBLIC_DIR = path.join(__dirname, "public");
 
 let currentLead = null;
@@ -95,9 +96,21 @@ server.listen(PORT, HOST, () => {
   console.log(`Bridge token for extension Options: ${TOKEN}`);
   console.log("Phone URLs on this Wi-Fi:");
   for (const address of getLanAddresses()) {
-    console.log(`  http://${address}:${PORT}/?token=${TOKEN}`);
+    console.log(`  http://${address}:${PORT}/`);
   }
 });
+
+function getSavedToken() {
+  try {
+    const saved = fs.readFileSync(TOKEN_FILE, "utf8").trim();
+    if (saved) return saved;
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  const token = crypto.randomBytes(18).toString("hex");
+  fs.writeFileSync(TOKEN_FILE, token, { mode: 0o600 });
+  return token;
+}
 
 function requireToken(req, url) {
   const headerToken = req.headers["x-bridge-token"];
@@ -151,7 +164,12 @@ function serveStatic(requestPath, res) {
       ".js": "application/javascript; charset=utf-8"
     }[ext] || "application/octet-stream";
 
-    sendCors(res, 200, { "content-type": contentType });
+    if (pathname === "/index.html") {
+      // Opening the local page pairs the phone automatically. Do not expose
+      // the pairing page to cross-origin JavaScript through CORS.
+      content = content.toString().replace("<head>", `<head><meta name="impact-bridge-token" content="${encodeURIComponent(TOKEN)}">`);
+    }
+    res.writeHead(200, { "content-type": contentType, "cache-control": "no-store" });
     res.end(content);
   });
 }

@@ -10,6 +10,17 @@ Important: a GitHub Pages HTTPS page may be blocked by the browser from fetching
 
 ## Start
 
+On Windows, double-click **Start Phone Companion.cmd** in the project folder.
+Keep its window open and open the printed local Phone URL on your phone using
+the same Wi-Fi. The local page connects automatically; no phone token entry is
+needed. Bookmark that page or add it to your home screen. The computer must stay
+awake, and its network address may change when you switch networks.
+
+The extension token is saved locally in `phone-web/.bridge-token` (excluded from
+Git), so the extension only needs to be configured once. Anyone able to reach
+the bridge on your local network can open the phone page and pair automatically.
+The hosted GitHub Pages version still requires manual connection settings.
+
 From `/Users/codywilliams/Documents/ImpactExtension`:
 
 ```bash
