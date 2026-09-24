@@ -1,5 +1,7 @@
 import { LOG_LIMIT, STORAGE_KEYS } from "../shared/storage-keys.js";
 
+let lastAutoPublishFingerprint = "";
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "impact/log") {
     appendLog(message.entry, sender).then(() => sendResponse({ ok: true }));
@@ -45,8 +47,15 @@ async function autoPublishLead(lead) {
     return { skipped: true, reason: "autoPublish disabled" };
   }
 
+  const fingerprint = makeLeadFingerprint(lead);
+  if (fingerprint === lastAutoPublishFingerprint) {
+    return { skipped: true, reason: "duplicate lead payload" };
+  }
+
   try {
-    return await publishLead(lead, { eventName: "bridge.leadAutoPublished" });
+    const result = await publishLead(lead, { eventName: "bridge.leadAutoPublished" });
+    lastAutoPublishFingerprint = fingerprint;
+    return result;
   } catch (error) {
     await appendLocalLog("warn", "bridge.autoPublishFailed", {
       reason: error.message
@@ -93,6 +102,20 @@ async function publishLead(lead, options = {}) {
   });
 
   return response.json();
+}
+
+function makeLeadFingerprint(lead) {
+  return JSON.stringify({
+    leadName: lead?.leadName || "",
+    language: lead?.language || "",
+    email: lead?.email || "",
+    address: lead?.address || "",
+    phones: lead?.phones || [],
+    nextLeadAvailable: Boolean(lead?.nextLead?.available),
+    nextLeadName: lead?.nextLead?.leadName || "",
+    nextLeadError: lead?.nextLead?.error || "",
+    nextLeadCandidate: lead?.nextLead?.candidate?.safePath || ""
+  });
 }
 
 async function appendLocalLog(level, event, details) {
