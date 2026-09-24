@@ -45,6 +45,11 @@
   async function getSnapshot() {
     const config = await getSelectorConfig();
     const allowed = await isOriginAllowed();
+    const localLeadPreview = allowed ? collectLocalLeadPreview() : null;
+    const prefetchedNextLead = localLeadPreview?.available ? await prefetchNextLead() : null;
+    if (localLeadPreview?.available && prefetchedNextLead?.available) {
+      localLeadPreview.nextLead = prefetchedNextLead;
+    }
     const snapshot = {
       capturedAt: new Date().toISOString(),
       url: scrubCurrentUrl(),
@@ -53,7 +58,8 @@
       readyState: document.readyState,
       allowedOrigin: allowed,
       leadPageDetected: allowed && matchesLeadPageHints(config),
-      localLeadPreview: allowed ? collectLocalLeadPreview() : null,
+      localLeadPreview,
+      prefetchedNextLead,
       fields: allowed ? readConfiguredFields(config) : [],
       pageSignals: allowed ? collectPageSignals() : collectMinimalPageSignals(),
       warnings: []
@@ -160,12 +166,13 @@
       headings: Array.from(document.querySelectorAll("h1, h2, h3"))
         .slice(0, 10)
         .map((element) => sanitizeText(element.innerText || element.textContent || "")),
-      detailCandidates: collectDetailCandidates()
+      detailCandidates: collectDetailCandidates(),
+      nextLeadCandidates: collectNextLeadCandidates()
     };
   }
 
-  function collectLocalLeadPreview() {
-    const panel = document.querySelector("#primaryPanel");
+  function collectLocalLeadPreview(root = document, source = "#primaryPanel") {
+    const panel = root.querySelector("#primaryPanel");
     if (!panel) {
       return {
         available: false,
@@ -181,8 +188,97 @@
       email: extractEmail(text),
       address: extractAddress(text),
       phones: collectPhoneEntries(panel, text),
-      source: "#primaryPanel"
+      source
     };
+  }
+
+  async function prefetchNextLead() {
+    const candidate = collectNextLeadCandidates()[0];
+    if (!candidate?.url) {
+      return null;
+    }
+
+    try {
+      const response = await fetch(candidate.url, {
+        credentials: "include",
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        return {
+          available: false,
+          error: `HTTP ${response.status}`,
+          candidate
+        };
+      }
+
+      const html = await response.text();
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const lead = collectLocalLeadPreview(doc, candidate.safePath);
+      return {
+        ...lead,
+        prefetchedAt: new Date().toISOString(),
+        candidate
+      };
+    } catch (error) {
+      return {
+        available: false,
+        error: error.message,
+        candidate
+      };
+    }
+  }
+
+  function collectNextLeadCandidates() {
+    const currentUrl = new URL(location.href);
+    const candidates = Array.from(document.querySelectorAll("a[href]"))
+      .map((element) => {
+        const href = element.getAttribute("href") || "";
+        const url = toSameOriginUrl(href);
+        if (!url || !url.pathname.includes("/Lead/InboxDetail")) {
+          return null;
+        }
+
+        if (url.href === currentUrl.href) {
+          return null;
+        }
+
+        const text = sanitizeText(element.innerText || element.textContent || element.getAttribute("aria-label") || element.getAttribute("title") || "");
+        return {
+          url: url.href,
+          safePath: `${url.pathname}${url.search ? "?..." : ""}`,
+          selector: buildSelector(element),
+          text: redactControlText(text).slice(0, 80),
+          confidence: getNextCandidateConfidence(text, element)
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 5);
+
+    return dedupeCandidates(candidates);
+  }
+
+  function getNextCandidateConfidence(text, element) {
+    const combined = `${text} ${element.getAttribute("aria-label") || ""} ${element.getAttribute("title") || ""}`.toLowerCase();
+    if (combined.includes("next") || combined.includes("down") || combined.includes("keyboard_arrow_down")) {
+      return 100;
+    }
+    if (combined.includes("up") || combined.includes("previous") || combined.includes("keyboard_arrow_up")) {
+      return 40;
+    }
+    return 60;
+  }
+
+  function dedupeCandidates(candidates) {
+    const seen = new Set();
+    return candidates.filter((candidate) => {
+      if (seen.has(candidate.url)) {
+        return false;
+      }
+      seen.add(candidate.url);
+      return true;
+    });
   }
 
   function startAutoPublishWatcher() {
@@ -231,13 +327,19 @@
         return;
       }
 
+      const nextLead = await prefetchNextLead();
+      if (nextLead?.available) {
+        lead.nextLead = nextLead;
+      }
+
       const fingerprint = JSON.stringify({
         url: location.href,
         leadName: lead.leadName,
         language: lead.language,
         email: lead.email,
         address: lead.address,
-        phones: lead.phones
+        phones: lead.phones,
+        nextLeadName: lead.nextLead?.leadName || ""
       });
 
       if (fingerprint === lastAutoPublishFingerprint) {
@@ -640,6 +742,15 @@
 
   function scrubCurrentUrl() {
     return `${location.origin}${location.pathname}`;
+  }
+
+  function toSameOriginUrl(href) {
+    try {
+      const url = new URL(href, location.href);
+      return url.origin === location.origin ? url : null;
+    } catch (_error) {
+      return null;
+    }
   }
 
   function getSafeHrefPath(element) {
