@@ -74,6 +74,17 @@ textarea:focus {
   gap: 10px;
 }
 
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.checkboxRow input {
+  width: 18px;
+  min-height: 18px;
+}
+
 button {
   min-height: 40px;
   padding: 0 16px;

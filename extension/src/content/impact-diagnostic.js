@@ -8,10 +8,13 @@
   const STORAGE_KEYS = {
     allowedOrigins: "impact.allowedOrigins",
     selectorConfig: "impact.selectorConfig",
+    autoPublish: "impact.autoPublish",
     lastSnapshot: "impact.lastSnapshot"
   };
 
   let pickerState = null;
+  let lastAutoPublishFingerprint = "";
+  let autoPublishTimer = null;
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === "impact/getSnapshot") {
@@ -36,6 +39,8 @@
 
     return false;
   });
+
+  startAutoPublishWatcher();
 
   async function getSnapshot() {
     const config = await getSelectorConfig();
@@ -178,6 +183,80 @@
       phones: collectPhoneEntries(panel, text),
       source: "#primaryPanel"
     };
+  }
+
+  function startAutoPublishWatcher() {
+    window.setTimeout(runAutoPublishCheck, 1000);
+    window.setInterval(runAutoPublishCheck, 2500);
+
+    const observer = new MutationObserver(() => {
+      window.clearTimeout(autoPublishTimer);
+      autoPublishTimer = window.setTimeout(runAutoPublishCheck, 600);
+    });
+
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
+
+    let lastHref = location.href;
+    window.setInterval(() => {
+      if (location.href !== lastHref) {
+        lastHref = location.href;
+        lastAutoPublishFingerprint = "";
+        runAutoPublishCheck();
+      }
+    }, 1000);
+  }
+
+  async function runAutoPublishCheck() {
+    try {
+      if (!location.href.includes("/Lead/InboxDetail")) {
+        return;
+      }
+
+      const allowed = await isOriginAllowed();
+      if (!allowed) {
+        return;
+      }
+
+      const autoPublish = await isAutoPublishEnabled();
+      if (!autoPublish) {
+        return;
+      }
+
+      const lead = collectLocalLeadPreview();
+      if (!lead.available || !lead.leadName || !lead.phones?.length) {
+        return;
+      }
+
+      const fingerprint = JSON.stringify({
+        url: location.href,
+        leadName: lead.leadName,
+        language: lead.language,
+        email: lead.email,
+        address: lead.address,
+        phones: lead.phones
+      });
+
+      if (fingerprint === lastAutoPublishFingerprint) {
+        return;
+      }
+
+      lastAutoPublishFingerprint = fingerprint;
+      await chrome.runtime.sendMessage({
+        type: "impact/autoPublishLead",
+        lead
+      });
+    } catch (_error) {
+      // Auto-publish should never interrupt the IMPACT page.
+    }
+  }
+
+  async function isAutoPublishEnabled() {
+    const result = await chrome.storage.local.get(STORAGE_KEYS.autoPublish);
+    return result[STORAGE_KEYS.autoPublish] !== false;
   }
 
   function extractLeadName(text) {

@@ -27,10 +27,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "impact/autoPublishLead") {
+    autoPublishLead(message.lead)
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
   return false;
 });
 
-async function publishLead(lead) {
+async function autoPublishLead(lead) {
+  const result = await chrome.storage.local.get(STORAGE_KEYS.autoPublish);
+  const autoPublish = result[STORAGE_KEYS.autoPublish] !== false;
+
+  if (!autoPublish) {
+    return { skipped: true, reason: "autoPublish disabled" };
+  }
+
+  try {
+    return await publishLead(lead, { eventName: "bridge.leadAutoPublished" });
+  } catch (error) {
+    await appendLocalLog("warn", "bridge.autoPublishFailed", {
+      reason: error.message
+    });
+    return { skipped: true, reason: error.message };
+  }
+}
+
+async function publishLead(lead, options = {}) {
   if (!lead?.available) {
     throw new Error("No lead payload available to send.");
   }
@@ -62,7 +87,7 @@ async function publishLead(lead) {
     throw new Error(`Bridge rejected lead update: HTTP ${response.status}`);
   }
 
-  await appendLocalLog("info", "bridge.leadPublished", {
+  await appendLocalLog("info", options.eventName || "bridge.leadPublished", {
     bridgeUrl,
     phoneCount: lead.phones?.length || 0
   });

@@ -5,6 +5,7 @@ const allowedOriginsInput = document.querySelector("#allowedOrigins");
 const selectorConfigInput = document.querySelector("#selectorConfig");
 const bridgeUrlInput = document.querySelector("#bridgeUrl");
 const bridgeTokenInput = document.querySelector("#bridgeToken");
+const autoPublishInput = document.querySelector("#autoPublish");
 const statusOutput = document.querySelector("#status");
 const lastPickedOutput = document.querySelector("#lastPicked");
 const saveButton = document.querySelector("#save");
@@ -21,6 +22,7 @@ async function init() {
     STORAGE_KEYS.selectorConfig,
     STORAGE_KEYS.bridgeUrl,
     STORAGE_KEYS.bridgeToken,
+    STORAGE_KEYS.autoPublish,
     "impact.lastPickedElement"
   ]);
 
@@ -28,6 +30,7 @@ async function init() {
   selectorConfigInput.value = JSON.stringify(result[STORAGE_KEYS.selectorConfig] || DEFAULT_SELECTOR_CONFIG, null, 2);
   bridgeUrlInput.value = result[STORAGE_KEYS.bridgeUrl] || "http://127.0.0.1:8787";
   bridgeTokenInput.value = result[STORAGE_KEYS.bridgeToken] || "";
+  autoPublishInput.checked = result[STORAGE_KEYS.autoPublish] !== false;
   lastPickedOutput.textContent = result["impact.lastPickedElement"]
     ? JSON.stringify(result["impact.lastPickedElement"], null, 2)
     : "No element picked yet.";
@@ -43,7 +46,8 @@ async function saveOptions() {
       [STORAGE_KEYS.allowedOrigins]: allowedOrigins,
       [STORAGE_KEYS.selectorConfig]: selectorConfig,
       [STORAGE_KEYS.bridgeUrl]: parseBridgeUrl(bridgeUrlInput.value),
-      [STORAGE_KEYS.bridgeToken]: bridgeTokenInput.value.trim()
+      [STORAGE_KEYS.bridgeToken]: bridgeTokenInput.value.trim(),
+      [STORAGE_KEYS.autoPublish]: autoPublishInput.checked
     });
 
     setStatus("Saved.");
@@ -56,6 +60,7 @@ async function resetDefaults() {
   allowedOriginsInput.value = DEFAULT_ALLOWED_ORIGINS.join("\n");
   selectorConfigInput.value = JSON.stringify(DEFAULT_SELECTOR_CONFIG, null, 2);
   bridgeUrlInput.value = "http://127.0.0.1:8787";
+  autoPublishInput.checked = true;
   setStatus("Defaults restored in the editor. Click Save to apply.");
 }
 

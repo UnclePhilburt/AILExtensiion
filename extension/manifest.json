@@ -12,6 +12,16 @@
     "type": "module"
   },
   "options_page": "src/options/options.html",
+  "content_scripts": [
+    {
+      "matches": ["https://mobile.impact.ailife.com/*"],
+      "js": [
+        "src/content/selector-config.js",
+        "src/content/impact-diagnostic.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
   "permissions": [
     "activeTab",
     "scripting",
@@ -19,6 +29,7 @@
     "tabs"
   ],
   "host_permissions": [
+    "https://mobile.impact.ailife.com/*",
     "http://127.0.0.1:8787/*",
     "http://localhost:8787/*"
   ]

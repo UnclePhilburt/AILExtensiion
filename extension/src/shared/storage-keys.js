@@ -3,6 +3,7 @@ export const STORAGE_KEYS = {
   selectorConfig: "impact.selectorConfig",
   bridgeUrl: "impact.bridgeUrl",
   bridgeToken: "impact.bridgeToken",
+  autoPublish: "impact.autoPublish",
   logs: "impact.logs",
   lastSnapshot: "impact.lastSnapshot"
 };
