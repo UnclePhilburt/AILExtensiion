@@ -91,38 +91,26 @@ function renderNextLead(nextLead) {
   nextLeadCard.replaceChildren();
 
   if (!nextLead?.available) {
-    nextLeadCard.className = "leadCard empty";
+    nextLeadCard.className = "nextStatus empty";
     nextLeadCard.textContent = nextLead?.error
-      ? `No preloaded next lead: ${nextLead.error}`
+      ? `Next preload unavailable: ${nextLead.error}`
       : "No preloaded next lead yet.";
-    if (nextLead?.candidate?.safePath || nextLead?.responseUrl || nextLead?.htmlTitle) {
-      appendDetailTo(nextLeadCard, "Candidate", nextLead.candidate?.safePath || "");
-      appendDetailTo(nextLeadCard, "Response", nextLead.responseUrl || "");
-      appendDetailTo(nextLeadCard, "Title", nextLead.htmlTitle || "");
-    }
     return;
   }
 
-  nextLeadCard.className = "leadCard nextLead";
-  const title = document.createElement("h2");
-  title.textContent = "Preloaded Next";
-  nextLeadCard.append(title);
+  nextLeadCard.className = "nextStatus ready";
 
-  appendDetailTo(nextLeadCard, "Name", nextLead.leadName);
-  appendDetailTo(nextLeadCard, "Language", nextLead.language);
-  appendDetailTo(nextLeadCard, "Email", nextLead.email);
-  appendDetailTo(nextLeadCard, "Address", nextLead.address);
+  const label = document.createElement("div");
+  label.className = "nextLabel";
+  label.textContent = "Next lead ready";
 
-  const phoneList = document.createElement("div");
-  phoneList.className = "phoneList";
-  for (const phone of nextLead.phones || []) {
-    const link = document.createElement("a");
-    link.className = "callLink secondaryCall";
-    link.href = phone.dialHref;
-    link.textContent = `Call Next ${phone.label}: ${phone.number}`;
-    phoneList.append(link);
-  }
-  nextLeadCard.append(phoneList);
+  const meta = document.createElement("div");
+  meta.className = "nextMeta";
+  meta.textContent = nextLead.prefetchedAt
+    ? `Preloaded ${new Date(nextLead.prefetchedAt).toLocaleTimeString()}`
+    : "Preloaded in background";
+
+  nextLeadCard.append(label, meta);
 }
 
 function appendDetail(label, value) {

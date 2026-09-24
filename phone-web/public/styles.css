@@ -112,12 +112,33 @@ h1 {
   text-decoration: none;
 }
 
-.nextLead {
-  border-color: #93c5fd;
+.nextStatus {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: white;
 }
 
-.secondaryCall {
-  background: #2563eb;
+.nextStatus.ready {
+  border-color: #16a34a;
+  background: #f0fdf4;
+}
+
+.nextStatus.empty {
+  color: #64748b;
+}
+
+.nextLabel {
+  color: #166534;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.nextMeta {
+  color: #475569;
+  font-size: 13px;
 }
 
 .controls {
