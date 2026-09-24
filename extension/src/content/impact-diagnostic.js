@@ -743,8 +743,55 @@
     const target = slots[0].querySelector("a, button, input, [role='button'], [onclick]") || slots[0];
     if (target.disabled || target.getAttribute("aria-disabled") === "true") throw new Error("That appointment time is unavailable in IMPACT.");
     target.click();
+    await submitVirtualAppointmentEmail();
     // The next phone call belongs to the next lead, not this appointment page.
     sessionStorage.removeItem("impact.virtualAppointmentContext");
+  }
+
+  async function submitVirtualAppointmentEmail() {
+    const deadline = Date.now() + 4000;
+    let dialog;
+    while (Date.now() < deadline) {
+      dialog = document.querySelector("#emailOptionDialog");
+      if (dialog?.getClientRects().length) break;
+      await new Promise((resolve) => window.setTimeout(resolve, 80));
+    }
+    if (!dialog?.getClientRects().length) throw new Error("IMPACT did not open the email confirmation. Complete it on your computer.");
+    const accountEmail = await getAccountEmail();
+    if (!accountEmail) throw new Error("Could not find your Companion account email for CC. Complete the email dialog on your computer.");
+    const inputs = Array.from(dialog.querySelectorAll('input:not([type="hidden"]'))
+      .filter((element) => !element.disabled && !element.readOnly);
+    const ccCandidates = inputs.filter((element) => /\bcc\b/i.test([
+      element.name, element.id, element.placeholder, element.getAttribute("aria-label"),
+      element.previousElementSibling?.textContent, element.parentElement?.previousElementSibling?.textContent
+    ].filter(Boolean).join(" ")));
+    const ccInput = ccCandidates.length === 1 ? ccCandidates[0] : inputs.length === 2 ? inputs[1] : null;
+    if (!ccInput) throw new Error("Could not identify IMPACT's CC field. Complete the email dialog on your computer.");
+    setInputValue(ccInput, accountEmail);
+    const submits = Array.from(dialog.querySelectorAll('button, input[type="submit"], input[type="button"]'))
+      .filter((element) => /^(Submit)$/i.test(sanitizeText(element.value || element.innerText || element.textContent || "")))
+      .filter((element) => !element.disabled && element.getAttribute("aria-disabled") !== "true" && element.getClientRects().length);
+    if (submits.length !== 1) throw new Error("Could not find the email confirmation Submit button. Complete the dialog on your computer.");
+    submits[0].click();
+  }
+
+  async function getAccountEmail() {
+    try {
+      const stored = await chrome.storage.local.get("impact.supabase.session");
+      const session = typeof stored["impact.supabase.session"] === "string"
+        ? JSON.parse(stored["impact.supabase.session"]) : stored["impact.supabase.session"];
+      const email = String(session?.user?.email || "").trim();
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  function setInputValue(input, value) {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    setter ? setter.call(input, value) : input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
   function submitCallResult(command, choice) {
