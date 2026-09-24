@@ -167,6 +167,10 @@ test('the phone lead card shows heads-up chips above the details and hides them 
   assert.ok(names.indexOf('headsUp')<names.indexOf('phoneList'),'shown before the Call buttons');
   assert.deepEqual(headsUp.children.map(c=>c.className),['headsUpChip callback soon','headsUpChip neutral muted','headsUpChip neutral','headsUpChip neutral muted']);
   assert.deepEqual(headsUp.children[0].children.map(c=>c.textContent),['Callback due today','Today · No time preference','Call back any time today']);
+  state={...state,lead:{...lead,leadId:'test-c',callHistory:[realLead.join(' ')]}};
+  await app.refreshCloud();
+  assert.equal(el('#historyEntries').children.length,9,'Previous activity lists run-together lines separately');
+  assert.equal(el('#historyEntries').children[2].textContent,realLead[2]);
   state={...state,lead:{...lead,leadId:'test-b',callHistory:[]}};
   await app.refreshCloud();
   assert.equal(el('#leadCard').children.some(c=>c.className==='headsUp'),false);

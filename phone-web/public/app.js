@@ -1,7 +1,7 @@
 import { client, accessToken } from './auth-runtime.js';
 import { cloudEnabled, cloudState, cloudTouchPhone, cloudSend, watchCloud, visibleLead, isOnline } from './cloud-sync.js';
 import { NETWORK_MESSAGE, SIGN_IN_MESSAGE, RESULT_COMMANDS, checkBeforeSend, isStateFresh, isAuthFailure, isNetworkFailure, friendlySendError, withTimeout } from './phone-actions.js';
-import { buildHeadsUp } from './lead-highlights.js';
+import { buildHeadsUp, splitHistory } from './lead-highlights.js';
 import { createPendingCall, readPendingCall, writePendingCall, pendingCallDecision, markPendingCallResult, isCallResultCommand } from './pending-call.js';
 const statusEl = document.querySelector("#status");
 const leadCard = document.querySelector("#leadCard");
@@ -656,7 +656,8 @@ function renderCallHistory(lead) {
   historyLeadKey = key;
   card.hidden = !lead?.available;
   entries.replaceChildren();
-  const history = Array.isArray(lead?.callHistory) ? lead.callHistory : [];
+  // One line per Status entry, even if IMPACT's text arrived run together.
+  const history = splitHistory(lead?.callHistory);
   document.querySelector("#historyCount").textContent = history.length ? `(${history.length})` : "";
   for (const entry of history.length ? history : ["No previous activity found on this lead."]) {
     const item = document.createElement("li");
