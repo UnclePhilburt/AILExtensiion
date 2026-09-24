@@ -1,0 +1,5 @@
+.summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 22px 0 12px; }
+.summary div,.member { border: 1px solid #dce6df; border-radius: 12px; padding: 14px; background: #f8fbf9; }
+.summary strong { display: block; font-size: 23px; color: #17684e; }.summary span { font-size: 12px; color: #65786d; }
+.team { display: grid; gap: 10px; margin: 16px 0; }.member { display: grid; gap: 8px; }.memberEmail { font-weight: 700; overflow-wrap: anywhere; }.memberStatus { display: flex; gap: 8px; flex-wrap: wrap; }
+.badge { border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 700; background: #e5ece8; color: #52695e; }.badge.online { background: #dcefe3; color: #17684e; }.badge.off { background: #f4e5e3; color: #943a32; }
