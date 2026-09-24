@@ -92,7 +92,14 @@ function renderNextLead(nextLead) {
 
   if (!nextLead?.available) {
     nextLeadCard.className = "leadCard empty";
-    nextLeadCard.textContent = "No preloaded next lead yet.";
+    nextLeadCard.textContent = nextLead?.error
+      ? `No preloaded next lead: ${nextLead.error}`
+      : "No preloaded next lead yet.";
+    if (nextLead?.candidate?.safePath || nextLead?.responseUrl || nextLead?.htmlTitle) {
+      appendDetailTo(nextLeadCard, "Candidate", nextLead.candidate?.safePath || "");
+      appendDetailTo(nextLeadCard, "Response", nextLead.responseUrl || "");
+      appendDetailTo(nextLeadCard, "Title", nextLead.htmlTitle || "");
+    }
     return;
   }
 
