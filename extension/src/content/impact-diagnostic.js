@@ -193,12 +193,13 @@
   }
 
   async function prefetchNextLead() {
-    const candidate = collectNextLeadCandidates().find((nextCandidate) => nextCandidate.url);
+    const candidates = collectNextLeadCandidates();
+    const candidate = candidates.find((nextCandidate) => nextCandidate.url && nextCandidate.canPrefetch);
     if (!candidate?.url) {
       return {
         available: false,
-        error: "No fetchable next lead URL found.",
-        candidates: collectNextLeadCandidates()
+        error: "No safe direct next lead URL found. IMPACT next button is stateful, so background prefetch is disabled.",
+        candidates
       };
     }
 
@@ -262,6 +263,8 @@
         return {
           url: url?.href || "",
           safePath: url ? `${url.pathname}${url.search ? "?..." : ""}` : "",
+          canPrefetch: Boolean(url && isSafePrefetchPath(url.pathname)),
+          prefetchNote: getPrefetchNote(url),
           selector: buildSelector(element),
           text: redactControlText(text).slice(0, 80),
           confidence: getNextCandidateConfidence(text, element),
@@ -824,6 +827,22 @@
 
   function isLeadNavigationPath(pathname) {
     return pathname.includes("/Lead/InboxDetail") || pathname.includes("/Lead/MoveNext");
+  }
+
+  function isSafePrefetchPath(pathname) {
+    return pathname.includes("/Lead/InboxDetail") && !pathname.includes("/Lead/MoveNext");
+  }
+
+  function getPrefetchNote(url) {
+    if (!url) {
+      return "No URL found on this control.";
+    }
+
+    if (url.pathname.includes("/Lead/MoveNext")) {
+      return "Unsafe to prefetch: MoveNext changes IMPACT navigation state.";
+    }
+
+    return isSafePrefetchPath(url.pathname) ? "Safe direct detail URL." : "Unsupported lead navigation URL.";
   }
 
   function isSameLeadPageUrl(candidateUrl, currentUrl) {
