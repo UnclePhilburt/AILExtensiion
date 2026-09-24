@@ -699,13 +699,17 @@
       const label = sanitizeText(header.innerText || header.textContent || "");
       if (!id || !panel || !label) continue;
       const slots = Array.from(panel.querySelectorAll(".appointmentslot")).slice(0, 80)
-        .map((slot) => sanitizeText(slot.innerText || slot.textContent || ""))
+        .map((slot) => appointmentSlotLabel(sanitizeText(slot.innerText || slot.textContent || "")))
         .filter(Boolean);
       if (slots.length) days.push({ id, label, slots, selected: /\bin\b/.test(panel.className || "") || panel.getClientRects().length > 0 });
     }
     if (!days.length) return null;
     const selectedDayId = days.find((day) => day.selected)?.id || days[0].id;
     return { leadId: context.leadId, days, selectedDayId };
+  }
+
+  function appointmentSlotLabel(value) {
+    return /^No Time Preference\b/i.test(value) ? "Right Now" : value;
   }
 
   function clickVirtualAppointmentDay(command) {
@@ -724,7 +728,7 @@
     const time = sanitizeText(command.time || "");
     if (!panel || !time || !/\bin\b/.test(panel.className || "")) throw new Error("Select the appointment day first, then choose its time.");
     const slots = Array.from(panel.querySelectorAll(".appointmentslot"))
-      .filter((element) => sanitizeText(element.innerText || element.textContent || "") === time)
+      .filter((element) => appointmentSlotLabel(sanitizeText(element.innerText || element.textContent || "")) === time)
       .filter((element) => element.getClientRects().length && element.getAttribute("aria-disabled") !== "true");
     if (slots.length !== 1) throw new Error("That appointment time is no longer available. Refresh the phone.");
     slots[0].click();
