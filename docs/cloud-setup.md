@@ -20,17 +20,11 @@ Real phone/Brave call handoff still needs the user's end-to-end check.
 4. Invite each account under Authentication > Users. Disable public signup.
    Set the Site URL and allowed redirect to
    `https://unclephilburt.github.io/AILExtensiion/account.html`.
-5. Approve the specific invited email with this SQL, replacing the sample email:
+5. Invite each coworker from Authentication > Users. Invited accounts now gain
+   their own cloud workspace automatically. Public/self-service accounts do not.
 
-```sql
-insert into public.companion_members (user_id)
-select id from auth.users where lower(email) = lower('coworker@example.com')
-on conflict (user_id) do update set enabled = true;
-```
-
-Do this for your own account too. Membership is an independent access gate:
-creating an authentication account alone does not grant access to lead data.
-No admin/service-role key is needed in the extension or website.
+Membership remains an independent access gate. No admin/service-role key is
+needed in the extension or website.
 
 ## Verify before inviting the team
 

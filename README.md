@@ -31,7 +31,7 @@ For debugging, use Options > Debug tools.
 ## Data and access
 
 Cloud mode stores the current snapshot and short-lived commands in Supabase,
-protected by account ownership and an administrator-managed membership gate.
+protected by account ownership and an invitation-managed membership gate.
 One active computer is supported per account. A scheduled cleanup clears old
 live snapshots; Supabase backups have separate project retention settings.
 Local mode sends leads through the local bridge instead. Supabase authenticates
