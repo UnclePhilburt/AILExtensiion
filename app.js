@@ -2,6 +2,7 @@ import { client, accessToken } from './auth-runtime.js';
 import { cloudEnabled, cloudState, cloudTouchPhone, cloudSend, watchCloud, visibleLead, isOnline } from './cloud-sync.js';
 import { NETWORK_MESSAGE, SIGN_IN_MESSAGE, RESULT_COMMANDS, checkBeforeSend, isStateFresh, isAuthFailure, isNetworkFailure, friendlySendError, withTimeout } from './phone-actions.js';
 import { buildHeadsUp, splitHistory } from './lead-highlights.js';
+import { doNotKnockWarning } from './lead-rules.js';
 import { createPendingCall, readPendingCall, writePendingCall, pendingCallDecision, markPendingCallResult, isCallResultCommand } from './pending-call.js';
 const statusEl = document.querySelector("#status");
 const leadCard = document.querySelector("#leadCard");
@@ -517,6 +518,17 @@ function renderLead(lead, updatedAt, source) {
     badge.className = "requestBadge";
     badge.textContent = lead.requestType;
     leadCard.append(badge);
+  }
+  const quietHoursWarning = doNotKnockWarning(lead);
+  if (quietHoursWarning) {
+    const warning = document.createElement("section");
+    warning.className = "quietHoursFlag";
+    const title = document.createElement("strong");
+    const detail = document.createElement("span");
+    title.textContent = quietHoursWarning.title;
+    detail.textContent = quietHoursWarning.detail;
+    warning.append(title, detail);
+    leadCard.append(warning);
   }
   const name = document.createElement("h2");
   name.textContent = lead.leadName || "Current lead";
