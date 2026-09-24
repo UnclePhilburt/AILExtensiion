@@ -33,9 +33,11 @@ bridgeTokenInput.value = localToken ? decodeURIComponent(localToken) : params.ge
 if (localToken) {
   document.querySelector("#bridgeSetup").hidden = true;
   // Remove obsolete pairing parameters from bookmarks copied from this page.
-  history.replaceState(null, "", location.pathname);
+  history.replaceState(null, "", location.pathname + (useCloud ? '' : '?mode=local'));
 }
 if (useCloud) document.querySelector('#bridgeSetup').hidden = true;
+document.querySelector('#connectionModeLabel').textContent = useCloud ? 'Cloud connection' : 'Local connection';
+if (!useCloud) document.querySelector('.accountLink').href = 'account.html?mode=local';
 
 persistBridgeSettings();
 
@@ -60,7 +62,7 @@ client.auth.onAuthStateChange((_event, session) => {
     leadEvents = null;
     eventsConnected = false;
     receiveBridgeLead(null, null);
-    location.replace('account.html');
+    location.replace(useCloud ? 'account.html' : 'account.html?mode=local');
   } else {
     document.querySelector('main').hidden = false;
     void connectLiveUpdates();
