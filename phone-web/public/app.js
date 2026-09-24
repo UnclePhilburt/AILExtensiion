@@ -136,6 +136,16 @@ function showFeedback(message, kind = "info", ms = 9000) {
   feedbackTimer = setTimeout(() => { actionFeedback.hidden = true; }, ms);
 }
 
+function commandProgressMessage(type, details = {}) {
+  if (type === "call") return `Connecting your ${details.phoneType || "phone"} call…`;
+  if (type === "no-answer") return "Logging No Answer…";
+  if (type === "refused-appointment") return "Logging Refused Appointment…";
+  if (type === "virtual-appointment") return "Opening Virtual Appointment…";
+  if (type === "virtual-appointment-day") return "Selecting appointment day…";
+  if (type === "virtual-appointment-slot") return "Setting appointment time…";
+  return type === "next" ? "Moving to the next lead…" : "Moving to the previous lead…";
+}
+
 async function connectLiveUpdates() {
   if (!signedIn) return;
   if (useCloud) {
@@ -429,6 +439,7 @@ async function sendNavigation(type) {
 
 async function sendComputerCommand(type, details = {}) {
   if (!signedIn) { showFeedback("You're signed out. Sign in again to continue.", "error"); return false; }
+  showFeedback(commandProgressMessage(type, details), "loading", 12000);
   try {
     if (useCloud) {
       const command = { type, leadId: displayedLead?.leadId, ...details };
@@ -444,7 +455,7 @@ async function sendComputerCommand(type, details = {}) {
         if (!(await refreshSessionNow())) throw new Error(SIGN_IN_MESSAGE);
         await withTimeout(cloudSend(state, command, id), 12000, NETWORK_MESSAGE);
       }
-      showFeedback(type === 'call' ? 'Call sent to IMPACT.' : type === 'virtual-appointment' ? 'Opening Virtual Appointment in IMPACT…' : type === 'virtual-appointment-day' ? 'Selecting that day in IMPACT…' : type === 'virtual-appointment-slot' ? 'Setting that appointment in IMPACT…' : type === 'refused-appointment' ? 'Sending Refused Appointment to IMPACT…' : type === 'no-answer' ? 'Sending No Answer to IMPACT…' : type === 'previous' ? 'Moving IMPACT back on computer…' : type === 'next' ? 'Advancing IMPACT on computer…' : 'Action sent to your computer…', "info", 4000);
+      showFeedback(type === 'call' ? 'Call sent to IMPACT.' : type === 'virtual-appointment' ? 'Opening Virtual Appointment in IMPACT…' : type === 'virtual-appointment-day' ? 'Selecting that day in IMPACT…' : type === 'virtual-appointment-slot' ? 'Setting that appointment in IMPACT…' : type === 'refused-appointment' ? 'Sending Refused Appointment to IMPACT…' : type === 'no-answer' ? 'Sending No Answer to IMPACT…' : type === 'previous' ? 'Moving IMPACT back on computer…' : type === 'next' ? 'Advancing IMPACT on computer…' : 'Action sent to your computer…', "loading", 4000);
       expectComputerResult(type);
       return true;
     }
@@ -471,7 +482,7 @@ async function sendComputerCommand(type, details = {}) {
 
     showFeedback(type === "virtual-appointment" ? "Opening Virtual Appointment in IMPACT..." : type === "virtual-appointment-day" ? "Selecting that day in IMPACT..." : type === "virtual-appointment-slot" ? "Setting that appointment in IMPACT..." : type === "refused-appointment" ? "Opening Refused Appointment in IMPACT..." : type === "no-answer" ? "Sending No Answer to IMPACT..." : type === "call" ? `Call ${details.phoneType} sent to IMPACT.` : type === "next"
       ? "Advancing IMPACT on computer..."
-      : "Moving IMPACT back on computer...", "info", 4000);
+      : "Moving IMPACT back on computer...", "loading", 4000);
     if (eventsConnected) expectComputerResult(type);
     return true;
   } catch (error) {

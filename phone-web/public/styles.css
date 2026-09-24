@@ -69,6 +69,7 @@ button:not(:disabled):active,.callLink:active { transform: translateY(1px); filt
 .resultHeading .eyebrow { color: #678373; }
 .resultHeading h2 { font-size: 21px; letter-spacing: -.4px; margin-top: 5px; }
 .actionFeedback { position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(520px, calc(100% - 32px)); z-index: 10; padding: 14px 18px; border-radius: 14px; background: #163c37; color: #fff; font-size: 14px; line-height: 1.45; box-shadow: 0 10px 30px #0b1f1c40; }
+.actionFeedback.loading { display:flex; align-items:center; gap:11px; }.actionFeedback.loading::before { content:""; width:17px; height:17px; flex:0 0 17px; border:2px solid #cce9db66; border-top-color:#fff; border-radius:50%; animation:companionSpin .72s linear infinite; }@keyframes companionSpin { to { transform:rotate(360deg); } }
 .actionFeedback.error { background: #7a2e1d; }
 .pendingCallNotice { display: grid; gap: 12px; padding: 18px 20px; background: #fff7e8; border: 1px solid #ecd3a4; border-radius: 18px; color: #5b4418; font-size: 14px; line-height: 1.5; }
 .pendingCallNotice button { min-height: 44px; justify-self: start; padding: 8px 18px; }
