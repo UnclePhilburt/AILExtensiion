@@ -41,6 +41,10 @@ button:not(:disabled):active,.callLink:active { transform: translateY(1px); filt
 .navControls { display: grid; grid-template-columns: 1fr 1.25fr; gap: 12px; }
 #nextLead:not(:disabled) { background: #dceae1; border-color: #c7dccf; color: #214c39; }
 .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 22px; background: #ffffffa6; border: 1px solid #dce6df; border-radius: 20px; }
+.appointmentPicker { display: grid; gap: 14px; padding: 22px; background: #fff; border: 1px solid #b9d6c5; border-radius: 20px; box-shadow: 0 8px 28px #173d3710; }
+.appointmentPicker .resultHeading { margin: 0; }.appointmentPicker .eyebrow { color: #356d53; }.appointmentPicker h2 { color: #163c37; }.appointmentPicker p { color: #64776d; font-size: 13px; line-height: 1.45; margin-top: 6px; }
+.appointmentDays { display: flex; gap: 8px; overflow-x: auto; padding: 2px; }.appointmentDays button { min-height: 45px; white-space: nowrap; padding: 9px 13px; font-size: 12px; }.appointmentDays button.selected { background: #17684e; border-color: #17684e; color: #fff; }
+.appointmentTimes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }.appointmentTimes button { min-height: 49px; }
 .resultHeading { grid-column: 1 / -1; margin-bottom: 5px; }
 .resultHeading .eyebrow { color: #678373; }
 .resultHeading h2 { font-size: 21px; letter-spacing: -.4px; margin-top: 5px; }
