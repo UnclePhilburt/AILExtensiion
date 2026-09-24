@@ -6,9 +6,11 @@ import { publishCloud, takeCloudCommand, reportCloudResult } from './cloud-deskt
 
 let lastAutoPublishFingerprint = "";
 let lastAutoPublishAt = 0;
+let lastPublishedLead = null;
 chrome.storage.onChanged.addListener((changes) => {
   if (changes['impact.supabase.session']) {
     lastAutoPublishFingerprint = '';
+    lastPublishedLead = null;
     void chrome.storage.local.remove([STORAGE_KEYS.lastSnapshot, STORAGE_KEYS.inboxQueue]);
   }
 });
@@ -51,6 +53,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "impact/publishAppointmentOptions") {
+    publishAppointmentOptions(message.appointmentOptions, sender.tab)
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
   if (message?.type === "impact/getPhoneCommand") {
     getPhoneCommand(sender.tab)
       .then((result) => sendResponse({ ok: true, result }))
@@ -73,7 +82,7 @@ async function getPhoneCommand(senderTab) {
   // never take a command and silently discard it because they cannot navigate.
   const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   if (!senderTab?.id || senderTab.id !== activeTab?.id ||
-      !/^https:\/\/mobile\.impact\.ailife\.com\/Lead\/(InboxDetail|WhatHappend)(?:[?#]|$)/.test(activeTab.url || "")) {
+      !/^https:\/\/mobile\.impact\.ailife\.com\/Lead\/(InboxDetail|WhatHappend|SetAppointment)(?:[?#]|$)/.test(activeTab.url || "")) {
     return { command: null };
   }
   if (await cloudEnabled()) return takeCloudCommand();
@@ -100,6 +109,18 @@ async function getPhoneCommand(senderTab) {
   }
 
   return response.json();
+}
+
+async function publishAppointmentOptions(appointmentOptions, senderTab) {
+  const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  if (!senderTab?.id || senderTab.id !== active?.id ||
+      !/^https:\/\/mobile\.impact\.ailife\.com\/Lead\/SetAppointment(?:[?#]|$)/.test(active?.url || "")) {
+    return { skipped: true, reason: "inactive appointment tab" };
+  }
+  if (!lastPublishedLead?.available || !appointmentOptions?.leadId || appointmentOptions.leadId !== lastPublishedLead.leadId) {
+    throw new Error("Appointment options do not match the current lead.");
+  }
+  return publishLead({ ...lastPublishedLead, appointmentOptions }, { eventName: "cloud.appointmentOptionsPublished" });
 }
 
 async function reportCommandResult(message) {
@@ -147,6 +168,7 @@ async function publishLead(lead, options = {}) {
   if (!lead?.available) {
     throw new Error("No lead payload available to send.");
   }
+  lastPublishedLead = structuredClone(lead);
   if (await cloudEnabled()) return publishCloud(lead);
 
   const result = await chrome.storage.local.get([

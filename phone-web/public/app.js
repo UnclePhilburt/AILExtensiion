@@ -11,6 +11,10 @@ const noAnswerButton = document.querySelector("#noAnswer");
 const virtualAppointmentButton = document.querySelector("#virtualAppointment");
 const refusedAppointmentButton = document.querySelector("#refusedAppointment");
 const callResults = document.querySelector("#callResults");
+const appointmentPicker = document.querySelector("#appointmentPicker");
+const appointmentDays = document.querySelector("#appointmentDays");
+const appointmentTimes = document.querySelector("#appointmentTimes");
+const appointmentHint = document.querySelector("#appointmentHint");
 const params = new URLSearchParams(location.search);
 
 let bridgeLead = null;
@@ -25,6 +29,7 @@ let historyLeadKey = "";
 const useCloud = await cloudEnabled();
 let currentCloudState = null, stopCloudWatch = null, cloudReadBusy = false, lastCloudResult = '', lastPhoneTouch = 0;
 let cloudGeneration = 0;
+let selectedAppointmentDay = "";
 
 const savedBridgeUrl = localStorage.getItem("impact.bridgeUrl") || "";
 const savedBridgeToken = localStorage.getItem("impact.bridgeToken") || "";
@@ -204,6 +209,7 @@ function receiveBridgeLead(lead, updatedAt) {
     displayedLead = lead;
     displayedLeadKey = nextKey;
     previousLeads = [];
+    selectedAppointmentDay = "";
   }
 
   // Preload and contact updates can arrive without changing the lead's identity.
@@ -225,7 +231,7 @@ async function sendComputerCommand(type, details = {}) {
   try {
     if (useCloud) {
       await cloudSend(currentCloudState, {type, leadId: displayedLead?.leadId, ...details});
-      statusEl.textContent = type === 'call' ? 'Call sent to IMPACT.' : 'Action sent to your computer…';
+      statusEl.textContent = type === 'call' ? 'Call sent to IMPACT.' : type === 'virtual-appointment' ? 'Opening Virtual Appointment in IMPACT…' : type === 'virtual-appointment-day' ? 'Selecting that day in IMPACT…' : type === 'virtual-appointment-slot' ? 'Setting that appointment in IMPACT…' : 'Action sent to your computer…';
       return;
     }
     const bridgeUrl = bridgeUrlInput.value.trim().replace(/\/$/, "");
@@ -249,7 +255,7 @@ async function sendComputerCommand(type, details = {}) {
       throw new Error(payload.error || `HTTP ${response.status}`);
     }
 
-    statusEl.textContent = type === "virtual-appointment" ? "Opening Virtual Appointment in IMPACT..." : type === "refused-appointment" ? "Opening Refused Appointment in IMPACT..." : type === "no-answer" ? "Sending No Answer to IMPACT..." : type === "call" ? `Call ${details.phoneType} sent to IMPACT.` : type === "next"
+    statusEl.textContent = type === "virtual-appointment" ? "Opening Virtual Appointment in IMPACT..." : type === "virtual-appointment-day" ? "Selecting that day in IMPACT..." : type === "virtual-appointment-slot" ? "Setting that appointment in IMPACT..." : type === "refused-appointment" ? "Opening Refused Appointment in IMPACT..." : type === "no-answer" ? "Sending No Answer to IMPACT..." : type === "call" ? `Call ${details.phoneType} sent to IMPACT.` : type === "next"
       ? "Advancing IMPACT on computer..."
       : "Moving IMPACT back on computer...";
   } catch (error) {
@@ -259,6 +265,7 @@ async function sendComputerCommand(type, details = {}) {
 
 function renderLead(lead, updatedAt, source) {
   renderCallHistory(lead);
+  renderAppointmentPicker(lead);
   if (!lead?.available) {
     leadCard.className = "leadCard empty";
     leadCard.textContent = "Send a lead from the Brave extension.";
@@ -312,6 +319,7 @@ function renderLead(lead, updatedAt, source) {
       calledLeadKey = getLeadKey(lead);
       document.querySelector("#callHistory").open = false;
       updateNavButtons();
+      renderAppointmentPicker(displayedLead);
       // Keep native tel: navigation in the user's tap, while the small command
       // continues sending if the phone browser moves into the dialer.
       if (lead.leadId && ["Home", "Mobile"].includes(phone.label)) {
@@ -330,10 +338,49 @@ function updateNavButtons() {
   const callStarted = Boolean(displayedLead?.available && calledLeadKey === getLeadKey(displayedLead));
   callResults.hidden = !callStarted;
   noAnswerButton.disabled = !callStarted || !displayedLead?.leadId;
-  virtualAppointmentButton.disabled = !callStarted || !displayedLead?.leadId;
+  virtualAppointmentButton.disabled = !callStarted || !displayedLead?.leadId || Boolean(displayedLead?.appointmentOptions);
   refusedAppointmentButton.disabled = !callStarted || !displayedLead?.leadId;
   previousLeadButton.disabled = !displayedLead?.available;
   nextLeadButton.disabled = !displayedLead?.available;
+}
+
+function renderAppointmentPicker(lead) {
+  const options = lead?.appointmentOptions;
+  const active = Boolean(lead?.available && calledLeadKey === getLeadKey(lead) && options?.leadId === lead?.leadId && Array.isArray(options.days));
+  appointmentPicker.hidden = !active;
+  appointmentDays.replaceChildren();
+  appointmentTimes.replaceChildren();
+  if (!active) return;
+
+  const days = options.days.filter((day) => day?.id && Array.isArray(day.slots));
+  if (!days.some((day) => day.id === selectedAppointmentDay)) selectedAppointmentDay = options.selectedDayId || days[0]?.id || "";
+  const selectedDay = days.find((day) => day.id === selectedAppointmentDay);
+  const ready = selectedDay?.id === options.selectedDayId;
+  appointmentHint.textContent = ready ? "Tap an available time to set the appointment." : "Selecting this day in IMPACT…";
+  for (const day of days) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = day.label;
+    button.className = day.id === selectedAppointmentDay ? "selected" : "";
+    button.disabled = !lead.leadId;
+    button.addEventListener("click", () => {
+      if (day.id === selectedAppointmentDay && ready) return;
+      selectedAppointmentDay = day.id;
+      renderAppointmentPicker(displayedLead);
+      void sendComputerCommand("virtual-appointment-day", { leadId: lead.leadId, dayId: day.id });
+    });
+    appointmentDays.append(button);
+  }
+  for (const time of selectedDay?.slots || []) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = time;
+    button.disabled = !ready || !lead.leadId;
+    button.addEventListener("click", () => void sendComputerCommand("virtual-appointment-slot", {
+      leadId: lead.leadId, dayId: selectedDay.id, time
+    }));
+    appointmentTimes.append(button);
+  }
 }
 
 function renderCallHistory(lead) {

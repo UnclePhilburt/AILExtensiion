@@ -34,6 +34,8 @@ test('cloud SQL isolates accounts, leases a computer, rejects stale commands and
     assert.equal((await db.query('select companion_take($1) as command',[device])).rows[0].command,null);
     await db.query('select companion_send($1,$2,$3)',['dddddddd-dddd-4ddd-8ddd-dddddddddddd',device,{type:'virtual-appointment',leadId:'123'}]);
     assert.equal((await db.query('select companion_take($1) as command',[device])).rows[0].command.type,'virtual-appointment');
+    await db.query('select companion_send($1,$2,$3)',['eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',device,{type:'virtual-appointment-slot',leadId:'123',dayId:'Today',time:'08:00 AM'}]);
+    assert.equal((await db.query('select companion_take($1) as command',[device])).rows[0].command.type,'virtual-appointment-slot');
     await db.query("update companion_sync set commands=$1",[[{type:'call',requestedAt:'2000-01-01T00:00:00Z'}]]);
     assert.equal((await db.query('select companion_take($1) as command',[device])).rows[0].command,null);
     await db.exec("update companion_sync set desktop_seen=now()-interval '1 minute'");

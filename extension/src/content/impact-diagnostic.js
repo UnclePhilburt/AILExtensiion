@@ -21,6 +21,7 @@
   let nextLeadCache = null;
   let nextLeadRequest = null;
   let autoPublishBusy = false;
+  let lastAppointmentOptionsFingerprint = "";
   let resultDialogsBeforeSubmit = new WeakSet();
   chrome.storage.onChanged.addListener((changes) => {
     if (changes['impact.connectionMode']) lastAutoPublishFingerprint = '';
@@ -31,6 +32,7 @@
       const accountId = (value) => { try { return (typeof value === 'string' ? JSON.parse(value) : value)?.user?.id; } catch { return null; } };
       if (!change.newValue || accountId(change.oldValue) !== accountId(change.newValue)) {
         sessionStorage.removeItem('impact.phoneCallContext');
+        sessionStorage.removeItem('impact.virtualAppointmentContext');
         sessionStorage.removeItem('impact.pendingResultAdvance');
       }
     }
@@ -501,7 +503,7 @@
   async function pollPhoneCommand() {
     if (commandPollBusy || document.visibilityState !== "visible" ||
         location.origin !== "https://mobile.impact.ailife.com" ||
-        !["/Lead/InboxDetail", "/Lead/WhatHappend"].includes(location.pathname)) {
+        !["/Lead/InboxDetail", "/Lead/WhatHappend", "/Lead/SetAppointment"].includes(location.pathname)) {
       return;
     }
 
@@ -517,12 +519,29 @@
         return;
       }
 
+      if (["virtual-appointment-day", "virtual-appointment-slot"].includes(command.type)) {
+        let message;
+        try {
+          if (command.type === "virtual-appointment-day") {
+            clickVirtualAppointmentDay(command);
+            message = "Virtual appointment day selected. Choose a time on your phone.";
+          } else {
+            clickVirtualAppointmentSlot(command);
+            message = "Virtual appointment time selected in IMPACT.";
+          }
+        } catch (error) {
+          message = error.message;
+        }
+        await chrome.runtime.sendMessage({ type: "impact/commandResult", message });
+        return;
+      }
+
       if (["no-answer", "refused-appointment", "virtual-appointment"].includes(command.type)) {
         let message;
         try {
           if (command.type === "virtual-appointment") {
             clickVirtualAppointment(command);
-            message = "Virtual Appointment opened in IMPACT. Select the day and time on your computer for now.";
+            message = "Virtual Appointment opened in IMPACT. Available days and times will appear on your phone.";
           } else if (command.type === "refused-appointment") {
             await clickRefusedAppointment(command);
             message = "Refused Appointment submitted. Waiting for IMPACT, then moving to the next lead...";
@@ -645,7 +664,70 @@
       .filter((element) => /^\s*ResolveAppointment\s*\(/.test(element.getAttribute("onclick") || ""));
     if (choices.length !== 1) throw new Error("Set Virtual Appointment was not found uniquely in IMPACT.");
     if (choices[0].getAttribute("aria-disabled") === "true") throw new Error("Set Virtual Appointment is disabled in IMPACT.");
+    sessionStorage.setItem("impact.virtualAppointmentContext", JSON.stringify({ leadId: command.leadId, startedAt: Date.now() }));
     choices[0].click();
+  }
+
+  function getVirtualAppointmentContext() {
+    try {
+      const context = JSON.parse(sessionStorage.getItem("impact.virtualAppointmentContext") || "null");
+      if (!context?.leadId || !Number.isFinite(context.startedAt) || Date.now() - context.startedAt > 30 * 60 * 1000) return null;
+      return context;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function validateVirtualAppointmentCommand(command) {
+    if (location.pathname !== "/Lead/SetAppointment") throw new Error("Open Set Virtual Appointment in IMPACT, then choose a day and time.");
+    const requestedAt = Date.parse(command.requestedAt);
+    if (!Number.isFinite(requestedAt) || Date.now() - requestedAt > 15000) throw new Error("Appointment selection expired. Press it again on the phone.");
+    const context = getVirtualAppointmentContext();
+    if (!context || context.leadId !== command.leadId) throw new Error("This appointment no longer matches the phone lead. Start the call from the phone again.");
+    return context;
+  }
+
+  function collectVirtualAppointmentOptions() {
+    if (location.pathname !== "/Lead/SetAppointment") return null;
+    const context = getVirtualAppointmentContext();
+    const root = document.querySelector(".setappoinment");
+    if (!context || !root) return null;
+    const days = [];
+    for (const header of Array.from(root.querySelectorAll('a[href^="#"]')).slice(0, 14)) {
+      const id = (header.getAttribute("href") || "").slice(1);
+      const panel = id ? document.getElementById(id) : null;
+      const label = sanitizeText(header.innerText || header.textContent || "");
+      if (!id || !panel || !label) continue;
+      const slots = Array.from(panel.querySelectorAll(".appointmentslot")).slice(0, 80)
+        .map((slot) => sanitizeText(slot.innerText || slot.textContent || ""))
+        .filter(Boolean);
+      if (slots.length) days.push({ id, label, slots, selected: /\bin\b/.test(panel.className || "") || panel.getClientRects().length > 0 });
+    }
+    if (!days.length) return null;
+    const selectedDayId = days.find((day) => day.selected)?.id || days[0].id;
+    return { leadId: context.leadId, days, selectedDayId };
+  }
+
+  function clickVirtualAppointmentDay(command) {
+    validateVirtualAppointmentCommand(command);
+    const dayId = String(command.dayId || "");
+    const headers = Array.from(document.querySelectorAll('.setappoinment a[href^="#"]'))
+      .filter((element) => (element.getAttribute("href") || "").slice(1) === dayId)
+      .filter((element) => element.getClientRects().length && element.getAttribute("aria-disabled") !== "true");
+    if (headers.length !== 1 || !document.getElementById(dayId)) throw new Error("That appointment day is no longer available. Refresh the phone.");
+    headers[0].click();
+  }
+
+  function clickVirtualAppointmentSlot(command) {
+    validateVirtualAppointmentCommand(command);
+    const panel = document.getElementById(String(command.dayId || ""));
+    const time = sanitizeText(command.time || "");
+    if (!panel || !time || !/\bin\b/.test(panel.className || "")) throw new Error("Select the appointment day first, then choose its time.");
+    const slots = Array.from(panel.querySelectorAll(".appointmentslot"))
+      .filter((element) => sanitizeText(element.innerText || element.textContent || "") === time)
+      .filter((element) => element.getClientRects().length && element.getAttribute("aria-disabled") !== "true");
+    if (slots.length !== 1) throw new Error("That appointment time is no longer available. Refresh the phone.");
+    slots[0].click();
   }
 
   function submitCallResult(command, choice) {
@@ -738,10 +820,6 @@
     autoPublishBusy = true;
     try {
       if (!(await chrome.runtime.sendMessage({ type: 'impact/authStatus' }))?.ok) return;
-      if (!location.href.includes("/Lead/InboxDetail")) {
-        return;
-      }
-
       const allowed = await isOriginAllowed();
       if (!allowed) {
         return;
@@ -751,6 +829,18 @@
       if (!autoPublish) {
         return;
       }
+
+      if (location.pathname === "/Lead/SetAppointment") {
+        const appointmentOptions = collectVirtualAppointmentOptions();
+        if (!appointmentOptions) return;
+        const fingerprint = JSON.stringify(appointmentOptions);
+        if (fingerprint === lastAppointmentOptionsFingerprint) return;
+        const response = await chrome.runtime.sendMessage({ type: "impact/publishAppointmentOptions", appointmentOptions });
+        if (response?.ok) lastAppointmentOptionsFingerprint = fingerprint;
+        return;
+      }
+
+      if (location.pathname !== "/Lead/InboxDetail") return;
 
       const lead = collectLocalLeadPreview();
       if (!lead.available || !lead.leadName || !lead.phones?.length) {
