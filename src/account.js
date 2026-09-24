@@ -37,6 +37,7 @@ function render(session) {
   account.hidden = !signedIn;
   passwordForm.hidden = !signedIn;
   document.querySelector('#signedInEmail').textContent = session?.user?.email || '';
+  document.querySelector('#teamAdmin').hidden = session?.user?.email?.toLowerCase() !== 'cody2931@gmail.com';
   document.querySelector('#passwordTitle').textContent = completingInvite ? 'Set your password' : 'Change password';
   if (signedIn && completingInvite) say('Choose a password to finish setting up your account.');
 }

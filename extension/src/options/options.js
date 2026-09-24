@@ -7,6 +7,7 @@ try { await accessToken(); } catch { location.replace('../account/account.html')
 document.querySelector('main').hidden = false;
 const { data: accountData } = await client.auth.getSession();
 document.querySelector('#accountEmail').textContent = accountData.session?.user?.email || '';
+document.querySelector('#teamAdminLink').hidden = accountData.session?.user?.email?.toLowerCase() !== 'cody2931@gmail.com';
 chrome.storage.onChanged.addListener((changes) => {
   if (changes['impact.supabase.session'] && !changes['impact.supabase.session'].newValue) location.replace('../account/account.html');
   if (changes['impact.lastPickedElement']) document.querySelector('#lastPicked').textContent = JSON.stringify(changes['impact.lastPickedElement'].newValue, null, 2);
