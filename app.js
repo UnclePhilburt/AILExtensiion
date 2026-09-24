@@ -523,7 +523,11 @@ function renderLead(lead, updatedAt, source) {
   leadCard.append(name);
   renderHeadsUp(lead);
 
-  appendDetail("Language", lead.language);
+  // English is the usual case, so only spend screen space on language when
+  // the caller needs to know something different.
+  if (!/^english(?:\s*\([^)]*\))?$/i.test(String(lead.language || "").trim())) {
+    appendDetail("Language", lead.language);
+  }
   appendDetail("Email", lead.email);
   appendDetail("Address", lead.address);
 
