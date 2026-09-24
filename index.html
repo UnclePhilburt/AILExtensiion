@@ -1,59 +1,11 @@
 <!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>IMPACT Phone</title>
-    <link rel="stylesheet" href="styles.css">
-  </head>
-  <body>
-    <main class="app" hidden>
-      <header>
-        <div class="brand"><span class="brandMark" aria-hidden="true">i.</span> IMPACT <span class="brandSub">COMPANION</span></div>
-        <p class="eyebrow">YOUR CALLING WORKSPACE</p>
-        <h1>Current Lead</h1>
-        <a class="accountLink" href="account.html">Your account →</a>
-        <p id="status" role="status">Waiting for lead...</p>
-        <p id="connectionModeLabel" class="eyebrow">Cloud connection</p>
-      </header>
-
-      <section class="bridgeSetup" id="bridgeSetup">
-        <label for="bridgeUrl">Bridge URL</label>
-        <input id="bridgeUrl" placeholder="http://192.168.1.169:8787">
-        <label for="bridgeToken">Token</label>
-        <input id="bridgeToken" placeholder="Token from bridge server">
-        <button id="saveBridge" type="button">Connect</button>
-        <p>
-          Connect to your computer to see your current lead.
-        </p>
-      </section>
-
-      <section id="leadCard" class="leadCard empty">
-        Send a lead from the Brave extension.
-      </section>
-
-      <section class="navControls">
-        <button id="previousLead" type="button" disabled>← Previous</button>
-        <button id="nextLead" type="button" disabled>Next lead →</button>
-      </section>
-
-      <section id="callResults" class="controls" hidden>
-        <div class="resultHeading"><p class="eyebrow">AFTER THE CALL</p><h2>How did it go?</h2></div>
-        <button id="noAnswer" type="button" disabled>No Answer</button>
-        <button type="button" disabled>Voicemail</button>
-        <button type="button" disabled>Contacted</button>
-        <button type="button" disabled>Callback</button>
-        <button type="button" disabled>Appointment</button>
-        <button id="refusedAppointment" type="button" disabled>Refused Appointment</button>
-        <button type="button" disabled>Bad Number</button>
-        <button type="button" disabled>Notes</button>
-      </section>
-      <details id="callHistory" class="historyCard" open hidden>
-        <summary>Previous activity <span id="historyCount"></span></summary>
-        <p class="historyHint">Call results and appointments recorded in IMPACT</p>
-        <ol id="historyEntries"></ol>
-      </details>
-    </main>
-    <script type="module" src="phone-entry.js"></script>
-  </body>
-</html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>IMPACT Companion</title><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="home.css"></head>
+<body><main class="app home">
+<header><div class="brand"><span class="brandMark" aria-hidden="true">i.</span> IMPACT <span class="brandSub">COMPANION</span></div><p class="eyebrow">YOUR PHONE COMPANION</p><h1>Good calling starts here.</h1><p class="homeIntro">Keep IMPACT on your computer. Use your phone for the call, navigation, and call results.</p></header>
+<section class="homeHero"><span class="homeIcon" aria-hidden="true">☎</span><div><p class="eyebrow">CONNECTED WORKFLOW</p><h2>Your lead workspace is ready when you are.</h2></div></section>
+<section id="signedIn" class="homeActions" hidden><p>Signed in as <strong id="accountName"></strong></p><a class="workspaceLink" href="workspace.html">Open phone workspace <span aria-hidden="true">→</span></a><a class="subtleLink" href="account.html">Manage account</a></section>
+<section id="signedOut" class="homeActions" hidden><p>Sign in with the same account you use in the browser extension.</p><a class="workspaceLink" href="account.html?next=workspace.html">Sign in to continue <span aria-hidden="true">→</span></a></section>
+<p id="homeStatus" class="homeStatus" role="status">Checking your account…</p>
+<section class="homeGuide"><p class="eyebrow">HOW IT WORKS</p><ol><li><span>1</span>Open IMPACT on your computer.</li><li><span>2</span>Open the phone workspace.</li><li><span>3</span>Call, navigate, and record the result.</li></ol></section>
+<footer class="homeFooter"><a href="start.html">Setup & downloads</a><a href="privacy.html">Privacy & data use</a></footer>
+</main><script type="module" src="phone-entry.js"></script></body></html>
