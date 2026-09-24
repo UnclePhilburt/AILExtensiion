@@ -517,10 +517,13 @@
         return;
       }
 
-      if (["no-answer", "refused-appointment"].includes(command.type)) {
+      if (["no-answer", "refused-appointment", "virtual-appointment"].includes(command.type)) {
         let message;
         try {
-          if (command.type === "refused-appointment") {
+          if (command.type === "virtual-appointment") {
+            clickVirtualAppointment(command);
+            message = "Virtual Appointment opened in IMPACT. Select the day and time on your computer for now.";
+          } else if (command.type === "refused-appointment") {
             await clickRefusedAppointment(command);
             message = "Refused Appointment submitted. Waiting for IMPACT, then moving to the next lead...";
           } else {
@@ -632,6 +635,17 @@
     const choice = choices[0];
     if (choice.getAttribute("aria-disabled") === "true") throw new Error("No Answer is disabled in IMPACT.");
     submitCallResult(command, choice);
+  }
+
+  function clickVirtualAppointment(command) {
+    validateCallResult(command);
+    const choices = Array.from(document.querySelectorAll('#statuscontainer #collapseThree a[name="search"]'))
+      .filter((element) => /^Set Virtual Appointment\s*:/i.test(sanitizeText(element.innerText || element.textContent || "")))
+      .filter((element) => /appointmenttype=VirtualAppt/i.test(element.getAttribute("href") || ""))
+      .filter((element) => /^\s*ResolveAppointment\s*\(/.test(element.getAttribute("onclick") || ""));
+    if (choices.length !== 1) throw new Error("Set Virtual Appointment was not found uniquely in IMPACT.");
+    if (choices[0].getAttribute("aria-disabled") === "true") throw new Error("Set Virtual Appointment is disabled in IMPACT.");
+    choices[0].click();
   }
 
   function submitCallResult(command, choice) {

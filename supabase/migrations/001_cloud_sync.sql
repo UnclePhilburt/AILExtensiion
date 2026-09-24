@@ -56,7 +56,7 @@ begin
   if not found or s.device_id <> p_device or s.desktop_seen < now() - interval '45 seconds' then
     raise exception 'Your computer is offline. Open IMPACT and try again.';
   end if;
-  if coalesce(p_command->>'type','') not in ('next','previous','call','no-answer','refused-appointment') then raise exception 'Unknown command.'; end if;
+  if coalesce(p_command->>'type','') not in ('next','previous','call','no-answer','refused-appointment','virtual-appointment') then raise exception 'Unknown command.'; end if;
   if coalesce(p_command->>'leadId','') = '' or p_command->>'leadId' <> coalesce(s.lead->>'leadId','')
     or s.lead_updated_at < now() - interval '30 minutes' then raise exception 'The lead changed. Wait for the latest lead.'; end if;
   if octet_length(p_command::text) > 4096 then raise exception 'Command too large.'; end if;
