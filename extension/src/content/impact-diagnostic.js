@@ -236,7 +236,7 @@
         const url = findCandidateUrl(element);
         const text = sanitizeText(element.innerText || element.textContent || element.value || element.getAttribute("aria-label") || element.getAttribute("title") || "");
 
-        if (url && url.href === currentUrl.href) {
+        if (url && isSameLeadPageUrl(url, currentUrl)) {
           return null;
         }
 
@@ -782,20 +782,30 @@
 
     for (const value of rawValues) {
       const directUrl = toSameOriginUrl(value);
-      if (directUrl?.pathname.includes("/Lead/InboxDetail")) {
+      if (isLeadNavigationPath(directUrl?.pathname || "")) {
         return directUrl;
       }
 
-      const embeddedPath = String(value).match(/\/Lead\/InboxDetail[^'" )]*/i)?.[0];
+      const embeddedPath = String(value).match(/\/Lead\/(?:InboxDetail|MoveNext)[^'" )]*/i)?.[0];
       if (embeddedPath) {
         const embeddedUrl = toSameOriginUrl(embeddedPath);
-        if (embeddedUrl) {
+        if (embeddedUrl && isLeadNavigationPath(embeddedUrl.pathname)) {
           return embeddedUrl;
         }
       }
     }
 
     return null;
+  }
+
+  function isLeadNavigationPath(pathname) {
+    return pathname.includes("/Lead/InboxDetail") || pathname.includes("/Lead/MoveNext");
+  }
+
+  function isSameLeadPageUrl(candidateUrl, currentUrl) {
+    return candidateUrl.origin === currentUrl.origin
+      && candidateUrl.pathname === currentUrl.pathname
+      && candidateUrl.search === currentUrl.search;
   }
 
   function collectActionAttributes(element) {
