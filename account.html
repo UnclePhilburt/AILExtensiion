@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>IMPACT Account</title>
+  <link rel="stylesheet" href="account.css">
+</head>
+<body>
+  <main>
+    <a id="back" href="./">← Back</a>
+    <p class="eyebrow">IMPACT COMPANION</p>
+    <h1>Your account</h1>
+    <p>Use the same account on your phone and computer.</p>
+    <form id="signInForm">
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="username" required>
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" required>
+      <button type="submit">Sign in</button>
+      <button id="resetPassword" class="secondary" type="button">Forgot password?</button>
+      <p class="hint">Need an account? Ask your administrator for an invitation.</p>
+    </form>
+    <section id="account" hidden>
+      <p>Signed in as <strong id="signedInEmail"></strong></p>
+      <button id="signOut" class="secondary" type="button">Sign out on this device</button>
+    </section>
+    <form id="passwordForm" hidden>
+      <h2 id="passwordTitle">Change password</h2>
+      <label for="newPassword">New password</label>
+      <input id="newPassword" type="password" autocomplete="new-password" minlength="12" required>
+      <label for="confirmPassword">Confirm password</label>
+      <input id="confirmPassword" type="password" autocomplete="new-password" minlength="12" required>
+      <p class="hint">Use at least 12 characters.</p>
+      <button type="submit">Save password</button>
+    </form>
+    <p id="message" role="status" aria-live="polite"></p>
+    <p class="hint">Accounts are connected. Calling still uses your local computer bridge; cloud lead syncing is not enabled yet.</p>
+  </main>
+  <script type="module" src="account.js"></script>
+</body>
+</html>
