@@ -1,17 +1,22 @@
 const statusEl = document.querySelector("#status");
 const leadCard = document.querySelector("#leadCard");
-const nextLeadCard = document.querySelector("#nextLeadCard");
 const bridgeUrlInput = document.querySelector("#bridgeUrl");
 const bridgeTokenInput = document.querySelector("#bridgeToken");
 const saveBridgeButton = document.querySelector("#saveBridge");
 const previousLeadButton = document.querySelector("#previousLead");
 const nextLeadButton = document.querySelector("#nextLead");
+const noAnswerButton = document.querySelector("#noAnswer");
+const refusedAppointmentButton = document.querySelector("#refusedAppointment");
+const callResults = document.querySelector("#callResults");
 const params = new URLSearchParams(location.search);
 
 let bridgeLead = null;
 let displayedLead = null;
 let previousLeads = [];
 let displayedLeadKey = "";
+let leadEvents = null;
+let eventsConnected = false;
+let calledLeadKey = "";
 
 const savedBridgeUrl = localStorage.getItem("impact.bridgeUrl") || "";
 const savedBridgeToken = localStorage.getItem("impact.bridgeToken") || "";
@@ -29,16 +34,49 @@ persistBridgeSettings();
 saveBridgeButton.addEventListener("click", () => {
   localStorage.setItem("impact.bridgeUrl", bridgeUrlInput.value.trim());
   localStorage.setItem("impact.bridgeToken", bridgeTokenInput.value.trim());
-  refreshLead();
+  connectLiveUpdates();
 });
 
 bridgeUrlInput.addEventListener("input", persistBridgeSettings);
 bridgeTokenInput.addEventListener("input", persistBridgeSettings);
 previousLeadButton.addEventListener("click", showPreviousLead);
 nextLeadButton.addEventListener("click", showNextLead);
+noAnswerButton.addEventListener("click", () => sendComputerCommand("no-answer", { leadId: displayedLead?.leadId }));
+refusedAppointmentButton.addEventListener("click", () => sendComputerCommand("refused-appointment", { leadId: displayedLead?.leadId }));
 
-refreshLead();
-setInterval(refreshLead, 2500);
+connectLiveUpdates();
+// Poll only as a fallback while the live connection is unavailable.
+setInterval(() => { if (!eventsConnected) refreshLead(); }, 2500);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) connectLiveUpdates();
+});
+
+function connectLiveUpdates() {
+  leadEvents?.close();
+  eventsConnected = false;
+  const bridgeUrl = bridgeUrlInput.value.trim().replace(/\/$/, "");
+  const token = bridgeTokenInput.value.trim();
+  if (!bridgeUrl || !token || typeof EventSource === "undefined") {
+    refreshLead();
+    return;
+  }
+  const stream = new EventSource(`${bridgeUrl}/api/events?token=${encodeURIComponent(token)}`);
+  leadEvents = stream;
+  stream.addEventListener("command-result", (event) => {
+    if (stream === leadEvents) statusEl.textContent = JSON.parse(event.data).message;
+  });
+  stream.onmessage = (event) => {
+    if (stream !== leadEvents) return;
+    const payload = JSON.parse(event.data);
+    eventsConnected = true;
+    receiveBridgeLead(payload.lead, payload.updatedAt);
+  };
+  stream.onerror = () => {
+    if (stream !== leadEvents) return;
+    eventsConnected = false;
+    statusEl.textContent = "Reconnecting to computer...";
+  };
+}
 
 async function refreshLead() {
   try {
@@ -57,7 +95,7 @@ async function refreshLead() {
       throw new Error(payload.error || `HTTP ${response.status}`);
     }
 
-    receiveBridgeLead(payload.lead, payload.updatedAt);
+    if (!eventsConnected) receiveBridgeLead(payload.lead, payload.updatedAt);
   } catch (error) {
     statusEl.textContent = error.message;
   }
@@ -71,6 +109,7 @@ function persistBridgeSettings() {
 function receiveBridgeLead(lead, updatedAt) {
   bridgeLead = lead;
   if (!lead?.available) {
+    calledLeadKey = "";
     displayedLead = null;
     displayedLeadKey = "";
     previousLeads = [];
@@ -80,10 +119,14 @@ function receiveBridgeLead(lead, updatedAt) {
 
   const nextKey = getLeadKey(lead);
   if (!displayedLead || nextKey !== displayedLeadKey) {
+    calledLeadKey = "";
     displayedLead = lead;
     displayedLeadKey = nextKey;
     previousLeads = [];
   }
+
+  // Preload and contact updates can arrive without changing the lead's identity.
+  displayedLead = lead;
 
   renderLead(displayedLead, updatedAt, displayedLead === bridgeLead ? "bridge" : "local");
 }
@@ -96,7 +139,7 @@ async function showPreviousLead() {
   await sendComputerCommand("previous");
 }
 
-async function sendComputerCommand(type) {
+async function sendComputerCommand(type, details = {}) {
   try {
     const bridgeUrl = bridgeUrlInput.value.trim().replace(/\/$/, "");
     const token = bridgeTokenInput.value.trim();
@@ -107,17 +150,18 @@ async function sendComputerCommand(type) {
 
     const response = await fetch(`${bridgeUrl}/api/command?token=${encodeURIComponent(token)}`, {
       method: "POST",
+      keepalive: true,
       headers: {
         "content-type": "application/json"
       },
-      body: JSON.stringify({ type })
+      body: JSON.stringify({ type, ...details })
     });
     const payload = await response.json();
     if (!response.ok || !payload.ok) {
       throw new Error(payload.error || `HTTP ${response.status}`);
     }
 
-    statusEl.textContent = type === "next"
+    statusEl.textContent = type === "refused-appointment" ? "Opening Refused Appointment in IMPACT..." : type === "no-answer" ? "Sending No Answer to IMPACT..." : type === "call" ? `Call ${details.phoneType} sent to IMPACT.` : type === "next"
       ? "Advancing IMPACT on computer..."
       : "Moving IMPACT back on computer...";
   } catch (error) {
@@ -129,7 +173,6 @@ function renderLead(lead, updatedAt, source) {
   if (!lead?.available) {
     leadCard.className = "leadCard empty";
     leadCard.textContent = "Send a lead from the Brave extension.";
-    renderNextLead(null);
     updateNavButtons();
     statusEl.textContent = "No current lead.";
     return;
@@ -143,6 +186,12 @@ function renderLead(lead, updatedAt, source) {
   leadCard.className = "leadCard";
   leadCard.replaceChildren();
 
+  if (lead.requestType) {
+    const badge = document.createElement("div");
+    badge.className = "requestBadge";
+    badge.textContent = lead.requestType;
+    leadCard.append(badge);
+  }
   const name = document.createElement("h2");
   name.textContent = lead.leadName || "Current lead";
   leadCard.append(name);
@@ -157,46 +206,47 @@ function renderLead(lead, updatedAt, source) {
     const link = document.createElement("a");
     link.className = "callLink";
     link.href = phone.dialHref;
-    link.textContent = `Call ${phone.label}: ${phone.number}`;
+    const icon = document.createElement("span");
+    icon.className = "callIcon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = "☎";
+    const content = document.createElement("span");
+    content.className = "callText";
+    const label = document.createElement("span");
+    label.className = "callLabel";
+    label.textContent = `Call ${phone.label}`;
+    const number = document.createElement("strong");
+    number.textContent = phone.number;
+    content.append(label, number);
+    link.append(icon, content);
+    link.addEventListener("click", () => {
+      calledLeadKey = getLeadKey(lead);
+      updateNavButtons();
+      // Keep native tel: navigation in the user's tap, while the small command
+      // continues sending if the phone browser moves into the dialer.
+      if (lead.leadId && ["Home", "Mobile"].includes(phone.label)) {
+        void sendComputerCommand("call", { leadId: lead.leadId, phoneType: phone.label, phoneNumber: phone.number });
+      } else {
+        statusEl.textContent = "Dialing only: refresh the IMPACT lead to enable call registration.";
+      }
+    });
     phoneList.append(link);
   }
   leadCard.append(phoneList);
-  renderNextLead(lead.nextLead);
   updateNavButtons();
 }
 
-function renderNextLead(nextLead) {
-  nextLeadCard.replaceChildren();
-
-  if (!nextLead?.available) {
-    nextLeadCard.className = "nextStatus empty";
-    nextLeadCard.textContent = nextLead?.error
-      ? `Next preload unavailable: ${nextLead.error}`
-      : "No preloaded next lead yet.";
-    return;
-  }
-
-  nextLeadCard.className = "nextStatus ready";
-
-  const label = document.createElement("div");
-  label.className = "nextLabel";
-  label.textContent = "Next lead ready";
-
-  const meta = document.createElement("div");
-  meta.className = "nextMeta";
-  meta.textContent = nextLead.prefetchedAt
-    ? `Preloaded ${new Date(nextLead.prefetchedAt).toLocaleTimeString()}`
-    : "Preloaded in background";
-
-  nextLeadCard.append(label, meta);
-}
-
 function updateNavButtons() {
+  const callStarted = Boolean(displayedLead?.available && calledLeadKey === getLeadKey(displayedLead));
+  callResults.hidden = !callStarted;
+  noAnswerButton.disabled = !callStarted || !displayedLead?.leadId;
+  refusedAppointmentButton.disabled = !callStarted || !displayedLead?.leadId;
   previousLeadButton.disabled = !displayedLead?.available;
   nextLeadButton.disabled = !displayedLead?.available;
 }
 
 function getLeadKey(lead) {
+  if (lead?.leadId) return `lead:${lead.leadId}`;
   return [
     lead?.leadName || "",
     lead?.email || "",
@@ -212,7 +262,13 @@ function appendDetail(label, value) {
 
   const row = document.createElement("div");
   row.className = "detail";
-  row.textContent = `${label}: ${value}`;
+  const caption = document.createElement("span");
+  caption.className = "detailLabel";
+  caption.textContent = label;
+  const content = document.createElement("span");
+  content.className = "detailValue";
+  content.textContent = value;
+  row.append(caption, content);
   leadCard.append(row);
 }
 

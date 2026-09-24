@@ -9,8 +9,11 @@
   <body>
     <main class="app">
       <header>
+        <div class="brand"><span class="brandMark" aria-hidden="true">i.</span> IMPACT <span class="brandSub">COMPANION</span></div>
+        <p class="eyebrow">YOUR CALLING WORKSPACE</p>
         <h1>Current Lead</h1>
-        <p id="status">Waiting for lead...</p>
+        <a class="accountLink" href="account.html">Your account →</a>
+        <p id="status" role="status">Waiting for lead...</p>
       </header>
 
       <section class="bridgeSetup" id="bridgeSetup">
@@ -20,7 +23,7 @@
         <input id="bridgeToken" placeholder="Token from bridge server">
         <button id="saveBridge" type="button">Connect</button>
         <p>
-          The hosted page is only the UI shell. Live lead data still comes from your local bridge or a future approved backend.
+          Connect to your computer to see your current lead.
         </p>
       </section>
 
@@ -28,22 +31,19 @@
         Send a lead from the Brave extension.
       </section>
 
-      <section id="nextLeadCard" class="leadCard empty">
-        No preloaded next lead yet.
-      </section>
-
       <section class="navControls">
-        <button id="previousLead" type="button" disabled>Previous</button>
-        <button id="nextLead" type="button" disabled>Next</button>
+        <button id="previousLead" type="button" disabled>← Previous</button>
+        <button id="nextLead" type="button" disabled>Next lead →</button>
       </section>
 
-      <section class="controls">
-        <button type="button" disabled>No Answer</button>
+      <section id="callResults" class="controls" hidden>
+        <div class="resultHeading"><p class="eyebrow">AFTER THE CALL</p><h2>How did it go?</h2></div>
+        <button id="noAnswer" type="button" disabled>No Answer</button>
         <button type="button" disabled>Voicemail</button>
         <button type="button" disabled>Contacted</button>
         <button type="button" disabled>Callback</button>
         <button type="button" disabled>Appointment</button>
-        <button type="button" disabled>Not Interested</button>
+        <button id="refusedAppointment" type="button" disabled>Refused Appointment</button>
         <button type="button" disabled>Bad Number</button>
         <button type="button" disabled>Notes</button>
       </section>

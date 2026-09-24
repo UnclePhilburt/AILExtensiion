@@ -1,5 +1,6 @@
 import { DEFAULT_ALLOWED_ORIGINS, DEFAULT_SELECTOR_CONFIG } from "../shared/selector-config.js";
 import { STORAGE_KEYS } from "../shared/storage-keys.js";
+import { parseBridgeUrl } from "../shared/bridge-config.js";
 
 const allowedOriginsInput = document.querySelector("#allowedOrigins");
 const selectorConfigInput = document.querySelector("#selectorConfig");
@@ -86,15 +87,6 @@ function validateSelectorConfig(config) {
   if (!Array.isArray(config.fields)) {
     throw new Error("Selector config must include a fields array.");
   }
-}
-
-function parseBridgeUrl(value) {
-  const bridgeUrl = value.trim() || "http://127.0.0.1:8787";
-  const parsed = new URL(bridgeUrl);
-  if (!["http:"].includes(parsed.protocol)) {
-    throw new Error("Phone bridge URL must be local HTTP for this prototype.");
-  }
-  return parsed.origin;
 }
 
 function setStatus(message, isError = false) {

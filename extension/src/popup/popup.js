@@ -38,7 +38,9 @@ runDiagnosticButton.addEventListener("click", async () => {
 
 updatePhoneButton.addEventListener("click", async () => {
   await withBusy(updatePhoneButton, async () => {
+    phoneStatus.textContent = "Reading the current IMPACT lead...";
     const lead = await getFreshLeadPreview();
+    phoneStatus.textContent = "Sending to the phone bridge...";
     await publishLeadToPhone(lead);
   });
 });
@@ -79,8 +81,8 @@ async function ensureInjected() {
 }
 
 async function sendContentMessage(message) {
-  await ensureInjected();
-  return chrome.tabs.sendMessage(activeTab.id, message);
+  await withTimeout(ensureInjected(), 5000, "Could not connect to IMPACT. Refresh the IMPACT page and try again.");
+  return withTimeout(chrome.tabs.sendMessage(activeTab.id, message), 10000, "IMPACT did not respond. Refresh the IMPACT page and try again.");
 }
 
 async function loadLastSnapshot() {
@@ -94,7 +96,7 @@ async function loadLastSnapshot() {
 }
 
 async function getFreshLeadPreview() {
-  const response = await sendContentMessage({ type: "impact/getSnapshot" });
+  const response = await sendContentMessage({ type: "impact/getSnapshot", includeNextLead: false });
   if (!response.ok) {
     throw new Error(response.error || "Diagnostic failed.");
   }
@@ -105,16 +107,16 @@ async function getFreshLeadPreview() {
 }
 
 async function publishLeadToPhone(lead) {
-  const response = await chrome.runtime.sendMessage({
+  const response = await withTimeout(chrome.runtime.sendMessage({
     type: "impact/publishLead",
     lead
-  });
+  }), 12000, "The phone bridge did not respond. Check that it is running and the extension Bridge URL is http://127.0.0.1:8787.");
 
   if (!response.ok) {
     throw new Error(response.error || "Could not send lead to phone.");
   }
 
-  phoneStatus.textContent = `Phone updated at ${new Date().toLocaleTimeString()}.`;
+  phoneStatus.textContent = `Sent to bridge at ${new Date().toLocaleTimeString()}. Open the local phone link to view it.`;
   await loadLogs();
 }
 
@@ -133,6 +135,7 @@ function renderLeadPreview(preview) {
   leadPreview.append(name);
 
   const details = [
+    preview.requestType ? `Request type: ${preview.requestType}` : "",
     preview.language ? `Language: ${preview.language}` : "",
     preview.email ? `Email: ${preview.email}` : "",
     preview.address ? `Address: ${preview.address}` : ""
@@ -175,7 +178,7 @@ function renderLeadPreview(preview) {
 }
 
 async function loadLogs() {
-  const response = await chrome.runtime.sendMessage({ type: "impact/getLogs" });
+  const response = await withTimeout(chrome.runtime.sendMessage({ type: "impact/getLogs" }), 3000, "Could not load diagnostic logs.");
   const logs = response.logs || [];
   logOutput.textContent = logs.length ? JSON.stringify(logs.slice(-20), null, 2) : "No logs yet.";
 }
@@ -193,4 +196,14 @@ async function withBusy(button, callback) {
     button.disabled = false;
     button.textContent = original;
   }
+}
+
+function withTimeout(promise, milliseconds, message) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), milliseconds);
+    })
+  ]).finally(() => clearTimeout(timer));
 }

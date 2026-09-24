@@ -1,4 +1,5 @@
 import { LOG_LIMIT, STORAGE_KEYS } from "../shared/storage-keys.js";
+import { parseBridgeUrl } from "../shared/bridge-config.js";
 
 let lastAutoPublishFingerprint = "";
 
@@ -37,8 +38,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === "impact/getPhoneCommand") {
-    getPhoneCommand()
+    getPhoneCommand(sender.tab)
       .then((result) => sendResponse({ ok: true, result }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "impact/commandResult") {
+    reportCommandResult(message.message)
+      .then(() => sendResponse({ ok: true }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
@@ -46,19 +54,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return false;
 });
 
-async function getPhoneCommand() {
+async function getPhoneCommand(senderTab) {
+  // Only the active lead tab may consume commands. Inbox/background tabs must
+  // never take a command and silently discard it because they cannot navigate.
+  const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  if (!senderTab?.id || senderTab.id !== activeTab?.id ||
+      !/^https:\/\/mobile\.impact\.ailife\.com\/Lead\/(InboxDetail|WhatHappend)(?:[?#]|$)/.test(activeTab.url || "")) {
+    return { command: null };
+  }
   const result = await chrome.storage.local.get([
     STORAGE_KEYS.bridgeUrl,
     STORAGE_KEYS.bridgeToken
   ]);
-  const bridgeUrl = result[STORAGE_KEYS.bridgeUrl] || "http://127.0.0.1:8787";
+  const bridgeUrl = parseBridgeUrl(result[STORAGE_KEYS.bridgeUrl]);
   const bridgeToken = result[STORAGE_KEYS.bridgeToken] || "";
 
   if (!bridgeToken) {
     return { command: null };
   }
 
+  // A short request avoids leaving a waiting consumer behind when the tab
+  // navigates or loses focus. The content script repeats it every 100 ms.
   const response = await fetch(`${bridgeUrl.replace(/\/$/, "")}/api/command/next?token=${encodeURIComponent(bridgeToken)}`, {
+    signal: AbortSignal.timeout(8000),
     cache: "no-store"
   });
   if (!response.ok) {
@@ -66,6 +84,16 @@ async function getPhoneCommand() {
   }
 
   return response.json();
+}
+
+async function reportCommandResult(message) {
+  const settings = await chrome.storage.local.get([STORAGE_KEYS.bridgeUrl, STORAGE_KEYS.bridgeToken]);
+  const response = await fetch(`${parseBridgeUrl(settings[STORAGE_KEYS.bridgeUrl])}/api/command/result`, {
+    method: "POST", signal: AbortSignal.timeout(8000),
+    headers: { "content-type": "application/json", "x-bridge-token": settings[STORAGE_KEYS.bridgeToken] || "" },
+    body: JSON.stringify({ message })
+  });
+  if (!response.ok) throw new Error("Could not report command result.");
 }
 
 async function autoPublishLead(lead) {
@@ -102,7 +130,7 @@ async function publishLead(lead, options = {}) {
     STORAGE_KEYS.bridgeUrl,
     STORAGE_KEYS.bridgeToken
   ]);
-  const bridgeUrl = result[STORAGE_KEYS.bridgeUrl] || "http://127.0.0.1:8787";
+  const bridgeUrl = parseBridgeUrl(result[STORAGE_KEYS.bridgeUrl]);
   const bridgeToken = result[STORAGE_KEYS.bridgeToken] || "";
 
   if (!bridgeToken) {
@@ -110,6 +138,7 @@ async function publishLead(lead, options = {}) {
   }
 
   const response = await fetch(`${bridgeUrl.replace(/\/$/, "")}/api/current-lead`, {
+    signal: AbortSignal.timeout(8000),
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -136,12 +165,15 @@ async function publishLead(lead, options = {}) {
 function makeLeadFingerprint(lead) {
   return JSON.stringify({
     leadName: lead?.leadName || "",
+    leadId: lead?.leadId || "",
+    requestType: lead?.requestType || "",
     language: lead?.language || "",
     email: lead?.email || "",
     address: lead?.address || "",
     phones: lead?.phones || [],
     nextLeadAvailable: Boolean(lead?.nextLead?.available),
     nextLeadName: lead?.nextLead?.leadName || "",
+    nextLeadRequestType: lead?.nextLead?.requestType || "",
     nextLeadError: lead?.nextLead?.error || "",
     nextLeadCandidate: lead?.nextLead?.candidate?.safePath || ""
   });

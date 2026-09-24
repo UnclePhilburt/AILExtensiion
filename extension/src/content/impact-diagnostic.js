@@ -17,10 +17,14 @@
   let lastAutoPublishFingerprint = "";
   let autoPublishTimer = null;
   let commandPollBusy = false;
+  let nextLeadCache = null;
+  let nextLeadRequest = null;
+  let autoPublishBusy = false;
+  let resultDialogsBeforeSubmit = new WeakSet();
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === "impact/getSnapshot") {
-      getSnapshot()
+      getSnapshot({ includeNextLead: message.includeNextLead !== false })
         .then((snapshot) => sendResponse({ ok: true, snapshot }))
         .catch((error) => sendResponse({ ok: false, error: error.message }));
       return true;
@@ -44,13 +48,17 @@
 
   startAutoPublishWatcher();
   startPhoneCommandWatcher();
+  window.setInterval(finishResultAdvance, 150);
 
-  async function getSnapshot() {
+  async function getSnapshot({ includeNextLead = true } = {}) {
     const config = await getSelectorConfig();
     const allowed = await isOriginAllowed();
     const inboxQueue = allowed ? await syncInboxQueueFromPage() : null;
     const localLeadPreview = allowed ? collectLocalLeadPreview() : null;
-    const prefetchedNextLead = localLeadPreview?.available ? await prefetchNextLead() : null;
+    const cachedNextLead = nextLeadCache?.pageUrl === location.href && Date.now() < nextLeadCache.expiresAt
+      ? nextLeadCache.lead : null;
+    const prefetchedNextLead = localLeadPreview?.available
+      ? (includeNextLead ? await prefetchNextLead() : cachedNextLead) : null;
     if (localLeadPreview?.available && prefetchedNextLead) {
       localLeadPreview.nextLead = prefetchedNextLead;
     }
@@ -190,6 +198,8 @@
     return {
       available: true,
       leadName: extractLeadName(text),
+      leadId: root === document ? getCurrentLeadId() : "",
+      requestType: collectRequestType(panel),
       language: extractSimpleLabel(text, "Language"),
       email: extractEmail(text),
       address: extractAddress(text),
@@ -198,10 +208,36 @@
     };
   }
 
+  function collectRequestType(panel) {
+    // Scope the picker-provided location to the active lead's detail panel.
+    // Read the actual value: request types are not a fixed list.
+    const cell = panel.querySelector("#myTabContentJust div:nth-of-type(4) > table.table-bordered > tbody > tr:nth-of-type(2) > td");
+    return sanitizeText(cell?.innerText || cell?.textContent || "");
+  }
+
   async function prefetchNextLead() {
+    const pageUrl = location.href;
+    if (nextLeadCache?.pageUrl === pageUrl && Date.now() < nextLeadCache.expiresAt) {
+      return nextLeadCache.lead;
+    }
+    if (nextLeadRequest?.pageUrl === pageUrl) return nextLeadRequest.promise;
+    const request = { pageUrl };
+    request.promise = fetchNextLead().then((lead) => {
+      if (location.href === pageUrl) {
+        nextLeadCache = { pageUrl, lead, expiresAt: Date.now() + (lead?.available ? 60000 : 5000) };
+      }
+      return lead;
+    }).finally(() => {
+      if (nextLeadRequest === request) nextLeadRequest = null;
+    });
+    nextLeadRequest = request;
+    return request.promise;
+  }
+
+  async function fetchNextLead() {
     const queueCandidate = await getNextInboxQueueCandidate();
     const candidates = [queueCandidate, ...collectNextLeadCandidates()].filter(Boolean);
-    const candidate = candidates.find((nextCandidate) => nextCandidate.url && nextCandidate.canPrefetch);
+    const candidate = candidates.find((nextCandidate) => nextCandidate.url && nextCandidate.canPrefetch && nextCandidate.confidence >= 100);
     if (!candidate?.url) {
       return {
         available: false,
@@ -213,7 +249,8 @@
     try {
       const response = await fetch(candidate.url, {
         credentials: "include",
-        cache: "no-store"
+        signal: AbortSignal.timeout(5000),
+        cache: "default"
       });
 
       if (!response.ok) {
@@ -239,6 +276,7 @@
 
       return {
         ...lead,
+        leadId: new URL(candidate.url).searchParams.get("LeadId") || "",
         prefetchedAt: new Date().toISOString(),
         candidate
       };
@@ -286,7 +324,7 @@
   }
 
   async function syncInboxQueueFromPage() {
-    if (!location.pathname.includes("/Lead/Inbox")) {
+    if (location.pathname.replace(/\/$/, "") !== "/Lead/Inbox") {
       return null;
     }
 
@@ -397,14 +435,14 @@
   }
 
   function startAutoPublishWatcher() {
-    window.setTimeout(runAutoPublishCheck, 1000);
+    window.setTimeout(runAutoPublishCheck, 0);
     window.setInterval(runAutoPublishCheck, 2500);
     window.setTimeout(syncInboxQueueFromPage, 1000);
     window.setInterval(syncInboxQueueFromPage, 5000);
 
     const observer = new MutationObserver(() => {
       window.clearTimeout(autoPublishTimer);
-      autoPublishTimer = window.setTimeout(runAutoPublishCheck, 600);
+      autoPublishTimer = window.setTimeout(runAutoPublishCheck, 80);
     });
 
     observer.observe(document.documentElement, {
@@ -424,11 +462,17 @@
   }
 
   function startPhoneCommandWatcher() {
-    window.setInterval(pollPhoneCommand, 1000);
+    const poll = async () => {
+      await pollPhoneCommand();
+      window.setTimeout(poll, 100);
+    };
+    poll();
   }
 
   async function pollPhoneCommand() {
-    if (commandPollBusy || !location.origin.includes("mobile.impact.ailife.com")) {
+    if (commandPollBusy || document.visibilityState !== "visible" ||
+        location.origin !== "https://mobile.impact.ailife.com" ||
+        !["/Lead/InboxDetail", "/Lead/WhatHappend"].includes(location.pathname)) {
       return;
     }
 
@@ -437,6 +481,33 @@
       const response = await chrome.runtime.sendMessage({ type: "impact/getPhoneCommand" });
       const command = response?.result?.command;
       if (!command?.type) {
+        return;
+      }
+
+      if (["no-answer", "refused-appointment"].includes(command.type)) {
+        let message;
+        try {
+          if (command.type === "refused-appointment") {
+            await clickRefusedAppointment(command);
+            message = "Refused Appointment submitted. Waiting for IMPACT, then moving to the next lead...";
+          } else {
+            clickNoAnswer(command);
+            message = "No Answer submitted. Waiting for IMPACT, then moving to the next lead...";
+          }
+        } catch (error) {
+          message = error.message;
+        }
+        await chrome.runtime.sendMessage({ type: "impact/commandResult", message });
+        return;
+      }
+
+      if (command.type === "call") {
+        try {
+          clickLeadCallButton(command);
+          await log("info", "phone.callControlClicked", { phoneType: command.phoneType });
+        } catch (error) {
+          await log("warn", "phone.callControlFailed", { reason: error.message });
+        }
         return;
       }
 
@@ -455,16 +526,166 @@
   }
 
   function clickLeadNavigationButton(direction) {
-    const iconName = direction === "down" ? "keyboard_arrow_down" : "keyboard_arrow_up";
-    const icon = Array.from(document.querySelectorAll("button i, button .material-icons"))
-      .find((element) => sanitizeText(element.innerText || element.textContent || "") === iconName);
-    const button = icon?.closest("button");
-    if (button) {
-      button.click();
+    const button = findLeadNavigationButton(direction);
+    if (button) button.click();
+  }
+
+  function clickLeadCallButton(command) {
+    if (!command.leadId || command.leadId !== getCurrentLeadId()) throw new Error("Call skipped: the IMPACT lead changed.");
+    if (!Number.isFinite(Date.parse(command.requestedAt)) || Date.now() - Date.parse(command.requestedAt) > 15000) throw new Error("Call skipped: request expired.");
+    if (!["Mobile", "Home"].includes(command.phoneType)) throw new Error("Call skipped: phone type is unknown.");
+    const panel = document.querySelector("#primaryPanel");
+    if (!panel) throw new Error("Call skipped: lead panel is unavailable.");
+    const number = extractLabeledPhone(sanitizeText(panel.innerText || panel.textContent || ""), command.phoneType);
+    if (!number || toDialablePhone(number) !== toDialablePhone(command.phoneNumber)) throw new Error("Call skipped: phone number no longer matches.");
+    const controls = Array.from(panel.querySelectorAll(".row.text-center .col-xs-3"))
+      .filter((element) => new RegExp(`\\bCall\\s+${command.phoneType}\\b`, "i").test(sanitizeText(element.innerText || element.textContent || "")))
+      .filter((element) => element.getClientRects().length && element.getAttribute("aria-disabled") !== "true");
+    if (controls.length !== 1) throw new Error("Call skipped: matching IMPACT call control was not found uniquely.");
+    const control = controls[0];
+    const target = control.querySelector("button, a, [role='button'], [onclick]") || control;
+    if (target.disabled || target.getAttribute("aria-disabled") === "true") throw new Error("Call skipped: IMPACT call control is disabled.");
+    sessionStorage.setItem("impact.phoneCallContext", JSON.stringify({ leadId: command.leadId, startedAt: Date.now() }));
+    clickWithoutDesktopDialer(target);
+  }
+
+  function validateCallResult(command) {
+    if (location.pathname !== "/Lead/WhatHappend") throw new Error("Open Call - What Happened? in IMPACT, then choose the result.");
+    const requestedAt = Date.parse(command.requestedAt);
+    if (!Number.isFinite(requestedAt) || Date.now() - requestedAt > 15000) throw new Error("Call result expired. Press it again on the phone.");
+    const context = JSON.parse(sessionStorage.getItem("impact.phoneCallContext") || "null");
+    const pageLeadId = getCurrentLeadId();
+    if (!command.leadId || (pageLeadId ? pageLeadId !== command.leadId :
+        !context || context.leadId !== command.leadId || Date.now() - context.startedAt > 30 * 60 * 1000)) {
+      throw new Error("Could not match this call to the phone lead. Start the call from the phone first.");
     }
   }
 
+  async function clickRefusedAppointment(command) {
+    validateCallResult(command);
+    const choices = Array.from(document.querySelectorAll('#statuscontainer #collapseFour a[href="#panelRefused"]'))
+      .filter((element) => /^Refused Appointment\s*:/i.test(sanitizeText(element.innerText || element.textContent || "")));
+    if (choices.length !== 1) throw new Error("Refused Appointment option was not found uniquely in IMPACT.");
+    if (choices[0].getAttribute("aria-disabled") === "true") throw new Error("Refused Appointment is disabled in IMPACT.");
+    choices[0].click();
+    const deadline = Date.now() + 4000;
+    while (Date.now() < deadline) {
+      validateCallResult(command);
+      const panel = document.querySelector("#statuscontainer #panelRefused");
+      const submits = panel ? Array.from(panel.querySelectorAll('input[type="button"], button'))
+        .filter((element) => /^(Submit)$/i.test(sanitizeText(element.value || element.textContent || "")))
+        .filter((element) => /^\s*MarkResolveRefused\s*\([^,]+,[^,]+,\s*8\s*\)/.test(element.getAttribute("onclick") || "")) : [];
+      if (submits.length > 1) throw new Error("Refused Appointment Submit was not found uniquely.");
+      const submit = submits[0];
+      if (submit && submit.getClientRects().length && !submit.disabled && submit.getAttribute("aria-disabled") !== "true") {
+        const invalidField = Array.from(panel.querySelectorAll("input, select, textarea"))
+          .find((field) => field.willValidate && !field.checkValidity());
+        if (invalidField) throw new Error("Refused Appointment needs additional details. Complete the box on your computer.");
+        submitCallResult(command, submit);
+        return;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 80));
+    }
+    throw new Error("Refused Appointment Submit is not ready. Check the box on your computer.");
+  }
+
+  function clickNoAnswer(command) {
+    validateCallResult(command);
+    const choices = Array.from(document.querySelectorAll('#statuscontainer #collapseThree a[name="search"]'))
+      .filter((element) => /^No Answer\s*:/i.test(sanitizeText(element.innerText || element.textContent || "")))
+      .filter((element) => /^\s*UpdateCallStatus\s*\(/.test(element.getAttribute("onclick") || ""));
+    if (choices.length !== 1) throw new Error("No Answer option was not found uniquely in IMPACT.");
+    const choice = choices[0];
+    if (choice.getAttribute("aria-disabled") === "true") throw new Error("No Answer is disabled in IMPACT.");
+    submitCallResult(command, choice);
+  }
+
+  function submitCallResult(command, choice) {
+    resultDialogsBeforeSubmit = new WeakSet(document.querySelectorAll(".bootbox.bootbox-alert"));
+    sessionStorage.setItem("impact.pendingResultAdvance", JSON.stringify({
+      leadId: command.leadId,
+      requestedAt: Date.now(),
+      awaitingOK: command.type === "refused-appointment"
+    }));
+    try {
+      choice.click();
+    } catch (error) {
+      sessionStorage.removeItem("impact.pendingResultAdvance");
+      throw error;
+    }
+    sessionStorage.removeItem("impact.phoneCallContext");
+  }
+
+  function finishResultAdvance() {
+    const key = "impact.pendingResultAdvance";
+    const pending = JSON.parse(sessionStorage.getItem(key) || "null");
+    if (!pending) return;
+    if (Date.now() - pending.requestedAt > 20000) {
+      sessionStorage.removeItem(key);
+      void chrome.runtime.sendMessage({ type: "impact/commandResult", message: "IMPACT did not return to the lead page. Check the result on your computer before moving on." }).catch(() => {});
+      return;
+    }
+    if (pending.awaitingOK && location.pathname === "/Lead/WhatHappend" && document.visibilityState === "visible") {
+      const dialogs = Array.from(document.querySelectorAll('.bootbox.bootbox-alert[role="dialog"]'))
+        .filter((dialog) => !resultDialogsBeforeSubmit.has(dialog) && dialog.getClientRects().length);
+      if (dialogs.length === 1) {
+        const buttons = Array.from(dialogs[0].querySelectorAll(".modal-footer button"))
+          .filter((button) => sanitizeText(button.innerText || button.textContent || "") === "OK" &&
+            !button.disabled && button.getAttribute("aria-disabled") !== "true" && button.getClientRects().length);
+        if (buttons.length === 1) {
+          pending.awaitingOK = false;
+          sessionStorage.setItem(key, JSON.stringify(pending));
+          buttons[0].click();
+          return;
+        }
+      }
+    }
+    // Do not navigate away from a result form while IMPACT may still be saving.
+    // This marker survives a full-page redirect back to the lead details.
+    if (location.pathname !== "/Lead/InboxDetail" || document.visibilityState !== "visible") return;
+    const currentId = getCurrentLeadId();
+    if (!currentId) return;
+    if (currentId !== pending.leadId) {
+      // IMPACT already advanced. Never click Next again and skip a lead.
+      sessionStorage.removeItem(key);
+      return;
+    }
+    const next = findLeadNavigationButton("down");
+    if (!next) return;
+    sessionStorage.removeItem(key);
+    next.click();
+  }
+
+  function clickWithoutDesktopDialer(target) {
+    // Keep IMPACT's click handlers running, but cancel the browser's default
+    // protocol-link action during this one phone-initiated click. Also catches
+    // a tel: anchor synchronously clicked by IMPACT's handler.
+    const preventDialer = (event) => {
+      const link = event.target?.closest?.("a[href]");
+      const href = link?.getAttribute("href") || "";
+      if (event.target === target || target.contains(event.target) || /^(tel|callto|sip|sips):/i.test(href.trim())) {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener("click", preventDialer, true);
+    try {
+      target.click();
+    } finally {
+      window.removeEventListener("click", preventDialer, true);
+    }
+  }
+
+  function findLeadNavigationButton(direction) {
+    const iconName = direction === "down" ? "keyboard_arrow_down" : "keyboard_arrow_up";
+    return Array.from(document.querySelectorAll("button i, button .material-icons"))
+      .filter((element) => sanitizeText(element.innerText || element.textContent || "") === iconName)
+      .map((element) => element.closest("button"))
+      .find((button) => button && !button.disabled && button.getAttribute("aria-disabled") !== "true" && button.getClientRects().length > 0);
+  }
+
   async function runAutoPublishCheck() {
+    if (autoPublishBusy) return;
+    autoPublishBusy = true;
     try {
       if (!location.href.includes("/Lead/InboxDetail")) {
         return;
@@ -485,16 +706,36 @@
         return;
       }
 
-      lead.nextLead = await prefetchNextLead();
+      const pageUrl = location.href;
+      if (nextLeadCache?.pageUrl === pageUrl && Date.now() < nextLeadCache.expiresAt) {
+        lead.nextLead = nextLeadCache.lead;
+      }
+      await publishCurrentLead(lead);
+      if (!lead.nextLead) {
+        // Preloading must not lock out publication of a newly opened lead.
+        prefetchNextLead().then(() => {
+          if (location.href === pageUrl) window.setTimeout(runAutoPublishCheck, 0);
+        }).catch(() => {});
+      }
+    } catch (_error) {
+      // Auto-publish should never interrupt the IMPACT page.
+    } finally {
+      autoPublishBusy = false;
+    }
+  }
 
+  async function publishCurrentLead(lead) {
       const fingerprint = JSON.stringify({
         url: location.href,
         leadName: lead.leadName,
+        leadId: lead.leadId,
+        requestType: lead.requestType,
         language: lead.language,
         email: lead.email,
         address: lead.address,
         phones: lead.phones,
         nextLeadName: lead.nextLead?.leadName || "",
+        nextLeadRequestType: lead.nextLead?.requestType || "",
         nextLeadError: lead.nextLead?.error || "",
         nextLeadCandidate: lead.nextLead?.candidate?.safePath || ""
       });
@@ -503,14 +744,13 @@
         return;
       }
 
-      lastAutoPublishFingerprint = fingerprint;
-      await chrome.runtime.sendMessage({
+      const response = await chrome.runtime.sendMessage({
         type: "impact/autoPublishLead",
         lead
       });
-    } catch (_error) {
-      // Auto-publish should never interrupt the IMPACT page.
-    }
+      if (response?.ok && (!response.result?.skipped || response.result.reason === "duplicate lead payload")) {
+        lastAutoPublishFingerprint = fingerprint;
+      }
   }
 
   async function isAutoPublishEnabled() {

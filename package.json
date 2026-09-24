@@ -1,0 +1,14 @@
+{
+  "name": "impact-companion",
+  "private": true,
+  "scripts": {
+    "build:auth": "node scripts/build-auth.cjs",
+    "test": "node --test phone-web/live-bridge.test.cjs src/account.test.cjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.117.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

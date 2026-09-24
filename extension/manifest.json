@@ -29,6 +29,7 @@
     "tabs"
   ],
   "host_permissions": [
+    "https://uawladqdbbbgddqtdjoi.supabase.co/*",
     "https://mobile.impact.ailife.com/*",
     "http://127.0.0.1:8787/*",
     "http://localhost:8787/*"
