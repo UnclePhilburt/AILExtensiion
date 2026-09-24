@@ -193,7 +193,7 @@
   }
 
   async function prefetchNextLead() {
-    const candidate = collectNextLeadCandidates()[0];
+    const candidate = collectNextLeadCandidates().find((nextCandidate) => nextCandidate.url);
     if (!candidate?.url) {
       return null;
     }
@@ -231,25 +231,27 @@
 
   function collectNextLeadCandidates() {
     const currentUrl = new URL(location.href);
-    const candidates = Array.from(document.querySelectorAll("a[href]"))
+    const candidates = Array.from(document.querySelectorAll("a[href], button, input[type='button'], input[type='submit']"))
       .map((element) => {
-        const href = element.getAttribute("href") || "";
-        const url = toSameOriginUrl(href);
-        if (!url || !url.pathname.includes("/Lead/InboxDetail")) {
+        const url = findCandidateUrl(element);
+        const text = sanitizeText(element.innerText || element.textContent || element.value || element.getAttribute("aria-label") || element.getAttribute("title") || "");
+
+        if (url && url.href === currentUrl.href) {
           return null;
         }
 
-        if (url.href === currentUrl.href) {
+        const action = collectActionAttributes(element);
+        if (!url && !getNextCandidateConfidence(text, element)) {
           return null;
         }
 
-        const text = sanitizeText(element.innerText || element.textContent || element.getAttribute("aria-label") || element.getAttribute("title") || "");
         return {
-          url: url.href,
-          safePath: `${url.pathname}${url.search ? "?..." : ""}`,
+          url: url?.href || "",
+          safePath: url ? `${url.pathname}${url.search ? "?..." : ""}` : "",
           selector: buildSelector(element),
           text: redactControlText(text).slice(0, 80),
-          confidence: getNextCandidateConfidence(text, element)
+          confidence: getNextCandidateConfidence(text, element),
+          action
         };
       })
       .filter(Boolean)
@@ -267,7 +269,7 @@
     if (combined.includes("up") || combined.includes("previous") || combined.includes("keyboard_arrow_up")) {
       return 40;
     }
-    return 60;
+    return 0;
   }
 
   function dedupeCandidates(candidates) {
@@ -618,6 +620,7 @@
       role: element.getAttribute("role") || "",
       labelText: findLabelText(element),
       textSample: isSensitiveInput(element) ? "[redacted sensitive input]" : redactCustomerText(element.innerText || element.textContent || element.value || "").slice(0, 200),
+      clickableAncestor: describeClickableAncestor(element),
       nearbyStableAttributes: collectNearbyStableAttributes(element),
       url: scrubCurrentUrl(),
       capturedAt: new Date().toISOString()
@@ -691,6 +694,20 @@
     return attributes;
   }
 
+  function describeClickableAncestor(element) {
+    const clickable = element.closest("a, button, input[type='button'], input[type='submit']");
+    if (!clickable) {
+      return null;
+    }
+
+    return {
+      selector: buildSelector(clickable),
+      tagName: clickable.tagName.toLowerCase(),
+      text: redactControlText(clickable.innerText || clickable.textContent || clickable.value || "").slice(0, 120),
+      action: collectActionAttributes(clickable)
+    };
+  }
+
   function isReasonableCssIdentifier(value) {
     return typeof value === "string" && value.length > 0 && value.length < 80;
   }
@@ -751,6 +768,64 @@
     } catch (_error) {
       return null;
     }
+  }
+
+  function findCandidateUrl(element) {
+    const rawValues = [
+      element.getAttribute("href"),
+      element.getAttribute("formaction"),
+      element.getAttribute("data-href"),
+      element.getAttribute("data-url"),
+      element.getAttribute("data-link"),
+      element.getAttribute("onclick")
+    ].filter(Boolean);
+
+    for (const value of rawValues) {
+      const directUrl = toSameOriginUrl(value);
+      if (directUrl?.pathname.includes("/Lead/InboxDetail")) {
+        return directUrl;
+      }
+
+      const embeddedPath = String(value).match(/\/Lead\/InboxDetail[^'" )]*/i)?.[0];
+      if (embeddedPath) {
+        const embeddedUrl = toSameOriginUrl(embeddedPath);
+        if (embeddedUrl) {
+          return embeddedUrl;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  function collectActionAttributes(element) {
+    const attributeNames = [
+      "href",
+      "onclick",
+      "formaction",
+      "type",
+      "value",
+      "data-href",
+      "data-url",
+      "data-link",
+      "data-id",
+      "data-leadid",
+      "data-lead-id"
+    ];
+
+    return Object.fromEntries(
+      attributeNames
+        .map((name) => [name, element.getAttribute(name)])
+        .filter(([, value]) => value)
+        .map(([name, value]) => [name, scrubActionText(value)])
+    );
+  }
+
+  function scrubActionText(value) {
+    return String(value)
+      .replace(/\bLeadId=\d+\b/g, "LeadId=[redacted]")
+      .replace(/\b\d{5,}\b/g, "[id]")
+      .replace(/(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g, "[phone]");
   }
 
   function getSafeHrefPath(element) {
