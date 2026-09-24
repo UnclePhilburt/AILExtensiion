@@ -21,6 +21,18 @@
   let nextLeadRequest = null;
   let autoPublishBusy = false;
   let resultDialogsBeforeSubmit = new WeakSet();
+  chrome.storage.onChanged.addListener((changes) => {
+    if (changes['impact.supabase.session']) {
+      lastAutoPublishFingerprint = '';
+      nextLeadCache = null;
+      const change = changes['impact.supabase.session'];
+      const accountId = (value) => { try { return (typeof value === 'string' ? JSON.parse(value) : value)?.user?.id; } catch { return null; } };
+      if (!change.newValue || accountId(change.oldValue) !== accountId(change.newValue)) {
+        sessionStorage.removeItem('impact.phoneCallContext');
+        sessionStorage.removeItem('impact.pendingResultAdvance');
+      }
+    }
+  });
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === "impact/getSnapshot") {
@@ -51,6 +63,7 @@
   window.setInterval(finishResultAdvance, 150);
 
   async function getSnapshot({ includeNextLead = true } = {}) {
+    if (!(await chrome.runtime.sendMessage({ type: 'impact/authStatus' }))?.ok) throw new Error('Sign in through extension Options first.');
     const config = await getSelectorConfig();
     const allowed = await isOriginAllowed();
     const inboxQueue = allowed ? await syncInboxQueueFromPage() : null;
@@ -687,6 +700,7 @@
     if (autoPublishBusy) return;
     autoPublishBusy = true;
     try {
+      if (!(await chrome.runtime.sendMessage({ type: 'impact/authStatus' }))?.ok) return;
       if (!location.href.includes("/Lead/InboxDetail")) {
         return;
       }

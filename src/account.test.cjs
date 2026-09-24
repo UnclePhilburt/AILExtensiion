@@ -20,7 +20,7 @@ test('account UI signs in, clears the password, signs out, and validates passwor
     signOut: async () => ({}), updateUser: async () => { passwordUpdates++; return {}; }
   };
   const context = vm.createContext({
-    createClient: () => ({ auth }), URLSearchParams, localStorage: {}, location: { hash: '' },
+    createClient: () => ({ auth }), URLSearchParams, localStorage: { getItem: () => null }, location: { hash: '' },
     document: { querySelector: element, querySelectorAll: () => [] }
   });
   vm.runInContext(fs.readFileSync('src/account.js', 'utf8').replace(/^import .*;\r?\n/, ''), context);

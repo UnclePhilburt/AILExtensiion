@@ -3,6 +3,7 @@ const os = require("os");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+const { verifyUser: verifySupabaseUser } = require("./auth.cjs");
 
 const PORT = Number(process.env.IMPACT_BRIDGE_PORT || 8787);
 const HOST = process.env.IMPACT_BRIDGE_HOST || "0.0.0.0";
@@ -10,13 +11,10 @@ const TOKEN_FILE = path.join(__dirname, ".bridge-token");
 const TOKEN = process.env.IMPACT_BRIDGE_TOKEN || getSavedToken();
 const PUBLIC_DIR = path.join(__dirname, "public");
 
-let currentLead = null;
-let updatedAt = null;
-let commands = [];
-const leadSubscribers = new Set();
-const commandWaiters = new Set();
-
-const server = http.createServer(async (req, res) => {
+function createBridgeServer({ verifyUser = verifySupabaseUser } = {}) {
+const users = new Map();
+const revokedTokens = new Set();
+return http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
 
@@ -24,6 +22,32 @@ const server = http.createServer(async (req, res) => {
       sendCors(res, 204);
       return;
     }
+
+    let state;
+    let authToken;
+    if (url.pathname.startsWith("/api/")) {
+      requireToken(req, url);
+      authToken = req.headers.authorization?.match(/^Bearer (.+)$/i)?.[1];
+      if (!authToken) { sendJson(res, 401, { ok: false, error: "Sign in to access leads." }); return; }
+      const tokenHash = crypto.createHash('sha256').update(authToken).digest('hex');
+      if (revokedTokens.has(tokenHash)) { sendJson(res, 401, { ok: false, error: 'Session signed out.' }); return; }
+      let user;
+      try { user = await verifyUser(authToken); }
+      catch { sendJson(res, 401, { ok: false, error: "Account session is invalid or could not be verified. Sign in again." }); return; }
+      if (!users.has(user.id)) users.set(user.id, { currentLead: null, updatedAt: null, commands: [], leadSubscribers: new Set(), commandWaiters: new Set() });
+      state = users.get(user.id);
+      res.bridgeState = state;
+      if (url.pathname === '/api/logout' && req.method === 'POST') {
+        revokedTokens.add(tokenHash);
+        state.currentLead = null;
+        state.commands = [];
+        for (const client of state.leadSubscribers) { client.write('event: auth-required\ndata: {}\n\n'); client.end(); }
+        for (const deliver of state.commandWaiters) deliver(null);
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+    }
+    const { leadSubscribers, commandWaiters } = state || {};
 
     if (url.pathname === "/api/current-lead" && req.method === "POST") {
       requireToken(req, url);
@@ -33,10 +57,10 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      currentLead = body.lead;
-      updatedAt = new Date().toISOString();
+      state.currentLead = body.lead;
+      state.updatedAt = new Date().toISOString();
       for (const client of leadSubscribers) sendLeadEvent(client);
-      sendJson(res, 200, { ok: true, updatedAt });
+      sendJson(res, 200, { ok: true, updatedAt: state.updatedAt });
       return;
     }
 
@@ -46,7 +70,10 @@ const server = http.createServer(async (req, res) => {
       res.flushHeaders();
       leadSubscribers.add(res);
       sendLeadEvent(res);
-      const heartbeat = setInterval(() => res.write(": keepalive\n\n"), 15000);
+      const heartbeat = setInterval(async () => {
+        try { await verifyUser(authToken); if (!res.destroyed) res.write(": keepalive\n\n"); }
+        catch { res.write('event: auth-required\ndata: {}\n\n'); res.end(); }
+      }, 5000);
       res.on("close", () => {
         clearInterval(heartbeat);
         leadSubscribers.delete(res);
@@ -58,8 +85,8 @@ const server = http.createServer(async (req, res) => {
       requireToken(req, url);
       sendJson(res, 200, {
         ok: true,
-        lead: currentLead,
-        updatedAt
+        lead: state.currentLead,
+        updatedAt: state.updatedAt
       });
       return;
     }
@@ -81,12 +108,12 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      if (["no-answer", "refused-appointment"].includes(body.type) && (!body.leadId || body.leadId !== currentLead?.leadId)) {
+      if (["no-answer", "refused-appointment"].includes(body.type) && (!body.leadId || body.leadId !== state.currentLead?.leadId)) {
         sendJson(res, 400, { ok: false, error: "The lead changed. Refresh the phone before choosing a call result." });
         return;
       }
 
-      if (body.type === "call" && (!body.leadId || body.leadId !== currentLead?.leadId ||
+      if (body.type === "call" && (!body.leadId || body.leadId !== state.currentLead?.leadId ||
           !["Mobile", "Home"].includes(body.phoneType) || typeof body.phoneNumber !== "string")) {
         sendJson(res, 400, { ok: false, error: "Refresh the lead before calling; a matching Home or Mobile number is required." });
         return;
@@ -103,17 +130,17 @@ const server = http.createServer(async (req, res) => {
         command.phoneNumber = body.phoneNumber;
       }
       if (["no-answer", "refused-appointment"].includes(body.type)) command.leadId = body.leadId;
-      commands.push(command);
-      commands = commands.slice(-20);
+      state.commands.push(command);
+      state.commands = state.commands.slice(-20);
       const waiting = commandWaiters.values().next().value;
-      if (waiting) waiting(commands.shift());
+      if (waiting) waiting(state.commands.shift());
       sendJson(res, 200, { ok: true, command });
       return;
     }
 
     if (url.pathname === "/api/command/next" && req.method === "GET") {
       requireToken(req, url);
-      if (!commands.length && url.searchParams.get("wait") === "1") {
+      if (!state.commands.length && url.searchParams.get("wait") === "1") {
         let timer;
         const deliver = (command) => {
           clearTimeout(timer);
@@ -130,7 +157,7 @@ const server = http.createServer(async (req, res) => {
       }
       sendJson(res, 200, {
         ok: true,
-        command: commands.shift() || null
+        command: state.commands.shift() || null
       });
       return;
     }
@@ -148,7 +175,10 @@ const server = http.createServer(async (req, res) => {
     });
   }
 });
+}
 
+if (require.main === module) {
+const server = createBridgeServer();
 server.listen(PORT, HOST, () => {
   const localBridge = `http://127.0.0.1:${PORT}`;
   console.log("IMPACT phone bridge running.");
@@ -159,6 +189,8 @@ server.listen(PORT, HOST, () => {
     console.log(`  http://${address}:${PORT}/`);
   }
 });
+}
+module.exports = { createBridgeServer };
 
 function getSavedToken() {
   try {
@@ -173,7 +205,7 @@ function getSavedToken() {
 }
 
 function sendLeadEvent(res) {
-  res.write(`data: ${JSON.stringify({ ok: true, lead: currentLead, updatedAt })}\n\n`);
+  res.write(`data: ${JSON.stringify({ ok: true, lead: res.bridgeState.currentLead, updatedAt: res.bridgeState.updatedAt })}\n\n`);
 }
 
 function requireToken(req, url) {
@@ -247,7 +279,7 @@ function sendCors(res, statusCode, headers = {}) {
   res.writeHead(statusCode, {
     "access-control-allow-origin": "*",
     "access-control-allow-methods": "GET,POST,OPTIONS",
-    "access-control-allow-headers": "content-type,x-bridge-token",
+    "access-control-allow-headers": "content-type,x-bridge-token,authorization",
     "cache-control": "no-store",
     ...headers
   });

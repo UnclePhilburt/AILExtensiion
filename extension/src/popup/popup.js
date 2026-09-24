@@ -1,4 +1,10 @@
 import { STORAGE_KEYS } from "../shared/storage-keys.js";
+import { accessToken } from "../shared/auth-runtime.js";
+
+try { await accessToken(); } catch { location.replace('../account/account.html'); throw new Error('Sign-in required'); }
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes['impact.supabase.session'] && !changes['impact.supabase.session'].newValue) location.replace('../account/account.html');
+});
 
 const tabStatus = document.querySelector("#tabStatus");
 const snapshotOutput = document.querySelector("#snapshotOutput");

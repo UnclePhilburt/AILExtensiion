@@ -1,9 +1,20 @@
 import { LOG_LIMIT, STORAGE_KEYS } from "../shared/storage-keys.js";
 import { parseBridgeUrl } from "../shared/bridge-config.js";
+import { accessToken } from "../shared/auth-runtime.js";
 
 let lastAutoPublishFingerprint = "";
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes['impact.supabase.session']) {
+    lastAutoPublishFingerprint = '';
+    void chrome.storage.local.remove([STORAGE_KEYS.lastSnapshot, STORAGE_KEYS.inboxQueue]);
+  }
+});
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === 'impact/authStatus') {
+    accessToken().then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
   if (message?.type === "impact/log") {
     appendLog(message.entry, sender).then(() => sendResponse({ ok: true }));
     return true;
@@ -76,6 +87,7 @@ async function getPhoneCommand(senderTab) {
   // A short request avoids leaving a waiting consumer behind when the tab
   // navigates or loses focus. The content script repeats it every 100 ms.
   const response = await fetch(`${bridgeUrl.replace(/\/$/, "")}/api/command/next?token=${encodeURIComponent(bridgeToken)}`, {
+    headers: { Authorization: `Bearer ${await accessToken()}` },
     signal: AbortSignal.timeout(8000),
     cache: "no-store"
   });
@@ -90,7 +102,7 @@ async function reportCommandResult(message) {
   const settings = await chrome.storage.local.get([STORAGE_KEYS.bridgeUrl, STORAGE_KEYS.bridgeToken]);
   const response = await fetch(`${parseBridgeUrl(settings[STORAGE_KEYS.bridgeUrl])}/api/command/result`, {
     method: "POST", signal: AbortSignal.timeout(8000),
-    headers: { "content-type": "application/json", "x-bridge-token": settings[STORAGE_KEYS.bridgeToken] || "" },
+    headers: { "content-type": "application/json", "x-bridge-token": settings[STORAGE_KEYS.bridgeToken] || "", Authorization: `Bearer ${await accessToken()}` },
     body: JSON.stringify({ message })
   });
   if (!response.ok) throw new Error("Could not report command result.");
@@ -105,13 +117,14 @@ async function autoPublishLead(lead) {
   }
 
   const fingerprint = makeLeadFingerprint(lead);
-  if (fingerprint === lastAutoPublishFingerprint) {
+  const bearer = await accessToken();
+  if (`${bearer}:${fingerprint}` === lastAutoPublishFingerprint) {
     return { skipped: true, reason: "duplicate lead payload" };
   }
 
   try {
     const result = await publishLead(lead, { eventName: "bridge.leadAutoPublished" });
-    lastAutoPublishFingerprint = fingerprint;
+    lastAutoPublishFingerprint = `${bearer}:${fingerprint}`;
     return result;
   } catch (error) {
     await appendLocalLog("warn", "bridge.autoPublishFailed", {
@@ -141,6 +154,7 @@ async function publishLead(lead, options = {}) {
     signal: AbortSignal.timeout(8000),
     method: "POST",
     headers: {
+      Authorization: `Bearer ${await accessToken()}`,
       "content-type": "application/json",
       "x-bridge-token": bridgeToken
     },

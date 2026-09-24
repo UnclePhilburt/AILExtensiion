@@ -29,11 +29,19 @@ or service-role key belongs in this repository, browser code, or GitHub Pages.
 
 ## Current scope
 
-This is the account foundation, not the cloud bridge. Existing local calling
-still works without signing in, and no lead details or phone commands are sent
-to Supabase. Accounts do not yet protect or partition the local bridge. Before
-multi-user cloud use, add authenticated lead/command storage and enforce owner
-access through database row-level security, then test two independent users.
+Both the phone and extension require sign-in. Every bridge API request must
+include an account bearer token, which the bridge verifies with Supabase Auth
+(verification cached for up to five seconds). Leads, commands, and event streams
+are partitioned by the verified user ID. The bridge token alone grants no lead
+access. Signing out through a local account page revokes that access token on
+the bridge, clears the account's cached lead/commands, and closes its streams.
+
+The phone and extension must use the same account. Signing in to GitHub Pages
+does not sign in to the separate local phone URL; browser sessions are scoped
+to each origin. The local bridge needs internet access for verification and
+fails closed when it cannot verify a session. No lead data is uploaded to
+Supabase. A future cloud bridge still needs authenticated storage and row-level
+security. This update secures the local bridge, not a hosted multi-user backend.
 
 ## Build and publish
 

@@ -1,3 +1,4 @@
+import { client, accessToken } from './auth-runtime.js';
 const statusEl = document.querySelector("#status");
 const leadCard = document.querySelector("#leadCard");
 const bridgeUrlInput = document.querySelector("#bridgeUrl");
@@ -17,6 +18,7 @@ let displayedLeadKey = "";
 let leadEvents = null;
 let eventsConnected = false;
 let calledLeadKey = "";
+let signedIn = false;
 
 const savedBridgeUrl = localStorage.getItem("impact.bridgeUrl") || "";
 const savedBridgeToken = localStorage.getItem("impact.bridgeToken") || "";
@@ -44,41 +46,76 @@ nextLeadButton.addEventListener("click", showNextLead);
 noAnswerButton.addEventListener("click", () => sendComputerCommand("no-answer", { leadId: displayedLead?.leadId }));
 refusedAppointmentButton.addEventListener("click", () => sendComputerCommand("refused-appointment", { leadId: displayedLead?.leadId }));
 
-connectLiveUpdates();
+client.auth.onAuthStateChange((_event, session) => {
+  signedIn = Boolean(session);
+  if (!signedIn) {
+    leadEvents?.abort();
+    leadEvents = null;
+    eventsConnected = false;
+    receiveBridgeLead(null, null);
+    location.replace('account.html');
+  } else {
+    document.querySelector('main').hidden = false;
+    void connectLiveUpdates();
+  }
+});
 // Poll only as a fallback while the live connection is unavailable.
-setInterval(() => { if (!eventsConnected) refreshLead(); }, 2500);
+setInterval(() => { if (signedIn && !eventsConnected) refreshLead(); }, 2500);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) connectLiveUpdates();
 });
 
-function connectLiveUpdates() {
-  leadEvents?.close();
+async function connectLiveUpdates() {
+  if (!signedIn) return;
+  leadEvents?.abort();
   eventsConnected = false;
   const bridgeUrl = bridgeUrlInput.value.trim().replace(/\/$/, "");
   const token = bridgeTokenInput.value.trim();
-  if (!bridgeUrl || !token || typeof EventSource === "undefined") {
+  if (!bridgeUrl || !token) {
     refreshLead();
     return;
   }
-  const stream = new EventSource(`${bridgeUrl}/api/events?token=${encodeURIComponent(token)}`);
+  const stream = new AbortController();
   leadEvents = stream;
-  stream.addEventListener("command-result", (event) => {
-    if (stream === leadEvents) statusEl.textContent = JSON.parse(event.data).message;
-  });
-  stream.onmessage = (event) => {
-    if (stream !== leadEvents) return;
-    const payload = JSON.parse(event.data);
-    eventsConnected = true;
-    receiveBridgeLead(payload.lead, payload.updatedAt);
-  };
-  stream.onerror = () => {
+  try {
+    const bearer = await accessToken();
+    const response = await fetch(`${bridgeUrl}/api/events?token=${encodeURIComponent(token)}`, {
+      headers: { Authorization: `Bearer ${bearer}` }, signal: stream.signal, cache: 'no-store'
+    });
+    if (!response.ok) throw new Error('Sign in on both devices with the same account.');
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (signedIn && stream === leadEvents) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let boundary;
+      while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+        const frame = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        const data = frame.split('\n').find(line => line.startsWith('data: '));
+        if (!data || !signedIn || stream !== leadEvents) continue;
+        if (frame.includes('event: auth-required')) throw new Error('Your account session expired. Sign in again.');
+        const payload = JSON.parse(data.slice(6));
+        if (frame.includes('event: command-result')) statusEl.textContent = payload.message;
+        else { eventsConnected = true; receiveBridgeLead(payload.lead, payload.updatedAt); }
+      }
+    }
+  } catch (error) {
+    if (stream === leadEvents && !stream.signal.aborted) {
+      receiveBridgeLead(null, null);
+      statusEl.textContent = error.message;
+    }
+  } finally {
     if (stream !== leadEvents) return;
     eventsConnected = false;
-    statusEl.textContent = "Reconnecting to computer...";
-  };
+    if (signedIn) setTimeout(connectLiveUpdates, 1500);
+  }
 }
 
 async function refreshLead() {
+  if (!signedIn) return;
   try {
     const bridgeUrl = bridgeUrlInput.value.trim().replace(/\/$/, "");
     const token = bridgeTokenInput.value.trim();
@@ -88,6 +125,7 @@ async function refreshLead() {
     }
 
     const response = await fetch(`${bridgeUrl}/api/current-lead?token=${encodeURIComponent(token)}`, {
+      headers: { Authorization: `Bearer ${await accessToken()}` },
       cache: "no-store"
     });
     const payload = await response.json();
@@ -95,7 +133,7 @@ async function refreshLead() {
       throw new Error(payload.error || `HTTP ${response.status}`);
     }
 
-    if (!eventsConnected) receiveBridgeLead(payload.lead, payload.updatedAt);
+    if (signedIn && !eventsConnected) receiveBridgeLead(payload.lead, payload.updatedAt);
   } catch (error) {
     statusEl.textContent = error.message;
   }
@@ -140,6 +178,7 @@ async function showPreviousLead() {
 }
 
 async function sendComputerCommand(type, details = {}) {
+  if (!signedIn) return;
   try {
     const bridgeUrl = bridgeUrlInput.value.trim().replace(/\/$/, "");
     const token = bridgeTokenInput.value.trim();
@@ -152,6 +191,7 @@ async function sendComputerCommand(type, details = {}) {
       method: "POST",
       keepalive: true,
       headers: {
+        Authorization: `Bearer ${await accessToken()}`,
         "content-type": "application/json"
       },
       body: JSON.stringify({ type, ...details })

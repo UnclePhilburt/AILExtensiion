@@ -74,6 +74,15 @@ passwordForm.addEventListener('submit', event => {
   });
 });
 document.querySelector('#signOut').addEventListener('click', () => void run(async () => {
+  const { data } = await client.auth.getSession();
+  const bridgeSettings = isExtension ? await chrome.storage.local.get(['impact.bridgeUrl', 'impact.bridgeToken']) : null;
+  const bridgeUrl = isExtension ? (bridgeSettings['impact.bridgeUrl'] || 'http://127.0.0.1:8787') : localStorage.getItem('impact.bridgeUrl');
+  const bridgeToken = isExtension ? bridgeSettings['impact.bridgeToken'] : localStorage.getItem('impact.bridgeToken');
+  if (bridgeUrl && bridgeToken && data.session) {
+    try {
+      await fetch(`${bridgeUrl}/api/logout`, { method: 'POST', headers: { Authorization: `Bearer ${data.session.access_token}`, 'x-bridge-token': bridgeToken }, signal: AbortSignal.timeout(3000) });
+    } catch { /* Still clear this device's session if its bridge is offline. */ }
+  }
   const { error } = await client.auth.signOut({ scope: 'local' });
   if (error) throw error;
   completingInvite = false;

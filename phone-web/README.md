@@ -2,6 +2,11 @@
 
 Local-only phone companion prototype.
 
+Sign in to the same Supabase account on the phone and in extension Options.
+The bridge now rejects lead and command requests without a verified account
+session, even when the local bridge token is known. Opening the phone page while
+signed out sends you to the account page. See [account setup](../docs/supabase-accounts.md).
+
 The bridge keeps the current lead in memory and serves a phone-friendly page on your local network. It does not call IMPACT, does not write dispositions, and does not send data to a cloud service.
 
 The same static phone UI can also be deployed to GitHub Pages from `phone-web/public`. GitHub Pages is only the UI shell. Live lead data still needs the local bridge or a future approved backend such as Supabase.
@@ -17,8 +22,9 @@ needed. Bookmark that page or add it to your home screen. The computer must stay
 awake, and its network address may change when you switch networks.
 
 The extension token is saved locally in `phone-web/.bridge-token` (excluded from
-Git), so the extension only needs to be configured once. Anyone able to reach
-the bridge on your local network can open the phone page and pair automatically.
+Git), so the extension only needs to be configured once. Opening the local page
+fills the bridge connection settings automatically, but account sign-in is required
+to access that account's leads and commands.
 The hosted GitHub Pages version still requires manual connection settings.
 
 From `/Users/codywilliams/Documents/ImpactExtension`:
