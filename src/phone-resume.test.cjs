@@ -5,6 +5,7 @@ const vm=require('node:vm');
 const path=require('node:path');
 const read=file=>fs.readFileSync(path.join(__dirname,'../phone-web/public',file),'utf8');
 const phoneActionsSource=read('phone-actions.js').replace(/^export /gm,'');
+const leadHighlightsSource=require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/lead-highlights.js'),'utf8').replace(/^export /gm,'');
 const pendingCallSource=read('pending-call.js').replace(/^export /gm,'');
 const appSource=read('app.js').replace(/^import .*;\r?\n/gm,'');
 const MIN=60000;
@@ -42,7 +43,7 @@ async function loadPage(server){
     URLSearchParams, Date:FakeDate, JSON, crypto:require('node:crypto'), structuredClone,
     setInterval(){}, setTimeout:(fn,ms)=>{timers.push({fn,ms});return timers.length;}, clearTimeout(){}, console
   });
-  vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context);
+  vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context); vm.runInContext(leadHighlightsSource,context);
   const app=await vm.runInContext(`(async()=>{${appSource}\nreturn {refreshCloud};})()`,context);
   authChanged('SIGNED_IN',auth.session);
   await settle();

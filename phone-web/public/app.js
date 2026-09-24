@@ -1,6 +1,7 @@
 import { client, accessToken } from './auth-runtime.js';
 import { cloudEnabled, cloudState, cloudTouchPhone, cloudSend, watchCloud, visibleLead, isOnline } from './cloud-sync.js';
 import { NETWORK_MESSAGE, SIGN_IN_MESSAGE, RESULT_COMMANDS, checkBeforeSend, isStateFresh, isAuthFailure, isNetworkFailure, friendlySendError, withTimeout } from './phone-actions.js';
+import { buildHeadsUp } from './lead-highlights.js';
 import { createPendingCall, readPendingCall, writePendingCall, pendingCallDecision, markPendingCallResult, isCallResultCommand } from './pending-call.js';
 const statusEl = document.querySelector("#status");
 const leadCard = document.querySelector("#leadCard");
@@ -520,6 +521,7 @@ function renderLead(lead, updatedAt, source) {
   const name = document.createElement("h2");
   name.textContent = lead.leadName || "Current lead";
   leadCard.append(name);
+  renderHeadsUp(lead);
 
   appendDetail("Language", lead.language);
   appendDetail("Email", lead.email);
@@ -563,6 +565,36 @@ function renderLead(lead, updatedAt, source) {
   }
   leadCard.append(phoneList);
   updateNavButtons();
+}
+
+// Things to know before dialing (upcoming appointment, callback, bad number,
+// earlier tries), read from the lead's IMPACT Status history.
+function renderHeadsUp(lead) {
+  let chips = [];
+  try { chips = buildHeadsUp(lead.callHistory, Date.now()); } catch (_error) { chips = []; }
+  if (!chips.length) return;
+  const section = document.createElement("section");
+  section.className = "headsUp";
+  section.setAttribute("aria-label", "Heads-up for this lead");
+  for (const chip of chips) {
+    const item = document.createElement("div");
+    item.className = `headsUpChip ${chip.tone}${chip.soon ? " soon" : ""}${chip.muted ? " muted" : ""}`;
+    const label = document.createElement("span");
+    label.className = "headsUpLabel";
+    label.textContent = chip.soon ? `${chip.label} · soon` : chip.label;
+    const title = document.createElement("strong");
+    title.className = "headsUpTitle";
+    title.textContent = chip.title;
+    item.append(label, title);
+    if (chip.detail) {
+      const detail = document.createElement("span");
+      detail.className = "headsUpDetail";
+      detail.textContent = chip.detail;
+      item.append(detail);
+    }
+    section.append(item);
+  }
+  leadCard.append(section);
 }
 
 function updateNavButtons() {
