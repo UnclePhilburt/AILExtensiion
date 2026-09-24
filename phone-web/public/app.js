@@ -576,6 +576,14 @@ function renderHeadsUp(lead) {
   const section = document.createElement("section");
   section.className = "headsUp";
   section.setAttribute("aria-label", "Heads-up for this lead");
+  const scheduled = chips.filter((chip) => (chip.tone === "appointment" || chip.tone === "callback") && !chip.muted);
+  if (scheduled.length) {
+    section.className += " headsUpPriority";
+    const heading = document.createElement("p");
+    heading.className = "headsUpHeading";
+    heading.textContent = scheduled.length > 1 ? "SCHEDULED NEXT" : scheduled[0].tone === "appointment" ? "SCHEDULED APPOINTMENT" : "SCHEDULED CALLBACK";
+    section.append(heading);
+  }
   for (const chip of chips) {
     const item = document.createElement("div");
     item.className = `headsUpChip ${chip.tone}${chip.soon ? " soon" : ""}${chip.muted ? " muted" : ""}`;
