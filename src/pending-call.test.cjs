@@ -4,6 +4,7 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
 const phoneActionsSource=require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/phone-actions.js'),'utf8').replace(/^export /gm,'');
+const leadHighlightsSource=require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/lead-highlights.js'),'utf8').replace(/^export /gm,'');
 const pendingCallSource=fs.readFileSync(path.join(__dirname,'../phone-web/public/pending-call.js'),'utf8').replace(/^export /gm,'');
 const appSource=fs.readFileSync(path.join(__dirname,'../phone-web/public/app.js'),'utf8').replace(/^import .*;\r?\n/gm,'');
 const HOUR=60*60*1000;
@@ -13,7 +14,7 @@ function memoryStorage(){
   return {data,getItem:k=>data.has(k)?data.get(k):null,setItem:(k,v)=>{data.set(k,String(v));},removeItem:k=>{data.delete(k);}};
 }
 const savedCalls=storage=>[...storage.data.keys()].filter(key=>key.startsWith('impact.pendingCall.')).length;
-function helpers(){const context=vm.createContext({JSON,Number,String});vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context);return context;}
+function helpers(){const context=vm.createContext({JSON,Number,String});vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context); vm.runInContext(leadHighlightsSource,context);return context;}
 
 // Loads app.js the way the phone page does. Each call is one "page load";
 // sharing `storage` between calls simulates the phone reloading the tab.
@@ -32,7 +33,7 @@ async function loadPage({storage,shared,userId='user-1'}){
     localStorage:storage,location:{search:'',origin:'https://example.test',replace(){}},
     URLSearchParams, Date, crypto:require('node:crypto'), JSON, setInterval(){},setTimeout(){}, console
   });
-  vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context);
+  vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context); vm.runInContext(leadHighlightsSource,context);
   const app=await vm.runInContext(`(async()=>{${appSource}\nreturn {refreshCloud};})()`,context);
   authChanged('SIGNED_IN',{user:{id:userId}});
   await new Promise(setImmediate);
