@@ -691,7 +691,7 @@ function renderCallHistory(lead) {
   historyLeadKey = key;
   card.hidden = !lead?.available;
   entries.replaceChildren();
-  // One line per Status entry, even if IMPACT's text arrived run together.
+  // One line per IMPACT Status or Comment entry, even if its text arrived run together.
   const history = splitHistory(lead?.callHistory);
   document.querySelector("#historyCount").textContent = history.length ? `(${history.length})` : "";
   for (const entry of history.length ? history : ["No previous activity found on this lead."]) {

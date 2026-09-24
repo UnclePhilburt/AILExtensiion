@@ -265,12 +265,20 @@
 
   function collectCallHistory(panel) {
     const sections = Array.from(panel.querySelectorAll("#myTabContentJust .inner-schedule"));
-    const history = sections.find(section => /\bStatus\b/i.test(section.textContent || ""));
-    if (!history) return [];
-    // textContent also includes older entries hidden by IMPACT's Show More control.
-    const text = sanitizeText(history.textContent || "")
-      .replace(/Show (?:Less|More)\s*\.{0,3}/gi, "").replace(/^\s*Status\s*:?[\s]*/i, "").trim();
-    return text ? text.split(/(?<=\bby [^.]{1,100}\.)\s+(?=[A-Z])/).map(value => value.trim()).filter(Boolean) : [];
+    const entries = [];
+    for (const section of sections) {
+      // textContent also includes older entries hidden by IMPACT's Show More control.
+      const text = sanitizeText(section.textContent || "")
+        .replace(/Show (?:Less|More)\s*\.{0,3}/gi, "").trim();
+      if (/^Status\b/i.test(text)) {
+        const statuses = text.replace(/^Status\s*:?[\s]*/i, "").trim();
+        entries.push(...statuses.split(/(?<=\bby [^.]{1,100}\.)\s+(?=[A-Z])/).map(value => value.trim()).filter(Boolean));
+      } else if (/^Comment(?=\s|\d|:|$)/i.test(text)) {
+        // IMPACT sometimes runs the Comment heading and timestamp together.
+        entries.push(text.replace(/^Comment\s*/i, "Comment · "));
+      }
+    }
+    return entries;
   }
 
   async function prefetchNextLead() {

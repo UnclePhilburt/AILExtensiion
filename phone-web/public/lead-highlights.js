@@ -19,7 +19,7 @@ const DATE_PATTERN = new RegExp(
   '|(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4}))' +
   '(?:,?\\s+(?:at\\s+|-\\s+)?(\\d{1,2}):(\\d{2})(?::\\d{2})?\\s*([ap])\\.?m\\.?)?', 'gi');
 // Words a Status line starts with, used to split lines IMPACT's text ran together.
-const ACTION_START = /(?:No Answer|Schedule|Reschedule|Checkin|Check-?in|SetVirtualAppt|Set [A-Z]|Refused|Call ?Back|Left |Voice ?mail|Bad |Wrong |Do Not|Not Interested|Appointment|Cancel)/;
+const ACTION_START = /(?:No Answer|Schedule|Reschedule|Checkin|Check-?in|SetVirtualAppt|Set [A-Z]|Refused|Call ?Back|Left |Voice ?mail|Bad |Wrong |Do Not|Not Interested|Appointment|Cancel|Comment)/;
 const SPLIT = new RegExp(`(?<=\\bby [A-Z][a-z]*\\.?)\\s*(?=${ACTION_START.source})`);
 
 export function findDates(text) {

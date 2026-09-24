@@ -122,6 +122,7 @@ test('warnings, lines without dates and run-together lines are handled', ()=>{
   // If IMPACT's text arrives as one run-together string, the lines are split back apart.
   assert.equal(h.splitHistory([realLead.join(' ')]).length,9);
   assert.equal(h.splitHistory([realLead.join('')]).length,9);
+  assert.deepEqual(plain(h.splitHistory(['No Answer on Sep 23 2026 04:48 PM by Me. Comment · 9/24/2026 7:56:31 PM IMV'])),['No Answer on Sep 23 2026 04:48 PM by Me.','Comment · 9/24/2026 7:56:31 PM IMV']);
   assert.deepEqual(summary(plain(h.buildHeadsUp([realLead.join(' ')],now))),summary(plain(h.buildHeadsUp(realLead,now))));
   assert.equal(h.relativeTime(now+30*60000,now),'in 30 min');
   assert.equal(h.relativeTime(new Date(2026,8,24).getTime(),now,false),'today');
