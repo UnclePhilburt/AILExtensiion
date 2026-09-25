@@ -1,6 +1,6 @@
 // Shared time-zone helpers. IMPACT's times are Central time. The phone always
-// uses this zone for IMPACT and ignores lead.impactTimeZone (the extension's
-// Options dropdown still sends it, defaulting to Eastern). The phone shows times
+// uses this zone for IMPACT. Extensions before 0.3.8 also sent lead.impactTimeZone
+// (from a now-removed Options dropdown); the phone ignores it. The phone shows times
 // in the rep's own zone, so a Central phone shows them exactly as IMPACT does.
 
 export const IMPACT_TIME_ZONE = 'America/Chicago';

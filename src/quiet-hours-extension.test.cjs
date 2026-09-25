@@ -58,35 +58,32 @@ test('the notice is still dismissed, and other dialogs are ignored', async () =>
   assert.ok(env.stored['impact.quietHoursNoticeAt']);
 });
 
-test('published leads carry the IMPACT time zone and the last notice time', async () => {
+test('published leads carry the last notice time but no IMPACT time zone', async () => {
   const env = loadContentScript();
   const lead = await env.context.addQuietHoursContext({ available: true, leadName: 'A' });
-  assert.equal(lead.impactTimeZone, 'America/New_York');
+  assert.equal(lead.impactTimeZone, undefined);
   assert.equal(lead.quietHoursNoticeAt, undefined);
   const configured = loadContentScript({ 'impact.timeZone': 'America/Chicago', 'impact.quietHoursNoticeAt': '2026-09-25T00:02:00.000Z' });
   const lead2 = await configured.context.addQuietHoursContext({ available: true });
-  assert.equal(lead2.impactTimeZone, 'America/Chicago');
+  assert.equal(lead2.impactTimeZone, undefined, 'an old saved time zone is not sent');
   assert.equal(lead2.quietHoursNoticeAt, '2026-09-25T00:02:00.000Z');
 });
 
-test('the extension fingerprints include the quiet-hours fields so changes are re-sent', () => {
+test('the extension fingerprints include the notice time and no longer the time zone', () => {
   const content = read('extension/src/content/impact-diagnostic.js');
   const worker = read('extension/src/background/service-worker.js');
   for (const source of [content, worker]) {
-    assert.match(source, /impactTimeZone: lead\??\.impactTimeZone/);
+    assert.doesNotMatch(source, /impactTimeZone/);
     assert.match(source, /quietHoursNoticeAt: lead\??\.quietHoursNoticeAt/);
   }
 });
 
-test('options offer common IMPACT time zones with Eastern as the default', async () => {
-  const keys = read('extension/src/shared/storage-keys.js').replace(/^export /gm, '');
-  const context = vm.createContext({});
-  vm.runInContext(`${keys}\nthis.STORAGE_KEYS = STORAGE_KEYS; this.DEFAULT_IMPACT_TIME_ZONE = DEFAULT_IMPACT_TIME_ZONE; this.IMPACT_TIME_ZONES = IMPACT_TIME_ZONES;`, context);
-  assert.equal(context.DEFAULT_IMPACT_TIME_ZONE, 'America/New_York');
-  assert.equal(context.STORAGE_KEYS.impactTimeZone, 'impact.timeZone');
-  const zones = context.IMPACT_TIME_ZONES.map(([zone]) => zone);
-  for (const zone of ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles']) assert.ok(zones.includes(zone));
-  for (const zone of zones) assert.doesNotThrow(() => new Intl.DateTimeFormat('en-US', { timeZone: zone }));
-  assert.match(read('extension/src/options/options.html'), /id="impactTimeZone"/);
-  assert.match(read('extension/src/options/options.js'), /\[STORAGE_KEYS\.impactTimeZone\]: impactTimeZoneInput\.value/);
+test('the IMPACT time zone setting is gone from Options', () => {
+  const keys = read('extension/src/shared/storage-keys.js');
+  assert.doesNotMatch(keys, /impactTimeZone|IMPACT_TIME_ZONE/);
+  assert.match(keys, /quietHoursNoticeAt: "impact\.quietHoursNoticeAt"/);
+  const html = read('extension/src/options/options.html');
+  assert.doesNotMatch(html, /impactTimeZone|IMPACT time zone/);
+  assert.doesNotMatch(read('extension/src/options/options.js'), /impactTimeZone|IMPACT_TIME_ZONE/);
+  assert.equal(JSON.parse(read('extension/manifest.json')).version, '0.3.8');
 });

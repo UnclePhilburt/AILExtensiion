@@ -226,5 +226,6 @@ test('the quiet-hours watcher ignores the PR dialog, and the phone message menti
   assert.ok(source.includes(quietHours.source), 'watcher pattern unchanged');
   assert.equal(quietHours.test('× PR Option Flag for PR? No Great Experience Poor Experience Comment: Submit Cancel'), false);
   assert.match(source, /Refused Appointment submitted \(PR flag: No\)/);
-  assert.match(fs.readFileSync(path.join(__dirname, '../extension/manifest.json'), 'utf8'), /"version": "0\.3\.7"/);
+  const version = JSON.parse(fs.readFileSync(path.join(__dirname, '../extension/manifest.json'), 'utf8')).version.split('.').map(Number);
+  assert.ok(version[0] > 0 || version[1] > 3 || (version[1] === 3 && version[2] >= 7), 'shipped in 0.3.7 or later');
 });

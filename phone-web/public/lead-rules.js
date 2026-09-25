@@ -2,7 +2,7 @@
 //
 // Union / Association leads must not be knocked in the evening. On the phone
 // the flag starts at 7 PM Central (IMPACT's time zone, IMPACT_TIME_ZONE) and
-// lasts until 6 AM. lead.impactTimeZone from the extension is ignored.
+// lasts until 6 AM. lead.impactTimeZone (older extensions) is ignored.
 // lead.quietHoursNoticeAt (set when IMPACT itself shows its do-not-knock
 // notice) can also turn the flag on for that evening.
 
