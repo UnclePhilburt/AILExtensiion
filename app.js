@@ -5,6 +5,7 @@ import { buildHeadsUp, splitHistory, localTimeNote } from './lead-highlights.js'
 import { doNotKnockWarning } from './lead-rules.js';
 import { loadPhoneSettings } from './settings-store.js';
 import { saveLeadSchedule, saveAppointmentChoice } from './calendar-sync.js';
+import { encourageLead, encourageResult } from './encouragement-ui.js';
 import { createPendingCall, readPendingCall, writePendingCall, pendingCallDecision, markPendingCallResult, isCallResultCommand } from './pending-call.js';
 const statusEl = document.querySelector("#status");
 const leadCard = document.querySelector("#leadCard");
@@ -338,6 +339,7 @@ function receiveBridgeLead(lead, updatedAt) {
     previousLeads = [];
     navPending = null;
     renderLead(null, updatedAt, "bridge");
+    encourageLead("");
     return;
   }
 
@@ -358,6 +360,8 @@ function receiveBridgeLead(lead, updatedAt) {
   if (useCloud) void saveLeadSchedule(lead).catch(() => {});
 
   renderLead(displayedLead, updatedAt, displayedLead === bridgeLead ? "bridge" : "local");
+  // Header encouragement line: a fresh one only when the lead itself changes.
+  encourageLead(nextKey);
 }
 
 function setPendingCall(record) {
@@ -399,6 +403,8 @@ async function sendCallResult(type, details = {}) {
   }
   const sent = await sendComputerCommand(type, { ...details, leadId: call.leadId });
   if (sent) tapAccepted();
+  // A short, gentle message for No Answer / Refused / an appointment set (Settings can turn it off).
+  if (sent) encourageResult(type);
   if (sent && isCallResultCommand(type) && pendingCall === call) setPendingCall(markPendingCallResult(call, Date.now()));
   return sent;
 }
