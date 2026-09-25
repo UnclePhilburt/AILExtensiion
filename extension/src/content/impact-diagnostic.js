@@ -614,8 +614,10 @@
             clickVirtualAppointment(command);
             message = "Virtual Appointment opened in IMPACT. Available days and times will appear on your phone.";
           } else if (command.type === "refused-appointment") {
-            await clickRefusedAppointment(command);
-            message = "Refused Appointment submitted. Waiting for IMPACT, then moving to the next lead...";
+            const pr = await clickRefusedAppointment(command);
+            message = pr === "answered"
+              ? "Refused Appointment submitted (PR flag: No). Waiting for IMPACT, then moving to the next lead..."
+              : "Refused Appointment submitted. Waiting for IMPACT, then moving to the next lead...";
           } else {
             clickNoAnswer(command);
             message = "No Answer submitted. Waiting for IMPACT, then moving to the next lead...";
@@ -696,7 +698,7 @@
     }
   }
 
-  async function clickRefusedAppointment(command) {
+  async function clickRefusedAppointment(command, prTimings) {
     validateCallResult(command);
     const choices = Array.from(document.querySelectorAll('#statuscontainer #collapseFour a[href="#panelRefused"]'))
       .filter((element) => /^Refused Appointment\s*:/i.test(sanitizeText(element.innerText || element.textContent || "")));
@@ -717,11 +719,123 @@
           .find((field) => field.willValidate && !field.checkValidity());
         if (invalidField) throw new Error("Refused Appointment needs additional details. Complete the box on your computer.");
         submitCallResult(command, submit);
-        return;
+        return await answerPrOptionDialog(prTimings);
       }
       await new Promise((resolve) => window.setTimeout(resolve, 80));
     }
     throw new Error("Refused Appointment Submit is not ready. Check the box on your computer.");
+  }
+
+  // After the Refused Appointment Submit, IMPACT asks "Flag for PR?" in
+  // div#prOptionDialog (choices No / Great Experience / Poor Experience, a
+  // Comment box, and a footer Submit that runs onPROption(...)). The rep's
+  // standing answer is "No" with no comment. Returns "answered", or
+  // "not-shown" if IMPACT never opened the question.
+  const PR_QUESTION_ERROR = "IMPACT's PR question couldn't be answered automatically. Pick No and Submit on your computer.";
+
+  async function answerPrOptionDialog({ appearMs = 6000, readyMs = 3000, closeMs = 5000, stepMs = 100 } = {}) {
+    const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+    const dialogShown = () => {
+      const dialog = document.querySelector("#prOptionDialog");
+      return dialog && isShownModal(dialog) ? dialog : null;
+    };
+    let deadline = Date.now() + appearMs;
+    let dialog = dialogShown();
+    while (!dialog && Date.now() < deadline) { await wait(stepMs); dialog = dialogShown(); }
+    if (!dialog) {
+      void log("warn", "refused.prOptionDialogNotShown", {}).catch(() => {});
+      return "not-shown";
+    }
+    try {
+      // IMPACT may fill the question in just after the box opens.
+      deadline = Date.now() + readyMs;
+      let choices = findPrNoChoices(dialog);
+      while (choices.length !== 1 && Date.now() < deadline) { await wait(stepMs); choices = findPrNoChoices(dialog); }
+      if (choices.length !== 1) throw new Error(PR_QUESTION_ERROR);
+      const choice = choices[0];
+      choice.apply();
+      if (!choice.verify()) throw new Error(PR_QUESTION_ERROR);
+      const submits = Array.from(dialog.querySelectorAll(".modal-footer a"))
+        .filter((link) => sanitizeText(link.innerText || link.textContent || "") === "Submit")
+        .filter((link) => /^\s*onPROption\s*\(/.test(link.getAttribute("onclick") || ""))
+        .filter((link) => link.getClientRects().length && link.getAttribute("aria-disabled") !== "true" && !link.classList?.contains("disabled"));
+      if (submits.length !== 1) throw new Error(PR_QUESTION_ERROR);
+      submits[0].click();
+      void log("info", "refused.prOptionAnswered", { choice: "No", control: choice.kind }).catch(() => {});
+      // Restart the result-advance clock: the PR step took part of its window.
+      const pending = JSON.parse(sessionStorage.getItem("impact.pendingResultAdvance") || "null");
+      if (pending) sessionStorage.setItem("impact.pendingResultAdvance", JSON.stringify({ ...pending, requestedAt: Date.now() }));
+      deadline = Date.now() + closeMs;
+      while (dialogShown() && Date.now() < deadline) await wait(stepMs);
+      if (dialogShown()) throw new Error("IMPACT's PR box is still open after Submit. Check it on your computer.");
+      return "answered";
+    } catch (error) {
+      // Stop the automatic OK / Next steps; the rep finishes this on the computer.
+      sessionStorage.removeItem("impact.pendingResultAdvance");
+      void log("warn", "refused.prOptionFailed", { reason: error.message }).catch(() => {});
+      throw error;
+    }
+  }
+
+  function isShownModal(element) {
+    if (!element.getClientRects().length) return false;
+    const classes = element.classList;
+    return !classes?.contains("fade") || classes.contains("in") || classes.contains("show");
+  }
+
+  // Every control in the PR question whose text is exactly "No", whatever kind
+  // of control IMPACT uses. Each entry knows how to choose it and verify it.
+  function findPrNoChoices(dialog) {
+    const body = dialog.querySelector(".modal-body");
+    if (!body) return [];
+    const isNo = (text) => /^no$/i.test(sanitizeText(text));
+    const enabled = (element) => !element.disabled && element.getAttribute("aria-disabled") !== "true";
+    const found = [];
+    const labels = Array.from(body.querySelectorAll("label"));
+    for (const input of body.querySelectorAll('input[type="radio"], input[type="checkbox"]')) {
+      const forLabel = input.id ? labels.find((label) => label.getAttribute("for") === input.id) : null;
+      const wrapping = input.closest?.("label");
+      let text = forLabel ? forLabel.innerText || forLabel.textContent : wrapping ? wrapping.innerText || wrapping.textContent : "";
+      if (!forLabel && !wrapping) {
+        const next = input.nextSibling;
+        text = next?.nodeType === 3 && sanitizeText(next.textContent) ? next.textContent
+          : input.nextElementSibling && !/^(INPUT|SELECT|TEXTAREA|BR)$/.test(input.nextElementSibling.tagName) ? input.nextElementSibling.innerText || input.nextElementSibling.textContent : "";
+      }
+      if (!isNo(text) || !enabled(input)) continue;
+      const others = () => input.type === "checkbox"
+        ? Array.from(body.querySelectorAll('input[type="checkbox"]')).filter((box) => box !== input && box.checked) : [];
+      found.push({
+        kind: input.type,
+        apply: () => { if (!(input.type === "checkbox" && input.checked)) input.click(); },
+        verify: () => input.checked === true && others().length === 0
+      });
+    }
+    for (const select of body.querySelectorAll("select")) {
+      for (const option of Array.from(select.options || select.querySelectorAll("option"))) {
+        if (!isNo(option.innerText || option.textContent || option.label) || !enabled(select) || option.disabled) continue;
+        found.push({
+          kind: "select",
+          apply: () => {
+            select.value = option.value;
+            option.selected = true;
+            select.dispatchEvent(new Event("input", { bubbles: true }));
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+          },
+          verify: () => select.value === option.value && option.selected === true
+        });
+      }
+    }
+    const clickables = body.querySelectorAll('button, a, [role="button"], [role="radio"], [role="option"], input[type="button"], input[type="submit"]');
+    for (const element of clickables) {
+      const text = element.tagName === "INPUT" ? element.value : element.innerText || element.textContent;
+      if (!isNo(text) || !enabled(element) || !element.getClientRects().length) continue;
+      found.push({
+        kind: "button",
+        apply: () => element.click(),
+        verify: () => element.getAttribute("aria-checked") !== "false" && element.getAttribute("aria-pressed") !== "false"
+      });
+    }
+    return found;
   }
 
   function clickNoAnswer(command) {
