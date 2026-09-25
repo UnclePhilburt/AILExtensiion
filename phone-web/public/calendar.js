@@ -3,6 +3,7 @@
 // day's list, and the next 14 days. Times in Central, as IMPACT lists them.
 import { client } from './auth-runtime.js';
 import { localTimeZone } from './time-zone.js';
+import { requestTypeLabel } from './lead-rules.js';
 import { NOT_SET_UP_CODES } from './calendar-sync.js';
 import {
   EVENT_KINDS, normalizeEvent, groupByDay, monthGrid, shiftMonth, monthLabel, dayHeading, dayKey,
@@ -39,7 +40,7 @@ function eventItem(event, now) {
   if (note) time.append(el('small', '', note));
   const body = el('div', 'calBody');
   body.append(el('span', 'calKind', EVENT_KINDS[event.kind]), el('strong', 'calName', event.leadName));
-  if (event.requestType) body.append(el('span', 'calMeta', event.requestType));
+  if (event.requestType) body.append(el('span', 'calMeta', requestTypeLabel(event.requestType)));
   const href = telHref(event.phone);
   if (href) {
     const call = el('a', 'calPhone', `☎ ${event.phone}`);

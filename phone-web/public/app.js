@@ -2,7 +2,7 @@ import { client, accessToken } from './auth-runtime.js';
 import { cloudEnabled, cloudState, cloudTouchPhone, cloudSend, watchCloud, visibleLead, isOnline } from './cloud-sync.js';
 import { NETWORK_MESSAGE, SIGN_IN_MESSAGE, RESULT_COMMANDS, checkBeforeSend, isStateFresh, isAuthFailure, isNetworkFailure, friendlySendError, withTimeout } from './phone-actions.js';
 import { buildHeadsUp, splitHistory, localTimeNote } from './lead-highlights.js';
-import { doNotKnockWarning } from './lead-rules.js';
+import { doNotKnockWarning, requestTypeLabel } from './lead-rules.js';
 import { loadPhoneSettings } from './settings-store.js';
 import { saveLeadSchedule, saveAppointmentChoice } from './calendar-sync.js';
 import { encourageLead, encourageResult } from './encouragement-ui.js';
@@ -598,7 +598,8 @@ function renderLead(lead, updatedAt, source, transition = "") {
   if (lead.requestType) {
     const badge = document.createElement("div");
     badge.className = "requestBadge";
-    badge.textContent = lead.requestType;
+    badge.textContent = requestTypeLabel(lead.requestType);
+    badge.title = lead.requestType;
     leadCard.append(badge);
   }
   const quietHoursWarning = doNotKnockWarning(lead);
