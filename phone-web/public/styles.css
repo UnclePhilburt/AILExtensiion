@@ -127,3 +127,14 @@ html[data-text-size="large"] :is(.workspace,.calendarPage) { --text-zoom:1.15; }
 .bgOption input:checked + .bgSwatch::after { content:"✓"; position:absolute; top:6px; right:6px; display:grid; place-items:center; width:20px; height:20px; border-radius:50%; background:#17684e; color:#fff; font-size:12px; font-weight:800; }
 .bgOption input:checked ~ .bgName { color:#17684e; font-weight:800; }
 .bgOption input:focus-visible + .bgSwatch { outline:3px solid #d49534; outline-offset:4px; }
+
+/* Encouragement lines (encouragement-ui.js). Two lines of height are always
+   reserved, so a new line never moves anything below it. */
+.encLine { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; min-height: calc(2 * 1.45em); margin: 6px 0 8px; color: #d8ece4; font-size: 14px; font-style: italic; line-height: 1.45; letter-spacing: .1px; text-shadow: 0 1px 2px #00000033; }
+.encLine.encOnCard { margin: 9px 0 0; color: #3d6b57; text-shadow: none; }
+.encFade { animation: encFadeIn .8s ease-out both; }
+@keyframes encFadeIn { from { opacity: 0; } to { opacity: 1; } }
+/* After-result message: a soft toast at the top that never takes taps. */
+.encToast { position: fixed; left: 50%; top: max(14px, env(safe-area-inset-top)); z-index: 60; width: min(calc(100vw - 32px), 420px); padding: 13px 18px; border: 1px solid #cfe5da; border-radius: 16px; background: #f4faf7; color: #1d4a3f; box-shadow: 0 10px 30px #0b1f1c40; font-size: 15px; line-height: 1.45; text-align: center; pointer-events: none; opacity: 0; transform: translate(-50%, -8px); transition: opacity .5s ease, transform .5s ease; }
+.encToast.show { opacity: 1; transform: translate(-50%, 0); }
+@media (prefers-reduced-motion: reduce) { .encFade { animation: none; } .encToast { transition: none; transform: translate(-50%, 0); } }

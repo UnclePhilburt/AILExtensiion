@@ -32,7 +32,7 @@ async function loadPage(server,globals={}){
     client:{auth:{onAuthStateChange:fn=>{authChanged=fn;},
       getSession:async()=>{auth.getSessionCalls++;return {data:{session:auth.session},error:null};},
       refreshSession:async()=>{auth.refreshCalls++;return auth.refreshOk?{data:{session:auth.session},error:null}:{data:{session:null},error:new Error('refresh failed')};}}},
-    saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, cloudEnabled:async()=>true,
+    saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, encourageLead:()=>{}, encourageResult:()=>{}, cloudEnabled:async()=>true,
     cloudState:async()=>{server.reads++;return server.nextRead?server.nextRead():structuredClone(server.state);},
     cloudTouchPhone:async()=>{},
     cloudSend:async(state,command,id)=>{server.attempts.push({state,command,id});if(server.failNext){const e=server.failNext;server.failNext=null;throw e;}server.sent.push(command);},
@@ -250,4 +250,15 @@ test('Calendar: each lead the Workspace receives is handed to the calendar, and 
   assert.ok(page.el('#leadCard').children.some(c=>c.textContent==='Fictional A'),'lead still shown');
   page.callLink().listeners.click(); await settle();
   assert.deepEqual(server.sent.map(c=>c.type),['call'],'workspace keeps working');
+});
+
+test('Encouragement: the header line follows the lead, and only a sent result gets the gentle message', async()=>{
+  const calls=[];
+  const {server,page}=await calledPage({encourageLead:key=>calls.push(['lead',key]),encourageResult:type=>calls.push(['result',type])});
+  assert.ok(calls.some(c=>c[0]==='lead'&&c[1]),'a lead key was handed over when the lead arrived');
+  server.failNext=new Error('Failed to fetch');
+  await page.el('#noAnswer').listeners.click(); await settle();
+  assert.equal(calls.filter(c=>c[0]==='result').length,0,'a failed send gets no message');
+  await page.el('#noAnswer').listeners.click(); await settle();
+  assert.deepEqual(calls.filter(c=>c[0]==='result'),[['result','no-answer']]);
 });

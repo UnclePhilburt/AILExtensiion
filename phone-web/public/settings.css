@@ -27,3 +27,4 @@
 .settingsReset button { width:100%; background:#fff; color:#8a3a22; border-color:#ecc9bd; }
 .settingsReset p { color:var(--page-ink); font-size:12px; text-align:center; }
 .savedHint { position:fixed; left:50%; bottom:max(18px, env(safe-area-inset-bottom)); transform:translateX(-50%); z-index:10; padding:10px 18px; border-radius:999px; background:#163c37; color:#fff; font-size:14px; font-weight:650; box-shadow:0 10px 30px #0b1f1c40; }
+.dependentOff .settingText { opacity:.55; }
