@@ -18,6 +18,7 @@ header { color: #fff; padding: 0 4px 7px; }
 .brand { display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 750; letter-spacing: 1.8px; margin-bottom: 28px; }
 .brandMark { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #69938b; border-radius: 10px; font: italic 700 24px Georgia, serif; color: #c8eddb; }
 .brandSub { color: #a4c5be; font-size: 10px; letter-spacing: 1.4px; }
+.organizationLabel { display:inline-flex; align-items:center; width:max-content; margin:0; padding:4px 8px; border:1px solid rgba(202, 236, 220, .25); border-radius:999px; color:#c8eddb; background:rgba(3, 28, 25, .22); font-size:10px; font-weight:700; letter-spacing:.45px; line-height:1.1; }
 .eyebrow { font-size: 10px; font-weight: 750; letter-spacing: 1.8px; color: #acd0c5; }
 h1 { font-size: 32px; font-weight: 650; letter-spacing: -1px; margin: 5px 0 8px; }
 #status { font-size: 12px; line-height: 1.5; color: #c2d9d2; min-height: 18px; overflow-wrap: anywhere; }
@@ -156,6 +157,7 @@ html[data-bg] .wsBand { background-color: transparent; background-image: radial-
 /* Header: the logo goes back to Home (Calendar/Statistics also keep their small back link); quiet status */
 .wsHeader .workspaceTop { align-items: center; min-height: 40px; margin-bottom: 22px; }
 .wsHeader .workspaceTop .brand { margin: 0; min-width: 0; }
+.wsHeader .organizationLabel { margin-left:auto; }
 .wsHeader .eyebrow { color: #a9cfc2; font-size: 10.5px; font-weight: 650; letter-spacing: 1.5px; }
 .wsHeader h1 { margin: 6px 0 8px; font-size: 28px; font-weight: 600; letter-spacing: -.4px; line-height: 1.15; }
 .wsHeader .encLine { color: #d3e7df; font-size: 14.5px; margin: 0 0 8px; }

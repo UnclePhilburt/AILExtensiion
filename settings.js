@@ -1,7 +1,7 @@
 // The Settings page. Every change is saved right away (localStorage) and applied
 // to this page; other pages pick it up on load (settings-boot.js).
 import { BACKGROUNDS, readBackground, saveBackground } from './backgrounds.js';
-import { TEXT_SIZES, loadPhoneSettings, savePhoneSettings, resetPhoneSettings } from './settings-store.js';
+import { TEXT_SIZES, ORGANIZATIONS, loadPhoneSettings, savePhoneSettings, resetPhoneSettings } from './settings-store.js';
 import { refreshEncouragement } from './encouragement-ui.js';
 
 // Back link: only known pages (never an arbitrary URL from the query string).
@@ -74,6 +74,18 @@ textSize.addEventListener('change', (event) => {
   saved();
 });
 
+const organization = document.querySelector('#organization');
+for (const item of ORGANIZATIONS) {
+  const option = document.createElement('option');
+  option.value = item.id;
+  option.textContent = item.label;
+  organization.append(option);
+}
+organization.addEventListener('change', () => {
+  savePhoneSettings(localStorage, { organization: organization.value });
+  saved('Organization saved');
+});
+
 // Switches
 const SWITCHES = ['keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'showEncouragement', 'encourageAfterResults'];
 for (const key of SWITCHES) {
@@ -111,6 +123,7 @@ function render() {
   const background = readBackground(localStorage);
   for (const input of bgGrid.querySelectorAll('input')) input.checked = input.value === background;
   for (const input of textSize.querySelectorAll('input')) input.checked = input.value === settings.textSize;
+  organization.value = settings.organization;
   for (const key of SWITCHES) {
     const input = document.querySelector(`#${key}`);
     input.checked = input.disabled ? false : settings[key];
