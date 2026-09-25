@@ -159,28 +159,35 @@ async function handleObjectionTranscript(transcript) {
   if (!match) return;
   // Store only the matched rebuttal label, never the audio or full transcript.
   await chrome.storage.local.set({ 'impact.lastObjection': { label: match.label, at: Date.now() } });
-  await revealSalebaseRebuttal(match.label);
+  await revealSalebaseRebuttal(match);
 }
 
-async function revealSalebaseRebuttal(label) {
+async function revealSalebaseRebuttal(match) {
   const [tab] = await chrome.tabs.query({ url: 'https://salebase.ai/phone_scripts/*' });
   if (!tab?.id) return;
   try {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: (wanted) => {
-        const words = wanted.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(Boolean);
-        const candidates = [...document.querySelectorAll('button, a, summary, [role="button"]')];
-        const target = candidates.find((element) => {
-          const text = (element.textContent || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ');
-          return words.length > 2 && words.every((word) => text.includes(word));
-        });
+      func: (phrases) => {
+        const compact = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const wanted = phrases.map(compact).filter((value) => value.length > 5);
+        // Salebase uses regular div panels for some rebuttals. Find the
+        // smallest text element containing a saved phrase, then let its click
+        // bubble to the panel's own handler if it has one.
+        const candidates = [...document.querySelectorAll('body *')].filter((element) => {
+          const text = compact(element.textContent);
+          return wanted.some((phrase) => text.includes(phrase));
+        }).sort((a, b) => (a.textContent || '').length - (b.textContent || '').length);
+        const target = candidates[0];
         if (!target) return false;
         target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        target.click();
+        const interactive = target.closest('button, a, summary, [role="button"], [onclick]');
+        (interactive || target).click();
+        const details = target.closest('details');
+        if (details) details.open = true;
         return true;
       },
-      args: [label]
+      args: [match.phrases]
     });
   } catch (_error) { /* Salebase may be reloading or signed out. */ }
 }

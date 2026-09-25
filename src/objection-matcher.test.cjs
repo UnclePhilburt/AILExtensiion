@@ -33,3 +33,10 @@ test('the extension offers a direct local English-pack install and detected brow
   const permissionPage = fs.readFileSync(path.join(__dirname, '../extension/src/offscreen/microphone-permission.js'), 'utf8');
   assert.match(permissionPage, /navigator\.mediaDevices\.getUserMedia\(\{ audio: true \}\)/);
 });
+
+test('Salebase rebuttal lookup uses the saved phrase variants and div fallback', () => {
+  const worker = fs.readFileSync(path.join(__dirname, '../extension/src/background/service-worker.js'), 'utf8');
+  assert.match(worker, /revealSalebaseRebuttal\(match\)/);
+  assert.match(worker, /args: \[match\.phrases\]/);
+  assert.match(worker, /document\.querySelectorAll\('body \*'\)/);
+});
