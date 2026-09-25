@@ -219,7 +219,6 @@ function makeLeadFingerprint(lead) {
     email: lead?.email || "",
     address: lead?.address || "",
     phones: lead?.phones || [],
-    impactTimeZone: lead?.impactTimeZone || "",
     quietHoursNoticeAt: lead?.quietHoursNoticeAt || "",
     nextLeadAvailable: Boolean(lead?.nextLead?.available),
     nextLeadName: lead?.nextLead?.leadName || "",

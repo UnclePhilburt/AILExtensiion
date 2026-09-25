@@ -11,10 +11,8 @@
     autoPublish: "impact.autoPublish",
     inboxQueue: "impact.inboxQueue",
     lastSnapshot: "impact.lastSnapshot",
-    impactTimeZone: "impact.timeZone",
     quietHoursNoticeAt: "impact.quietHoursNoticeAt"
   };
-  const DEFAULT_IMPACT_TIME_ZONE = "America/New_York";
 
   let pickerState = null;
   let lastAutoPublishFingerprint = "";
@@ -29,7 +27,7 @@
   const dismissedQuietHoursDialogs = new WeakSet();
   const recordedQuietHoursDialogs = new WeakSet();
   chrome.storage.onChanged.addListener((changes) => {
-    if (changes['impact.connectionMode'] || changes[STORAGE_KEYS.impactTimeZone]) lastAutoPublishFingerprint = '';
+    if (changes['impact.connectionMode']) lastAutoPublishFingerprint = '';
     if (changes['impact.supabase.session']) {
       lastAutoPublishFingerprint = '';
       nextLeadCache = null;
@@ -119,8 +117,7 @@
 
   async function addQuietHoursContext(lead) {
     if (!lead?.available) return lead;
-    const stored = await chrome.storage.local.get([STORAGE_KEYS.impactTimeZone, STORAGE_KEYS.quietHoursNoticeAt]);
-    lead.impactTimeZone = stored[STORAGE_KEYS.impactTimeZone] || DEFAULT_IMPACT_TIME_ZONE;
+    const stored = await chrome.storage.local.get([STORAGE_KEYS.quietHoursNoticeAt]);
     if (stored[STORAGE_KEYS.quietHoursNoticeAt]) lead.quietHoursNoticeAt = stored[STORAGE_KEYS.quietHoursNoticeAt];
     return lead;
   }
@@ -1134,7 +1131,6 @@
         email: lead.email,
         address: lead.address,
         phones: lead.phones,
-        impactTimeZone: lead.impactTimeZone || "",
         quietHoursNoticeAt: lead.quietHoursNoticeAt || "",
         nextLeadName: lead.nextLead?.leadName || "",
         nextLeadRequestType: lead.nextLead?.requestType || "",
