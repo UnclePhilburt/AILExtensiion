@@ -5,8 +5,8 @@ const vm=require('node:vm');
 const path=require('node:path');
 // app.js imports these helpers; the tests strip imports, so load them into each context.
 const phoneActionsSource=require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/phone-actions.js'),'utf8').replace(/^export /gm,'');
-const leadHighlightsSource=require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/lead-highlights.js'),'utf8').replace(/^export /gm,'');
-const leadRulesSource=require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/lead-rules.js'),'utf8').replace(/^export /gm,'');
+const leadHighlightsSource=(require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/time-zone.js'),'utf8')+'\n'+require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/lead-highlights.js'),'utf8')).replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
+const leadRulesSource=require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/lead-rules.js'),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
 const pendingCallSource=fs.readFileSync(path.join(__dirname,'../phone-web/public/pending-call.js'),'utf8').replace(/^export /gm,'');
 test('phone cloud flow shows live leads, collapses history for a call and clears on logout', async()=>{
   const elements=new Map();

@@ -10,7 +10,15 @@
 // For "Schedule ..." / "Reschedule ..." lines the date is the time that was
 // SCHEDULED, not when the line was logged (a Sep 22 3:00 PM appointment is
 // listed below a 2:56 PM No Answer; a Sep 24 callback sits between Sep 22 and
-// Sep 23 lines). Dates are IMPACT's wall-clock time, read as the phone's local time.
+// Sep 23 lines).
+//
+// Times are IMPACT's wall clock in IMPACT's time zone (lead.impactTimeZone,
+// default Eastern). They are converted to real instants, compared with the
+// real "now", and shown in the phone's own time zone. A date with no time
+// (a "No Time Preference" callback) is an IMPACT calendar day, so "today" for
+// those follows IMPACT's calendar.
+
+import { DEFAULT_IMPACT_TIME_ZONE, validTimeZone, localTimeZone, wallClockToInstant, zonedParts, zonedDayNumber, timeZoneAbbr, clockTime } from './time-zone.js';
 
 const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, sept: 8, oct: 9, nov: 10, dec: 11 };
 const DAY = 24 * 60 * 60 * 1000;
@@ -22,7 +30,13 @@ const DATE_PATTERN = new RegExp(
 const ACTION_START = /(?:No Answer|Schedule|Reschedule|Checkin|Check-?in|SetVirtualAppt|Set [A-Z]|Refused|Call ?Back|Left |Voice ?mail|Bad |Wrong |Do Not|Not Interested|Appointment|Cancel|Comment)/;
 const SPLIT = new RegExp(`(?<=\\bby [A-Z][a-z]*\\.?)\\s*(?=${ACTION_START.source})`);
 
-export function findDates(text) {
+// { impact, phone } time zones used for parsing and display.
+export function resolveZones({ impactTimeZone, phoneTimeZone } = {}) {
+  return { impact: validTimeZone(impactTimeZone), phone: validTimeZone(phoneTimeZone || localTimeZone(), 'UTC') };
+}
+
+export function findDates(text, timeZone = DEFAULT_IMPACT_TIME_ZONE) {
+  const zone = validTimeZone(timeZone);
   const found = [];
   for (const match of String(text || '').matchAll(DATE_PATTERN)) {
     const month = match[1] ? MONTHS[match[1].toLowerCase()] : Number(match[4]) - 1;
@@ -31,9 +45,11 @@ export function findDates(text) {
     const hasTime = Boolean(match[7]);
     const hour = hasTime ? Number(match[7]) % 12 + (/p/i.test(match[9]) ? 12 : 0) : 0;
     const minute = hasTime ? Number(match[8]) : 0;
-    const date = new Date(year, month, day, hour, minute);
-    if (Number.isNaN(date.getTime()) || date.getMonth() !== month || date.getDate() !== day) continue;
-    found.push({ at: date.getTime(), hasTime, index: match.index, length: match[0].length });
+    const check = new Date(Date.UTC(year, month, day));
+    if (check.getUTCMonth() !== month || check.getUTCDate() !== day || hour > 23 || minute > 59) continue;
+    const at = wallClockToInstant(zone, year, month, day, hour, minute);
+    if (!Number.isFinite(at)) continue;
+    found.push({ at, hasTime, index: match.index, length: match[0].length });
   }
   return found;
 }
@@ -54,9 +70,9 @@ function sentenceCase(value) {
   return /\d/.test(value) ? value : value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
 }
 
-export function parseHistoryEntry(text) {
+export function parseHistoryEntry(text, timeZone = DEFAULT_IMPACT_TIME_ZONE) {
   const value = String(text || '').replace(/\s+/g, ' ').trim();
-  const dates = findDates(value);
+  const dates = findDates(value, timeZone);
   const first = dates[0];
   const byMatch = value.match(/\s+by\s+([^.]{1,100}?)\.?\s*$/i);
   const body = byMatch ? value.slice(0, byMatch.index) : value.replace(/\.$/, '');
@@ -80,17 +96,32 @@ export function splitHistory(callHistory) {
   return callHistory.flatMap((entry) => String(entry || '').split(SPLIT)).map((entry) => entry.trim()).filter(Boolean);
 }
 
-function startOfDay(ms) { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); }
-function dayDiff(at, now) { return Math.round((startOfDay(at) - startOfDay(now)) / DAY); }
-
-export function formatWhen(at, hasTime, { weekday = true } = {}) {
-  const d = new Date(at);
-  const date = d.toLocaleDateString('en-US', weekday ? { weekday: 'short', month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric' });
-  return hasTime ? `${date}, ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : date;
+// Calendar-day difference. Timed entries follow the phone's calendar (they are
+// shown in phone time); date-only entries follow IMPACT's calendar.
+function dayDiff(at, now, hasTime = true, zones = resolveZones()) {
+  const zone = hasTime ? zones.phone : zones.impact;
+  return zonedDayNumber(at, zone) - zonedDayNumber(now, zone);
 }
 
-export function relativeTime(at, now, hasTime = true) {
-  const days = dayDiff(at, now);
+function sameClock(at, zones) { return clockTime(at, zones.phone) === clockTime(at, zones.impact); }
+
+// "(3:00 PM ET)" when IMPACT's clock differs from the phone's, else "".
+function impactClockNote(at, zones) {
+  return sameClock(at, zones) ? '' : ` (${clockTime(at, zones.impact)} ${timeZoneAbbr(zones.impact, new Date(at))})`;
+}
+
+// Timed dates in phone time; date-only dates as IMPACT's calendar day.
+export function formatWhen(at, hasTime, { weekday = true, zones = resolveZones(), impactClock = false } = {}) {
+  const date = new Date(at).toLocaleDateString('en-US', {
+    timeZone: hasTime ? zones.phone : zones.impact,
+    ...(weekday ? { weekday: 'short', month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric' })
+  });
+  if (!hasTime) return date;
+  return `${date}, ${clockTime(at, zones.phone)}${impactClock ? impactClockNote(at, zones) : ''}`;
+}
+
+export function relativeTime(at, now, hasTime = true, zones = resolveZones()) {
+  const days = dayDiff(at, now, hasTime, zones);
   const diff = at - now;
   if (days === 0) {
     if (!hasTime) return 'today';
@@ -106,21 +137,34 @@ export function relativeTime(at, now, hasTime = true) {
   return `${-days} days ago`;
 }
 
+// For Previous activity and comments, which show IMPACT's own text: the first
+// IMPACT time in the line converted to phone time, e.g. "8:38 PM your time".
+// Empty when the line has no time or both clocks agree.
+export function localTimeNote(text, options = {}) {
+  const zones = options.zones || resolveZones(options);
+  const date = findDates(text, zones.impact).find((found) => found.hasTime);
+  if (!date || sameClock(date.at, zones)) return '';
+  const impactDay = zonedParts(date.at, zones.impact), phoneDay = zonedParts(date.at, zones.phone);
+  const differentDay = impactDay.day !== phoneDay.day || impactDay.month !== phoneDay.month;
+  const day = differentDay ? `${new Date(date.at).toLocaleDateString('en-US', { timeZone: zones.phone, month: 'short', day: 'numeric' })}, ` : '';
+  return `${day}${clockTime(date.at, zones.phone)} your time`;
+}
+
 // When a scheduled time stands relative to now. A date with no time counts as
 // due for that whole day.
-export function scheduleStatus(date, now) {
-  const days = dayDiff(date.at, now);
+export function scheduleStatus(date, now, zones = resolveZones()) {
+  const days = dayDiff(date.at, now, date.hasTime, zones);
   if (!date.hasTime) return days > 0 ? 'upcoming' : days === 0 ? 'today' : 'past';
   if (date.at < now) return 'past';
   return days === 0 ? 'today' : 'upcoming';
 }
 
-// "Today · No time preference", "Tue, Sep 22, 3:00 PM"
-function scheduledTitle(entry, date, now) {
-  const days = dayDiff(date.at, now);
+// "Today · No time preference", "Tue, Sep 22, 2:00 PM (3:00 PM ET)"
+function scheduledTitle(entry, date, now, zones) {
+  const days = dayDiff(date.at, now, date.hasTime, zones);
   const when = days === 0
-    ? (date.hasTime ? `Today, ${new Date(date.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : 'Today')
-    : formatWhen(date.at, date.hasTime);
+    ? (date.hasTime ? `Today, ${clockTime(date.at, zones.phone)}${impactClockNote(date.at, zones)}` : 'Today')
+    : formatWhen(date.at, date.hasTime, { zones, impactClock: true });
   return entry.preference ? `${when} · ${entry.preference}` : when;
 }
 
@@ -130,8 +174,14 @@ function appointmentName(entry) {
 
 // Returns chips, most important first: { tone, label, title, detail, soon, muted }
 // tone: 'appointment' | 'callback' | 'danger' | 'neutral'
-export function buildHeadsUp(callHistory, now, { max = 4 } = {}) {
-  const entries = splitHistory(callHistory).map(parseHistoryEntry);
+// Times in titles/details are phone time; scheduled times also show IMPACT's
+// clock when it differs, e.g. "Tue, Sep 22, 2:00 PM (3:00 PM ET)".
+export function buildHeadsUp(callHistory, now, { max = 4, impactTimeZone, phoneTimeZone } = {}) {
+  const zones = resolveZones({ impactTimeZone, phoneTimeZone });
+  const entries = splitHistory(callHistory).map((entry) => parseHistoryEntry(entry, zones.impact));
+  const days = (date) => dayDiff(date.at, now, date.hasTime, zones);
+  const rel = (date) => relativeTime(date.at, now, date.hasTime, zones);
+  const when = (date, options = {}) => formatWhen(date.at, date.hasTime, { zones, ...options });
   if (!entries.length) return [];
   const active = [], context = [];
   const happened = (entry) => entry.dates[0] && entry.dates[0].at <= now;
@@ -142,32 +192,32 @@ export function buildHeadsUp(callHistory, now, { max = 4 } = {}) {
   const appointment = entries.find((e) => e.kind === 'appointment' && e.scheduled);
   if (appointment) {
     const date = appointment.dates[0];
-    const status = scheduleStatus(date, now);
-    const days = dayDiff(date.at, now);
+    const status = scheduleStatus(date, now, zones);
+    const dayCount = days(date);
     const name = appointmentName(appointment) + (appointment.reschedule ? ' (rescheduled)' : '');
     if (status !== 'past') {
       active.push({ tone: 'appointment', label: status === 'today' ? 'Appointment today' : 'Upcoming appointment',
-        title: scheduledTitle(appointment, date, now), detail: `${name} · ${relativeTime(date.at, now, date.hasTime)}`,
-        soon: days <= 1, at: date.at });
-    } else if (days >= -30) {
-      context.push({ tone: 'neutral', label: 'Had appointment', title: formatWhen(date.at, date.hasTime),
-        detail: `${name} · ${relativeTime(date.at, now, date.hasTime)}`, muted: true, order: 2 });
+        title: scheduledTitle(appointment, date, now, zones), detail: `${name} · ${rel(date)}`,
+        soon: dayCount <= 1, at: date.at });
+    } else if (dayCount >= -30) {
+      context.push({ tone: 'neutral', label: 'Had appointment', title: when(date, { impactClock: true }),
+        detail: `${name} · ${rel(date)}`, muted: true, order: 2 });
     }
   }
 
   const callback = entries.find((e) => e.kind === 'callback' && e.scheduled);
   if (callback) {
     const date = callback.dates[0];
-    const status = scheduleStatus(date, now);
-    const days = dayDiff(date.at, now);
+    const status = scheduleStatus(date, now, zones);
+    const dayCount = days(date);
     if (status !== 'past') {
       active.push({ tone: 'callback', label: status === 'today' ? 'Callback due today' : 'Callback set',
-        title: scheduledTitle(callback, date, now),
-        detail: status === 'today' && !date.hasTime ? 'Call back any time today' : relativeTime(date.at, now, date.hasTime),
-        soon: days <= 1, at: date.at });
-    } else if (days >= -14) {
-      context.push({ tone: 'callback', label: 'Callback date passed', title: scheduledTitle(callback, date, now),
-        detail: relativeTime(date.at, now, date.hasTime), muted: true, order: 1 });
+        title: scheduledTitle(callback, date, now, zones),
+        detail: status === 'today' && !date.hasTime ? 'Call back any time today' : rel(date),
+        soon: dayCount <= 1, at: date.at });
+    } else if (dayCount >= -14) {
+      context.push({ tone: 'callback', label: 'Callback date passed', title: scheduledTitle(callback, date, now, zones),
+        detail: rel(date), muted: true, order: 1 });
     }
   }
   active.sort((a, b) => a.at - b.at);
@@ -176,7 +226,7 @@ export function buildHeadsUp(callHistory, now, { max = 4 } = {}) {
   if (warning) {
     const label = warning.kind === 'bad-number' ? 'Check the number' : warning.kind === 'refused' ? 'Refused before' : 'Missed / cancelled appointment';
     const date = warning.dates[0];
-    context.push({ tone: 'danger', label, title: warning.action, detail: date ? `${formatWhen(date.at, date.hasTime)} · ${relativeTime(date.at, now, date.hasTime)}` : '', order: 0 });
+    context.push({ tone: 'danger', label, title: warning.action, detail: date ? `${when(date)} · ${rel(date)}` : '', order: 0 });
   }
 
   // Tries that already happened (a line dated after "now" can't be a real try).
@@ -185,11 +235,11 @@ export function buildHeadsUp(callHistory, now, { max = 4 } = {}) {
     const noAnswers = attempts.filter((e) => /no answer/i.test(e.text)).length;
     const dated = attempts.filter((e) => e.dates[0]);
     const last = dated.length ? newest(dated).dates[0] : null;
-    const today = dated.filter((e) => dayDiff(e.dates[0].at, now) === 0).length;
+    const today = dated.filter((e) => days(e.dates[0]) === 0).length;
     const title = noAnswers === attempts.length
       ? `${noAnswers} no answer${noAnswers === 1 ? '' : 's'}`
       : `${attempts.length} tries${noAnswers ? ` (${noAnswers} no answer${noAnswers === 1 ? '' : 's'})` : ''}`;
-    const detail = [last ? `Last ${formatWhen(last.at, last.hasTime, { weekday: false })} · ${relativeTime(last.at, now, last.hasTime)}` : '',
+    const detail = [last ? `Last ${when(last, { weekday: false })} · ${rel(last)}` : '',
       today ? `${today} today` : ''].filter(Boolean).join(' · ');
     context.push({ tone: 'neutral', label: 'Previous tries', title, detail, order: 3 });
   }
@@ -199,7 +249,7 @@ export function buildHeadsUp(callHistory, now, { max = 4 } = {}) {
     const checkin = newest(checkins);
     const date = checkin.dates[0];
     context.push({ tone: 'neutral', label: 'Recent activity', title: checkin.action,
-      detail: `${formatWhen(date.at, date.hasTime)} · ${relativeTime(date.at, now, date.hasTime)}`, muted: true, order: 4 });
+      detail: `${when(date)} · ${rel(date)}`, muted: true, order: 4 });
   }
 
   context.sort((a, b) => a.order - b.order);
