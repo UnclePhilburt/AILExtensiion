@@ -43,7 +43,7 @@ document.querySelector('#clearLogs').addEventListener('click', async () => {
 });
 
 async function refreshDebugTabs() {
-  const tabs = await chrome.tabs.query({url:['https://mobile.impact.ailife.com/*','https://salebase.ai/phone_scripts/*']});
+  const tabs = await chrome.tabs.query({url:['https://mobile.impact.ailife.com/*','https://salebase.ai/*']});
   const saved = await chrome.storage.session.get('impact.debugTabId');
   const select = document.querySelector('#debugTab');
   select.replaceChildren();
@@ -62,7 +62,7 @@ async function runDebug(button, type) {
     const tabId = Number(document.querySelector('#debugTab').value);
     if (!tabId) throw new Error('Open IMPACT or Salebase scripts, then refresh the tab list.');
     const tab = await chrome.tabs.get(tabId);
-    const salebase = tab.url?.startsWith('https://salebase.ai/phone_scripts/');
+    const salebase = tab.url?.startsWith('https://salebase.ai/');
     if (salebase && type === 'impact/getSnapshot') throw new Error('Run diagnostics on IMPACT. Use Pick element for Salebase scripts.');
     await chrome.scripting.executeScript({target:{tabId},files:salebase ? ['src/content/salebase-picker.js'] : ['src/content/selector-config.js','src/content/impact-diagnostic.js']});
     if (type === 'impact/startPicker') await chrome.tabs.update(tabId,{active:true});

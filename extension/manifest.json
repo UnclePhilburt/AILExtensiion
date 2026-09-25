@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "IMPACT Companion",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "update_url": "https://unclephilburt.github.io/AILExtensiion/updates/updates.xml",
   "description": "Connect your IMPACT lead workflow to your phone: contact details, navigation, call registration and call results.",
   "action": {
@@ -32,7 +32,7 @@
   "host_permissions": [
     "https://uawladqdbbbgddqtdjoi.supabase.co/*",
     "https://mobile.impact.ailife.com/*",
-    "https://salebase.ai/phone_scripts/*",
+    "https://salebase.ai/*",
     "http://127.0.0.1:8787/*",
     "http://localhost:8787/*"
   ]
