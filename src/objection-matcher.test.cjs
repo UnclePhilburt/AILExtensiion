@@ -37,7 +37,7 @@ test('the extension offers a direct local English-pack install and detected brow
 test('Salebase rebuttal lookup uses the saved label and phrase variants in the existing script tab', () => {
   const worker = fs.readFileSync(path.join(__dirname, '../extension/src/background/service-worker.js'), 'utf8');
   assert.match(worker, /revealSalebaseRebuttal\(match\)/);
-  assert.match(worker, /revealRebuttalInScriptTab\(chrome, match\)/);
+  assert.match(worker, /revealRebuttalInScriptTab\(chrome, match, \{ otherLabels: REBUTTAL_LABELS\.filter/);
   const reveal = worker.slice(worker.indexOf('async function revealSalebaseRebuttal'), worker.indexOf('async function getPhoneCommand'));
   assert.doesNotMatch(reveal, /tabs\.create|windows\.create|window\.open/);
   const module = fs.readFileSync(path.join(__dirname, '../extension/src/background/salebase-rebuttal.js'), 'utf8');

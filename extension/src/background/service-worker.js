@@ -4,7 +4,7 @@ import { accessToken } from "../shared/auth-runtime.js";
 import { cloudEnabled } from '../shared/cloud-sync.js';
 import { publishCloud, takeCloudCommand, reportCloudResult } from './cloud-desktop.js';
 import { SALEBASE_SCRIPTS_URL, salebaseOptionForRequestType } from './salebase-scripts.js';
-import { matchObjection } from './objection-matcher.js';
+import { matchObjection, REBUTTAL_LABELS } from './objection-matcher.js';
 import { findSalebaseTabs, findSalebaseScriptTabs, isSalebaseScriptUrl, revealRebuttalInScriptTab } from './salebase-rebuttal.js';
 
 let lastAutoPublishFingerprint = "";
@@ -169,7 +169,7 @@ async function revealSalebaseRebuttal(match) {
   // in the rep's existing script tab; never open a new tab or window for it.
   let result;
   try {
-    result = await revealRebuttalInScriptTab(chrome, match);
+    result = await revealRebuttalInScriptTab(chrome, match, { otherLabels: REBUTTAL_LABELS.filter((label) => label !== match.label) });
   } catch (error) {
     result = { status: 'error', message: `Could not open the rebuttal: ${error.message}` };
   }

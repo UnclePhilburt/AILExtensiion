@@ -177,6 +177,11 @@ class FakeElement {
   setAttribute(name, value) { this.attrs[name] = String(value); }
   removeAttribute(name) { delete this.attrs[name]; }
   get textContent() { return [this.ownText, ...this.children.map((child) => child.textContent)].join(' '); }
+  get firstElementChild() { return this.children[0] || null; }
+  get innerText() {
+    if (!this.getClientRects().length) return '';
+    return [this.ownText, ...this.children.map((child) => child.innerText)].join(' ');
+  }
   get nextElementSibling() { const list = this.parentElement?.children || []; return list[list.indexOf(this) + 1] || null; }
   getClientRects() {
     for (let node = this; node; node = node.parentElement) {
@@ -209,20 +214,21 @@ function loadContentScript(build) {
   const document = { body, getElementById: (id) => all(body).find((node) => node.id === id) || null };
   let listener = null;
   const context = vm.createContext({
-    URL, console, setTimeout: () => 0, document,
+    URL, console, Date, Promise, document,
+    setTimeout: (fn, ms) => setTimeout(fn, Math.min(ms, 20)),
     location: { href: SCRIPT_URL },
     chrome: { runtime: { onMessage: { addListener: (fn) => { listener = fn; } } } },
     addEventListener: (_type, fn) => win.listeners.add(fn),
     removeEventListener: (_type, fn) => win.listeners.delete(fn)
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../extension/src/content/salebase-rebuttal.js'), 'utf8'), context);
-  const send = (message) => { let response; listener(message, {}, (value) => { response = value; }); return response; };
+  const send = (message) => new Promise((resolve) => { listener(message, {}, resolve); });
   return { send, win, byId: document.getElementById };
 }
 
 const reveal = { type: 'impact/revealRebuttal', label: MATCH.label, phrases: MATCH.phrases };
 
-test('a collapsed in-page panel is opened by its own toggle without navigating', () => {
+test('a collapsed in-page panel is opened by its own toggle without navigating', async () => {
   let toggle;
   const page = loadContentScript((h) => {
     toggle = h('a', { 'data-toggle': 'collapse', href: '#rebuttal-1', 'aria-expanded': 'false' }, [], "I'm not interested");
@@ -234,8 +240,8 @@ test('a collapsed in-page panel is opened by its own toggle without navigating',
       h('div', { class: 'panel panel-default' }, [h('div', { class: 'panel-heading' }, [h('h4', { class: 'panel-title' }, [toggle])]), body])
     ];
   });
-  assert.deepEqual({ ...page.send({ type: 'impact/probeRebuttal', label: MATCH.label, phrases: MATCH.phrases }) }, { ok: true, isScriptPage: true, hasRebuttal: true, matchKind: 'label-exact' });
-  const result = page.send(reveal);
+  assert.deepEqual({ ...(await page.send({ type: 'impact/probeRebuttal', label: MATCH.label, phrases: MATCH.phrases })) }, { ok: true, isScriptPage: true, hasRebuttal: true, matchKind: 'label-exact' });
+  const result = await page.send(reveal);
   assert.equal(result.found, true);
   assert.equal(result.action, 'clicked-toggle');
   assert.equal(result.bodyShown, true);
@@ -244,12 +250,12 @@ test('a collapsed in-page panel is opened by its own toggle without navigating',
   assert.ok(toggle.scrolled);
   assert.deepEqual(page.win.navigations, []);
   // Hearing the same objection again must not collapse the open panel.
-  const again = page.send(reveal);
+  const again = await page.send(reveal);
   assert.equal(again.action, 'already-open');
   assert.equal(toggle.clicks, 1);
 });
 
-test('a link that would open a new Salebase tab is never clicked; the in-page panel is used instead', () => {
+test('a link that would open a new Salebase tab is never clicked; the in-page panel is used instead', async () => {
   let link; let header; let body;
   const page = loadContentScript((h) => {
     link = h('a', { href: '/phone_scripts/rebuttal.php?id=3', target: '_blank' }, [], "I'm not interested");
@@ -258,7 +264,7 @@ test('a link that would open a new Salebase tab is never clicked; the in-page pa
     header.onClick = () => { body.style.display = 'block'; };
     return [h('nav', {}, [link]), h('div', { class: 'rebuttals' }, [header, body])];
   });
-  const result = page.send(reveal);
+  const result = await page.send(reveal);
   assert.equal(result.action, 'clicked-toggle');
   assert.equal(result.header.classes, 'rebuttal-header');
   assert.equal(link.clicks, 0);
@@ -267,14 +273,14 @@ test('a link that would open a new Salebase tab is never clicked; the in-page pa
   assert.deepEqual(page.win.navigations, []);
 });
 
-test('when the only match is a navigating link, the panel is revealed in place and the link is left alone', () => {
+test('when the only match is a navigating link, the panel is revealed in place and the link is left alone', async () => {
   let link; let body;
   const page = loadContentScript((h) => {
     link = h('a', { href: 'https://salebase.ai/phone_scripts/phone_scripts.php?rebuttal=2', target: '_blank', onclick: "window.open(this.href); return false;" }, [], "I'm not interested");
     body = h('div', { class: 'answer', hidden: '' }, [], 'Most people feel that way...');
     return [h('div', { class: 'item' }, [link, body])];
   });
-  const result = page.send(reveal);
+  const result = await page.send(reveal);
   assert.equal(result.found, true);
   assert.equal(result.action, 'skipped-navigating-link');
   assert.match(result.skippedLink.reason, /onclick opens|target=_blank/);
@@ -285,32 +291,100 @@ test('when the only match is a navigating link, the panel is revealed in place a
   assert.deepEqual(page.win.navigations, []);
 });
 
-test('a click that bubbles into a navigating link is prevented', () => {
+test('a click that bubbles into a navigating link is prevented', async () => {
   let span;
   const page = loadContentScript((h) => {
     span = h('span', { role: 'button' }, [], "I'm not interested");
     return [h('a', { href: '/other.php', target: '_blank' }, [span])];
   });
-  const result = page.send(reveal);
+  const result = await page.send(reveal);
   assert.equal(result.action, 'skipped-navigating-link');
   assert.equal(span.clicks, 0);
   assert.deepEqual(page.win.navigations, []);
 });
 
-test('details/summary rebuttals are opened and missing rebuttals are reported with debug info', () => {
+test('details/summary rebuttals are opened and missing rebuttals are reported with debug info', async () => {
   let details;
   const page = loadContentScript((h) => {
     details = h('details', {}, [h('summary', {}, [], 'Can you mail it to me?'), h('p', {}, [], 'Sure, but...')]);
     return [details];
   });
-  const opened = page.send({ type: 'impact/revealRebuttal', label: 'Can you mail it to me?', phrases: ['mail it to me'] });
+  const opened = await page.send({ type: 'impact/revealRebuttal', label: 'Can you mail it to me?', phrases: ['mail it to me'] });
   assert.equal(opened.action, 'opened-details');
   assert.equal(details.open, true);
-  const missing = page.send({ type: 'impact/revealRebuttal', label: 'Do we have to do a Zoom meeting?', phrases: ['zoom meeting'] });
+  const missing = await page.send({ type: 'impact/revealRebuttal', label: 'Do we have to do a Zoom meeting?', phrases: ['zoom meeting'] });
   assert.equal(missing.found, false);
   assert.equal(missing.candidates, 0);
   assert.equal(missing.isScriptPage, false);
 });
+
+// Cody's capture: container div > "Expand All", "Collapse All", then one span
+// wrapper per rebuttal starting with <p><span>Title</span></p>.
+const SALEBASE_TITLES = ["I'm not interested.", 'Can you mail it to me?', "I don't remember doing this!", 'Do we have to do a Zoom meeting? / Do I have to do this? / Why do I have to do this?', 'What is this all about?'];
+const OTHER_LABELS = ['Can you mail it to me?', "I don't remember doing this!", 'Do we have to do a Zoom meeting?', 'What is this all about?'];
+
+function salebaseShape(placement, handlerOn) {
+  const state = { wraps: [], bodies: [], expandAll: 0, collapseAll: 0 };
+  const page = loadContentScript((h) => {
+    const expand = h('span', {}, [], 'Expand All');
+    const collapse = h('span', {}, [], 'Collapse All');
+    const children = [expand, collapse];
+    SALEBASE_TITLES.forEach((title, index) => {
+      const titleSpan = h('span', {}, [], title);
+      const body = [h('div', { 'data-display': 'none' }, [], `Rebuttal ${index} first paragraph.`), h('p', { 'data-display': 'none' }, [], `Rebuttal ${index} second paragraph.`)];
+      const wrap = h('span', {}, placement === 'inside-wrapper' ? [h('p', {}, [titleSpan]), ...body] : [h('p', {}, [titleSpan])]);
+      state.wraps.push({ wrap, titleSpan, p: wrap.children[0], body });
+      children.push(wrap);
+      if (placement === 'after-wrapper') children.push(...body);
+    });
+    const container = h('div', {}, children);
+    // jQuery-style delegated handler on the container: $(container).on('click', 'p > span', toggle)
+    container.onClick = (event) => {
+      if (event.target === expand) { state.expandAll += 1; return; }
+      if (event.target === collapse) { state.collapseAll += 1; return; }
+      const hit = state.wraps.find((item) => (handlerOn === 'title-span' ? item.titleSpan === event.target : [item.titleSpan, item.p].includes(event.target)));
+      if (!hit || handlerOn === 'none') return;
+      hit.body.forEach((part) => { part.style.display = part.style.display === 'block' ? 'none' : 'block'; });
+    };
+    const select = h('select', { id: 'myDropdown' }, [h('option', {}, [], 'Response Card')]);
+    return [h('div', {}), h('div', {}, [h('div', {}), h('div', {}), h('div', {}), h('div', {}), h('div', {}), h('div', {}, [select, h('div', {}, [h('div', {}), container])])])];
+  });
+  const open = () => state.wraps.map((item) => item.body.map((part) => (part.getClientRects().length ? 1 : 0)).join(''));
+  return { page, state, open };
+}
+
+for (const placement of ['inside-wrapper', 'after-wrapper']) {
+  for (const handlerOn of ['title-span', 'title-or-p', 'none']) {
+    test(`Salebase panel (${placement}, handler: ${handlerOn}) opens in place, only that rebuttal, and stays open`, async () => {
+      const { page, state, open } = salebaseShape(placement, handlerOn);
+      const message = { ...reveal, otherLabels: OTHER_LABELS };
+      const first = await page.send(message);
+      assert.equal(first.found, true);
+      assert.equal(first.header.tag, 'span');
+      assert.equal(first.header.text, "I'm not interested.");
+      assert.equal(first.bodyPlacement, placement);
+      assert.equal(first.bodyParts, 2);
+      assert.equal(first.action, handlerOn === 'none' ? 'clicked-title-then-revealed' : 'clicked-title');
+      assert.equal(first.forcedVisible, handlerOn === 'none');
+      assert.equal(state.wraps[0].titleSpan.clicks, 1, 'the innermost title span is clicked');
+      assert.deepEqual(open(), ['11', '00', '00', '00', '00']);
+      assert.ok(state.wraps[0].wrap.scrolled, 'scrolls to the wrapper');
+      assert.equal(state.wraps[0].wrap.style.outline, '3px solid #f59e0b');
+      // Same objection again: already open, not clicked (a click would close it).
+      const again = await page.send(message);
+      assert.equal(again.action, 'already-open');
+      assert.equal(state.wraps[0].titleSpan.clicks, 1);
+      assert.deepEqual(open(), ['11', '00', '00', '00', '00']);
+      // A different objection opens only its own panel.
+      const zoom = await page.send({ type: 'impact/revealRebuttal', label: 'Do we have to do a Zoom meeting?', phrases: ['zoom meeting'], otherLabels: [MATCH.label, ...OTHER_LABELS.filter((label) => !/Zoom/.test(label))] });
+      assert.equal(zoom.header.text, SALEBASE_TITLES[3].slice(0, 80));
+      assert.deepEqual(open(), ['11', '00', '00', '11', '00']);
+      assert.equal(state.expandAll, 0, 'Expand All is never clicked');
+      assert.equal(state.collapseAll, 0, 'Collapse All is never clicked');
+      assert.deepEqual(page.win.navigations, []);
+    });
+  }
+}
 
 test('the lead-script opener re-uses Salebase windows and only tries to open one once per lead', () => {
   const worker = fs.readFileSync(path.join(__dirname, '../extension/src/background/service-worker.js'), 'utf8');
