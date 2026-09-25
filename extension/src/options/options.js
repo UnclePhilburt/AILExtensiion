@@ -43,14 +43,15 @@ document.querySelector('#clearLogs').addEventListener('click', async () => {
 });
 
 async function refreshDebugTabs() {
-  const tabs = await chrome.tabs.query({url:'https://mobile.impact.ailife.com/*'});
+  const tabs = await chrome.tabs.query({url:['https://mobile.impact.ailife.com/*','https://salebase.ai/phone_scripts/*']});
   const saved = await chrome.storage.session.get('impact.debugTabId');
   const select = document.querySelector('#debugTab');
   select.replaceChildren();
   for (const tab of tabs) {
     const option = document.createElement('option');
     option.value = String(tab.id);
-    option.textContent = `${tab.title || 'IMPACT'} (tab ${tab.id})`;
+    const name = tab.url?.startsWith('https://salebase.ai/') ? 'Salebase scripts' : tab.title || 'IMPACT';
+    option.textContent = `${name} (tab ${tab.id})`;
     select.append(option);
     if (tab.id === saved['impact.debugTabId']) option.selected = true;
   }
@@ -59,13 +60,16 @@ async function runDebug(button, type) {
   button.disabled = true;
   try {
     const tabId = Number(document.querySelector('#debugTab').value);
-    if (!tabId) throw new Error('Open IMPACT and refresh the tab list first.');
-    await chrome.scripting.executeScript({target:{tabId},files:['src/content/selector-config.js','src/content/impact-diagnostic.js']});
+    if (!tabId) throw new Error('Open IMPACT or Salebase scripts, then refresh the tab list.');
+    const tab = await chrome.tabs.get(tabId);
+    const salebase = tab.url?.startsWith('https://salebase.ai/phone_scripts/');
+    if (salebase && type === 'impact/getSnapshot') throw new Error('Run diagnostics on IMPACT. Use Pick element for Salebase scripts.');
+    await chrome.scripting.executeScript({target:{tabId},files:salebase ? ['src/content/salebase-picker.js'] : ['src/content/selector-config.js','src/content/impact-diagnostic.js']});
     if (type === 'impact/startPicker') await chrome.tabs.update(tabId,{active:true});
     const response = await chrome.tabs.sendMessage(tabId,{type});
-    if (!response?.ok) throw new Error(response?.error || 'IMPACT did not respond.');
+    if (!response?.ok) throw new Error(response?.error || 'The selected tab did not respond.');
     if (response.snapshot) document.querySelector('#snapshotOutput').textContent = JSON.stringify(response.snapshot,null,2);
-    setStatus(type === 'impact/startPicker' ? 'Select an element in IMPACT, then return to Debug tools.' : 'Diagnostic complete.');
+    setStatus(type === 'impact/startPicker' ? `Select an element in ${salebase ? 'Salebase' : 'IMPACT'}, then return to Debug tools.` : 'Diagnostic complete.');
   } catch (error) { setStatus(error.message,true); }
   finally { button.disabled = false; }
 }

@@ -33,5 +33,6 @@ export const DEFAULT_SELECTOR_CONFIG = {
 };
 
 export const DEFAULT_ALLOWED_ORIGINS = [
-  "https://mobile.impact.ailife.com"
+  "https://mobile.impact.ailife.com",
+  "https://salebase.ai"
 ];
