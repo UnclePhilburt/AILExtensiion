@@ -88,10 +88,27 @@ test('the old slide-up panel is gone; pages load the boot script first and link 
   assert.match(read('index.html'), /<a class="settingsButton" href="settings\.html\?from=home" aria-label="Settings"/);
   assert.match(read('statistics.html'), /<a class="settingsLink" href="settings\.html\?from=statistics">/);
   const workspace = read('workspace.html');
-  const header = workspace.slice(workspace.indexOf('<header>'), workspace.indexOf('</header>'));
-  assert.match(header, /<div class="headerLinks"><a class="accountLink"[^>]*>Your account →<\/a><a class="calendarLink" href="calendar\.html\?from=workspace">.*?Calendar<\/a><a class="settingsLink" href="settings\.html\?from=workspace">/, 'Calendar and Settings sit under Your account in the header');
+  const header = workspace.slice(workspace.indexOf('<header'), workspace.indexOf('</header>'));
+  assert.match(header, /<nav class="headerLinks"[^>]*><a class="accountLink iconLink" href="account\.html\?next=workspace\.html" aria-label="Your account"[^>]*>.*?<\/a><a class="calendarLink iconLink" href="calendar\.html\?from=workspace" aria-label="Calendar"[^>]*>.*?<\/a><a class="settingsLink iconLink" href="settings\.html\?from=workspace" aria-label="Settings"/, 'Account, Calendar and Settings are a labelled row of icon buttons in the header');
   assert.equal(workspace.match(/settings\.html/g).length, 1, 'no settings entry point in the lead area');
   assert.doesNotMatch(read('styles.css'), /settingsSheet|titleRow/);
   assert.doesNotMatch(read('workspace-entry.js') + read('phone-entry.js'), /phone-settings/);
   assert.match(read('workspace-entry.js'), /import '\.\/wake-lock\.js';/);
+});
+
+test('calm Workspace: band + body layout, same controls in the same order, and every hook the app uses', () => {
+  const html = read('workspace.html');
+  assert.match(html, /<body class="wsPage"><main class="app workspace" hidden>\s*<div class="wsBand"><header class="wsHeader">/);
+  const ids = [...html.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]);
+  for (const id of ['connectionModeLabel', 'status', 'bridgeSetup', 'bridgeUrl', 'bridgeToken', 'saveBridge', 'leadCard', 'previousLead', 'nextLead', 'pendingCallNotice', 'pendingCallText', 'dismissPendingCall', 'callResults', 'noAnswer', 'virtualAppointment', 'refusedAppointment', 'appointmentPicker', 'appointmentHint', 'appointmentDays', 'appointmentTimes', 'callHistory', 'historyCount', 'historyEntries', 'actionFeedback']) assert.ok(ids.includes(id), id);
+  const results = html.slice(html.indexOf('id="callResults"'), html.indexOf('id="appointmentPicker"'));
+  assert.deepEqual([...results.matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1]), ['No Answer', 'Voicemail', 'Contacted', 'Callback', 'Set Virtual Appointment', 'Refused Appointment', 'Bad Number', 'Notes']);
+  assert.ok(html.indexOf('id="previousLead"') < html.indexOf('id="nextLead"'));
+  assert.ok(html.indexOf('id="leadCard"') < html.indexOf('id="previousLead"') && html.indexOf('id="nextLead"') < html.indexOf('id="callResults"'));
+  const css = read('styles.css');
+  assert.match(css, /button \{[^}]*min-height: 54px/, 'result and nav buttons keep 54px targets');
+  assert.match(css, /prefers-reduced-motion: reduce\) \{ \.wsBand, \.workspace \.leadCard\.empty::before \{ animation: none; \}/);
+  assert.match(css, /\.workspace \.quietHoursFlag::before \{ content: "!"/, 'DO NOT KNOCK keeps a clear icon');
+  assert.match(read('encouragement-ui.js'), /data-toast-avoid/);
+  assert.match(html, /data-toast-avoid/);
 });
