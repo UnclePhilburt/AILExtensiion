@@ -1,5 +1,5 @@
 import { DEFAULT_ALLOWED_ORIGINS, DEFAULT_SELECTOR_CONFIG } from "../shared/selector-config.js";
-import { STORAGE_KEYS } from "../shared/storage-keys.js";
+import { STORAGE_KEYS, DEFAULT_IMPACT_TIME_ZONE, IMPACT_TIME_ZONES } from "../shared/storage-keys.js";
 import { parseBridgeUrl } from "../shared/bridge-config.js";
 import { client, accessToken } from '../shared/auth-runtime.js';
 
@@ -24,6 +24,8 @@ const selectorConfigInput = document.querySelector("#selectorConfig");
 const bridgeUrlInput = document.querySelector("#bridgeUrl");
 const bridgeTokenInput = document.querySelector("#bridgeToken");
 const autoPublishInput = document.querySelector("#autoPublish");
+const impactTimeZoneInput = document.querySelector("#impactTimeZone");
+for (const [value, label] of IMPACT_TIME_ZONES) impactTimeZoneInput.append(new Option(label, value));
 const statusOutput = document.querySelector("#status");
 const lastPickedOutput = document.querySelector("#lastPicked");
 const saveButton = document.querySelector("#save");
@@ -86,6 +88,7 @@ async function init() {
     STORAGE_KEYS.bridgeUrl,
     STORAGE_KEYS.bridgeToken,
     STORAGE_KEYS.autoPublish,
+    STORAGE_KEYS.impactTimeZone,
     "impact.lastPickedElement"
     , "impact.connectionMode"
   ]);
@@ -97,6 +100,8 @@ async function init() {
   connectionMode.value = result['impact.connectionMode'] || 'cloud';
   document.querySelector('#localSettings').hidden = connectionMode.value !== 'local';
   autoPublishInput.checked = result[STORAGE_KEYS.autoPublish] !== false;
+  impactTimeZoneInput.value = IMPACT_TIME_ZONES.some(([value]) => value === result[STORAGE_KEYS.impactTimeZone])
+    ? result[STORAGE_KEYS.impactTimeZone] : DEFAULT_IMPACT_TIME_ZONE;
   lastPickedOutput.textContent = result["impact.lastPickedElement"]
     ? JSON.stringify(result["impact.lastPickedElement"], null, 2)
     : "No element picked yet.";
@@ -114,7 +119,8 @@ async function saveOptions() {
       [STORAGE_KEYS.selectorConfig]: selectorConfig,
       [STORAGE_KEYS.bridgeUrl]: parseBridgeUrl(bridgeUrlInput.value),
       [STORAGE_KEYS.bridgeToken]: bridgeTokenInput.value.trim(),
-      [STORAGE_KEYS.autoPublish]: autoPublishInput.checked
+      [STORAGE_KEYS.autoPublish]: autoPublishInput.checked,
+      [STORAGE_KEYS.impactTimeZone]: impactTimeZoneInput.value || DEFAULT_IMPACT_TIME_ZONE
     });
 
     setStatus("Saved. Refresh your IMPACT tab to apply the connection change.");
@@ -130,6 +136,7 @@ async function resetDefaults() {
   selectorConfigInput.value = JSON.stringify(DEFAULT_SELECTOR_CONFIG, null, 2);
   bridgeUrlInput.value = "http://127.0.0.1:8787";
   autoPublishInput.checked = true;
+  impactTimeZoneInput.value = DEFAULT_IMPACT_TIME_ZONE;
   setStatus("Defaults restored in the editor. Click Save to apply.");
 }
 
