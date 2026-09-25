@@ -28,7 +28,7 @@ async function loadPage({storage,shared,userId='user-1'}){
   const el=selector=>{if(!elements.has(selector))elements.set(selector,make());return elements.get(selector);};
   let authChanged;
   const context=vm.createContext({
-    client:{auth:{onAuthStateChange:fn=>{authChanged=fn;}}}, cloudEnabled:async()=>true,
+    client:{auth:{onAuthStateChange:fn=>{authChanged=fn;}}}, saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, cloudEnabled:async()=>true,
     cloudState:async()=>shared.state,cloudTouchPhone:async()=>{}, cloudSend:async(_s,c)=>{shared.sent.push(c);},
     watchCloud:async()=>()=>{},visibleLead:s=>s?.lead,isOnline:()=>true,
     document:{querySelector:selector=>selector.startsWith('meta')?null:el(selector),createElement:make,addEventListener(){}},

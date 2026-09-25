@@ -32,7 +32,7 @@ async function loadPage(server,globals={}){
     client:{auth:{onAuthStateChange:fn=>{authChanged=fn;},
       getSession:async()=>{auth.getSessionCalls++;return {data:{session:auth.session},error:null};},
       refreshSession:async()=>{auth.refreshCalls++;return auth.refreshOk?{data:{session:auth.session},error:null}:{data:{session:null},error:new Error('refresh failed')};}}},
-    cloudEnabled:async()=>true,
+    saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, cloudEnabled:async()=>true,
     cloudState:async()=>{server.reads++;return server.nextRead?server.nextRead():structuredClone(server.state);},
     cloudTouchPhone:async()=>{},
     cloudSend:async(state,command,id)=>{server.attempts.push({state,command,id});if(server.failNext){const e=server.failNext;server.failNext=null;throw e;}server.sent.push(command);},
@@ -240,4 +240,14 @@ test('Settings: No Answer never asks, and a failed send does not vibrate', async
   await page.el('#noAnswer').listeners.click(); await settle();
   assert.deepEqual(server.sent.map(c=>c.type),['call','no-answer']);
   assert.equal(asked.length,0); assert.deepEqual(buzz,[40]);
+});
+
+test('Calendar: each lead the Workspace receives is handed to the calendar, and a failure there changes nothing', async()=>{
+  const seen=[];
+  const server=makeServer(); freshState(server,null);
+  const page=await loadPage(server,{saveLeadSchedule:async lead=>{seen.push(lead.leadId);throw new Error('scheduled_events missing');}});
+  assert.ok(seen.includes('test-a'));
+  assert.ok(page.el('#leadCard').children.some(c=>c.textContent==='Fictional A'),'lead still shown');
+  page.callLink().listeners.click(); await settle();
+  assert.deepEqual(server.sent.map(c=>c.type),['call'],'workspace keeps working');
 });

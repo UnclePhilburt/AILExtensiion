@@ -19,7 +19,7 @@ test('phone cloud flow shows live leads, collapses history for a call and clears
   const lead={available:true,leadId:'test-a',leadName:'Fictional A',callHistory:['No Answer yesterday'],phones:[{label:'Mobile',number:'555-0100',dialHref:'#sample-call'}]};
   let state={lead,desktop_seen:new Date().toISOString(),lead_updated_at:new Date().toISOString(),device_id:'test-computer'};
   const context=vm.createContext({
-    client:{auth:{onAuthStateChange:fn=>{authChanged=fn;}}}, cloudEnabled:async()=>true,
+    client:{auth:{onAuthStateChange:fn=>{authChanged=fn;}}}, saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, cloudEnabled:async()=>true,
     cloudState:async()=>state,cloudTouchPhone:async()=>{}, cloudSend:async(s,c)=>{sent={s,c};},
     watchCloud:async()=>()=>{},visibleLead:s=>s?.lead,isOnline:()=>true,
     document:{querySelector:selector=>selector.startsWith('meta')?null:el(selector),createElement:make,addEventListener(){}},
@@ -59,7 +59,7 @@ test('phone locks Previous/Next until the moved-to lead arrives, so stale taps a
   const lead={available:true,leadId:'test-a',leadName:'Fictional A',phones:[]};
   let state={lead,desktop_seen:new Date().toISOString(),lead_updated_at:new Date().toISOString(),device_id:'test-computer'};
   const context=vm.createContext({
-    client:{auth:{onAuthStateChange:fn=>{authChanged=fn;}}}, cloudEnabled:async()=>true,
+    client:{auth:{onAuthStateChange:fn=>{authChanged=fn;}}}, saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, cloudEnabled:async()=>true,
     cloudState:async()=>state,cloudTouchPhone:async()=>{}, cloudSend:async(s,c)=>{sent.push(c);},
     watchCloud:async()=>()=>{},visibleLead:s=>s?.lead,isOnline:()=>true,
     document:{querySelector:selector=>selector.startsWith('meta')?null:el(selector),createElement:make,addEventListener(){}},
