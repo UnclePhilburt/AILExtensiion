@@ -1,11 +1,16 @@
 import { LOG_LIMIT, STORAGE_KEYS } from "../shared/storage-keys.js";
 import { parseBridgeUrl } from "../shared/bridge-config.js";
-import { accessToken } from "../shared/auth-runtime.js";
+import { accessToken, client } from "../shared/auth-runtime.js";
 import { cloudEnabled } from '../shared/cloud-sync.js';
 import { publishCloud, takeCloudCommand, reportCloudResult } from './cloud-desktop.js';
 import { SALEBASE_SCRIPTS_URL, salebaseOptionForRequestType } from './salebase-scripts.js';
 import { createObjectionDetector, REBUTTAL_LABELS } from './objection-matcher.js';
 import { findSalebaseTabs, findSalebaseScriptTabs, isSalebaseScriptUrl, revealRebuttalInScriptTab } from './salebase-rebuttal.js';
+import { scriptFieldsFromLead } from './script-fields.js';
+
+const SCRIPT_LEAD_KEY = 'impact.scriptLead';
+const SCRIPT_FILL_CONTENT_SCRIPT = 'src/content/salebase-personalize.js';
+const IMPACT_LEAD_PAGE = /^https:\/\/mobile\.impact\.ailife\.com\/Lead\/(InboxDetail|WhatHappend|SetAppointment)(?:[?#]|$)/;
 
 let lastAutoPublishFingerprint = "";
 let lastAutoPublishAt = 0;
@@ -25,8 +30,22 @@ chrome.storage.onChanged.addListener((changes) => {
     lastAutoPublishFingerprint = '';
     lastPublishedLead = null;
     void chrome.storage.local.remove([STORAGE_KEYS.lastSnapshot, STORAGE_KEYS.inboxQueue]);
+    if (!changes['impact.supabase.session'].newValue) void clearScriptLead();
   }
 });
+// The Salebase script shows the lead only while its IMPACT lead page is open.
+chrome.tabs.onRemoved.addListener((tabId) => { void clearScriptLeadForTab(tabId); });
+chrome.tabs.onUpdated.addListener((tabId, change) => {
+  if (change.url && !IMPACT_LEAD_PAGE.test(change.url)) void clearScriptLeadForTab(tabId);
+});
+// Salebase tabs that were already open before an install/update get the
+// script-fill content script too (the manifest only covers new page loads).
+chrome.runtime.onInstalled.addListener(() => { void injectScriptFill(); });
+// The Salebase content script reads the lead fields from session storage (kept
+// in memory, cleared when the browser closes). It never listens for tab
+// messages, so the rebuttal messaging in the same tab is unaffected.
+const allowScriptLeadInContentScripts = () => chrome.storage.session.setAccessLevel?.({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' }).catch(() => {});
+void allowScriptLeadInContentScripts();
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'impact/authStatus') {
@@ -58,6 +77,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     objectionListening = false;
     void chrome.storage.local.set({ 'impact.objectionListening': false, 'impact.objectionListenerError': message.error || 'Local listening stopped.' });
     return false;
+  }
+  if (message?.type === 'impact/getScriptLead') {
+    Promise.resolve(allowScriptLeadInContentScripts()).then(readScriptLead).then((record) => sendResponse({ ok: true, fields: record?.fields || null })).catch(() => sendResponse({ ok: false, fields: null }));
+    return true;
   }
   if (message?.type === 'impact/objectionTranscript') {
     void handleObjectionTranscript(message.transcript);
@@ -271,9 +294,13 @@ async function reportCommandResult(message) {
   if (!response.ok) throw new Error("Could not report command result.");
 }
 
-async function autoPublishLead(lead, senderTab) {
+async function autoPublishLead(incoming, senderTab) {
+  // Script-only details (DOB, group, ...) stay in this browser: they fill the
+  // Salebase script and are never sent to the phone, bridge or cloud.
+  const { scriptDetails, ...lead } = incoming || {};
   const [active] = await chrome.tabs.query({active:true,lastFocusedWindow:true});
   if (!senderTab?.id || senderTab.id !== active?.id) return {skipped:true,reason:'inactive tab'};
+  await rememberScriptLead(lead, scriptDetails, senderTab.id).catch(() => {});
   const result = await chrome.storage.local.get(STORAGE_KEYS.autoPublish);
   const autoPublish = result[STORAGE_KEYS.autoPublish] !== false;
 
@@ -436,6 +463,37 @@ async function selectSalebaseScript(tabId, option) {
     // The tab may still be signing in or loading. The completed-load listener
     // above retries without interrupting the rep's IMPACT workflow.
   }
+}
+
+// ---- Lead details for the Salebase phone script ----
+async function readScriptLead() {
+  const stored = await chrome.storage.session.get(SCRIPT_LEAD_KEY).catch(() => ({}));
+  return stored[SCRIPT_LEAD_KEY] || null;
+}
+
+async function rememberScriptLead(lead, details, sourceTabId) {
+  if (!lead?.available || !lead.leadName) return;
+  let user = null;
+  try { user = (await client.auth.getSession()).data?.session?.user || null; } catch (_error) {}
+  const fields = scriptFieldsFromLead(lead, details || {}, user);
+  if (!fields) return;
+  const previous = await readScriptLead();
+  if (previous && previous.sourceTabId === sourceTabId && JSON.stringify(previous.fields) === JSON.stringify(fields)) return;
+  await chrome.storage.session.set({ [SCRIPT_LEAD_KEY]: { fields, sourceTabId, at: Date.now() } });
+}
+
+async function clearScriptLeadForTab(tabId) {
+  const record = await readScriptLead();
+  if (record && record.sourceTabId === tabId) await clearScriptLead();
+}
+
+async function clearScriptLead() {
+  await chrome.storage.session.remove(SCRIPT_LEAD_KEY).catch(() => {});
+}
+
+async function injectScriptFill() {
+  const tabs = await findSalebaseScriptTabs(chrome).catch(() => []);
+  await Promise.all(tabs.map((tab) => chrome.scripting.executeScript({ target: { tabId: tab.id }, files: [SCRIPT_FILL_CONTENT_SCRIPT] }).catch(() => {})));
 }
 
 function makeLeadFingerprint(lead) {
