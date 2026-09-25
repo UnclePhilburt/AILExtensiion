@@ -467,7 +467,7 @@ test('the lead-script opener re-uses Salebase windows and only tries to open one
   const opener = worker.slice(worker.indexOf('async function openMatchingSalebaseScript'), worker.indexOf('async function clickSalebaseCallLink'));
   assert.match(opener, /findSalebaseScriptTabs\(chrome\)/);
   assert.match(opener, /if \(openKey === lastSalebaseOpenKey\) return;/);
-  assert.match(worker, /openMatchingSalebaseScript\(lead\.requestType, lead\.leadId \|\| lead\.leadName \|\| ''\)/);
+  assert.match(worker, /void openMatchingSalebaseScript\(lead\);/);
   const fallback = worker.slice(worker.indexOf('async function openSalebaseFallback'), worker.indexOf('async function selectSalebaseScript'));
   assert.match(fallback, /filter\(\(tab\) => !before\.has\(tab\.id\)\)/);
 });
