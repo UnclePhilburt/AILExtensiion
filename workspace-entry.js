@@ -1,2 +1,2 @@
-import './phone-settings.js';
+import './wake-lock.js';
 await import('./app.js');

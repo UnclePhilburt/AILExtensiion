@@ -1,8 +1,8 @@
 // Phone background choices. The colors live in styles.css as
 // html[data-bg="<id>"] rules (plus [data-bg-swatch="<id>"] for the picker
 // previews); this module only holds the list and the pure save/apply logic.
-// background-boot.js applies the saved choice before first paint, so keep
-// BACKGROUND_STORAGE_KEY in sync with it.
+// settings-boot.js applies the saved choice before first paint, so keep
+// BACKGROUND_STORAGE_KEY in sync with it. The picker is on settings.html.
 
 export const BACKGROUND_STORAGE_KEY = 'impact.phoneBackground';
 export const DEFAULT_BACKGROUND = 'default';

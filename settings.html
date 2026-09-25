@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Settings · IMPACT Companion</title><script src="settings-boot.js"></script><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="settings.css"></head>
+<body><main class="app settingsPage">
+<header><a id="settingsBack" class="backLink" href="workspace.html">← Workspace</a><p class="eyebrow">YOUR PHONE</p><h1>Settings</h1><p class="settingsIntro">Changes save automatically on this phone.</p></header>
+<section class="settingsCard" aria-labelledby="bgHeading"><div class="settingsCardHead"><p class="eyebrow">LOOK</p><h2 id="bgHeading">Background</h2></div><div id="bgGrid" class="bgGrid" role="radiogroup" aria-labelledby="bgHeading"></div></section>
+<section class="settingsCard" aria-labelledby="callingHeading"><div class="settingsCardHead"><p class="eyebrow">WHILE CALLING</p><h2 id="callingHeading">Calling</h2></div>
+<label class="settingRow"><span class="settingText"><strong>Keep screen awake</strong><small id="keepAwakeNote">Stops the screen from turning off while the Workspace is open.</small></span><input id="keepAwake" type="checkbox" role="switch" class="switch"></label>
+<label class="settingRow"><span class="settingText"><strong>Vibrate when a tap is sent</strong><small id="vibrateNote">A short buzz when a call result, Previous or Next reaches IMPACT. iPhone browsers don't support vibration.</small></span><input id="vibrate" type="checkbox" role="switch" class="switch"></label>
+<label class="settingRow"><span class="settingText"><strong>Confirm before Refused Appointment</strong><small>Asks before sending it, so a stray tap can't close the lead.</small></span><input id="confirmResults" type="checkbox" role="switch" class="switch"></label>
+</section>
+<section class="settingsCard" aria-labelledby="displayHeading"><div class="settingsCardHead"><p class="eyebrow">LEAD CARD</p><h2 id="displayHeading">Display</h2></div>
+<div class="settingRow settingColumn"><span class="settingText" id="textSizeLabel"><strong>Text size</strong><small>Makes the Workspace larger and easier to read.</small></span><div id="textSize" class="segmented" role="radiogroup" aria-labelledby="textSizeLabel"></div></div>
+<label class="settingRow"><span class="settingText"><strong>Show heads-up notes</strong><small>Scheduled appointments, callbacks and earlier tries at the top of the lead.</small></span><input id="showHeadsUp" type="checkbox" role="switch" class="switch"></label>
+<label class="settingRow"><span class="settingText"><strong>Show the DO NOT KNOCK flag</strong><small>The evening warning on Union and Association leads.</small></span><input id="showDoNotKnock" type="checkbox" role="switch" class="switch"></label>
+</section>
+<section class="settingsReset"><button id="resetSettings" type="button">Reset to defaults</button><p>Restores the default background and every setting on this page.</p></section>
+<p id="savedHint" class="savedHint" role="status" aria-live="polite" hidden>Saved</p>
+</main><script type="module" src="settings.js"></script></body></html>
