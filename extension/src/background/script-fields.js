@@ -135,6 +135,14 @@ export function agentFirstName(user) {
   return '';
 }
 
+// What to say for a group: "IUOE 148 (SGK2Q) (AD&D)" -> "IUOE 148". The
+// bracketed plan codes at the end are for IMPACT, not for the member.
+export function speakableGroup(raw) {
+  const text = clean(raw);
+  const spoken = text.replace(/(?:\s*\([^()]*\))+\s*$/, '').replace(/[\s,;:\-\u2013\u2014]+$/, '').trim();
+  return (spoken || text).slice(0, 80);
+}
+
 // lead: the payload IMPACT's content script publishes (leadName, address,
 // email, phones, requestType, ...). details: optional extra labelled values
 // read from the same lead panel (dob, group, beneficiary, spouse, kits).
@@ -159,7 +167,9 @@ export function scriptFieldsFromLead(lead, details = {}, user = null) {
     phone: clean(phone?.number),
     requestType: clean(lead.requestType),
     dob: formatDob(details.dob),
-    group: clean(details.group).slice(0, 80),
+    group: speakableGroup(details.group),
+    // Full value for the tooltip on the filled-in group (browser-only).
+    groupRaw: clean(details.group).slice(0, 120),
     beneficiary: displayPerson(details.beneficiary),
     spouse: displayPerson(details.spouse),
     kits,

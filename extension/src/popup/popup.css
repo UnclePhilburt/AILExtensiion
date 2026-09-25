@@ -12,3 +12,4 @@ button { cursor:pointer; font:inherit; font-weight:650; border-radius:10px; bord
 .footnote { text-align:center; color:#7b8d80; font-size:10px; margin-top:10px; } footer { display:flex; align-items:center; gap:10px; justify-content:space-between; border-top:1px solid #e0e8df; margin-top:23px; padding-top:12px; } #accountEmail { color:#738679; font-size:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } #message { color:#53735c; font-size:12px; line-height:1.5; margin-top:12px; overflow-wrap:anywhere; } #message.error { color:#a24232; } .muted { color:#788c7c; font-size:13px; }
 #objectionStatus { margin-top:6px; color:#1f6b45; font-size:10px; line-height:1.4; }
 #objectionStatus.error { color:#a24232; }
+.scriptStatus { margin-top:6px; color:#1f6b45; font-size:10px; line-height:1.4; overflow-wrap:anywhere; } .scriptStatus.warn { color:#a24232; }

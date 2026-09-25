@@ -1088,7 +1088,8 @@
     if (!lead.available || !lead.leadId || !leadReadyForPhone(lead)) return null;
     await addQuietHoursContext(lead);
     if (nextLeadCache?.pageUrl === location.href && Date.now() < nextLeadCache.expiresAt) lead.nextLead = nextLeadCache.lead;
-    lead.scriptDetails = collectScriptDetails(document.querySelector("#primaryPanel"));
+    lead.scriptDetails = collectScriptDetails(document.querySelector("#primaryPanel"), lead.requestType, lead.leadName);
+    logGroupRead(lead);
     return lead;
   }
 
@@ -1149,7 +1150,8 @@
       await addQuietHoursContext(lead);
       // Script-only values (DOB, group, ...) for the Salebase phone script. The
       // service worker removes them before anything is sent to the phone/cloud.
-      lead.scriptDetails = collectScriptDetails(document.querySelector("#primaryPanel"));
+      lead.scriptDetails = collectScriptDetails(document.querySelector("#primaryPanel"), lead.requestType, lead.leadName);
+      logGroupRead(lead);
       await publishCurrentLead(lead);
       if (!lead.nextLead) {
         // Preloading must not lock out publication of a newly opened lead.
@@ -1214,23 +1216,126 @@
   // or odd-looking values are left out so the script keeps its placeholder.
   const SCRIPT_DETAIL_LABELS = {
     dob: ["Date of Birth", "Birth Date", "Birthdate", "DOB"],
-    group: ["Group Name", "Group", "Union Name", "Union Local", "Local", "Association Name", "Organization"],
+    group: ["Group Name", "Group", "Union Name", "Union Local", "Union", "Local", "Association Name", "Association", "Organization", "Employer Group"],
     beneficiary: ["Beneficiary Name", "Beneficiary"],
     spouse: ["Spouse Name", "Spouse"],
     kits: ["Number of Kits", "# of Kits", "Kits Requested", "Kits", "Number of Children", "# of Children", "Children"]
   };
+  // Labels that sometimes carry the group; used only when the value looks like one.
+  const GROUP_HINT_LABELS = ["Account Name", "Account", "Case Name", "Case", "Lead Source", "Source", "Campaign", "Sub Group", "Plan"];
 
-  function collectScriptDetails(panel) {
+  function readLabelledValue(text, label) {
+    const match = text.match(new RegExp(`(?:^|[^A-Za-z#])${escapeRegExp(label)}\\s*:\\s*([^:]{1,80}?)(?=\\s+(?:[A-Z#][a-z']*(?: [A-Za-z#][a-z']*){0,4}|[A-Z]{2,5})\\s*:|$)`));
+    const value = sanitizeText(match?.[1] || "");
+    return value.length <= 60 ? value : "";
+  }
+
+  // A union/association group as IMPACT writes it: a name and number followed
+  // by bracketed codes, e.g. "IUOE 148 (SGK2Q) (AD&D)" or "Local 150 (ABC12)".
+  // The codes must contain a letter, so phone numbers "(555) ..." never match.
+  const GROUP_CODE = /(?:^|[\s,;:|\-\u2013\u2014])((?:(?:[A-Z][A-Z&.'\/-]*[A-Z&.]|Local|Lodge|District|Council|Chapter)\s+){1,4}#?\d{1,5}[A-Z]?)((?:\s*\((?=[^()]*[A-Za-z])[A-Za-z0-9&\/.' -]{1,20}\))+)/g;
+  // Words that come before a number in addresses/phones, never a group.
+  const NOT_GROUP_WORDS = new Set(["APT", "UNIT", "STE", "SUITE", "LOT", "BLDG", "RM", "FL", "BOX", "PO", "HWY", "RTE", "ROUTE", "CR", "SR", "US", "RR", "HC", "EXT", "ST", "AVE", "RD", "DR", "LN", "CT", "HOME", "MOBILE", "WORK", "CELL", "FAX", "PHONE"]);
+  // Heading words that may run into the group in flattened text.
+  const GROUP_LEAD_IN = new Set(["REQUEST", "TYPE", "MEMBER", "RESPONSE", "REPLY", "CARD", "CARDS", "LEAD", "GROUP", "NAME", "SOURCE", "UNION", "ASSOCIATION", "THE", "OF", "AND", "FOR"]);
+
+  function findGroupCode(text) {
+    for (const match of String(text || "").matchAll(GROUP_CODE)) {
+      const words = match[1].trim().split(/\s+/);
+      const number = words.pop();
+      while (words.length > 1 && GROUP_LEAD_IN.has(words[0].toUpperCase())) words.shift();
+      const last = words[words.length - 1].toUpperCase().replace(/\./g, "");
+      if (NOT_GROUP_WORDS.has(last) || GROUP_LEAD_IN.has(last)) continue;
+      if (/^\d{5}$/.test(number) && /^[A-Z]{2}$/.test(last)) continue; // "IL 62704 (...)": a ZIP code
+      return sanitizeText(`${words.join(" ")} ${number} ${match[2].trim()}`);
+    }
+    return "";
+  }
+
+  // The request table's cells (the one the request type is read from; on
+  // Response Card leads its 2nd-row cell holds the group, e.g.
+  // "IBT 610 (SGCOY) (AD&D)"). headers: the row above; label: any heading
+  // just before the table.
+  function collectRequestTable(panel) {
+    const table = panel?.querySelector?.("#myTabContentJust div:nth-of-type(4) > table.table-bordered");
+    const rows = table ? Array.from(table.querySelectorAll("tr")) : [];
+    const cellsOf = (row) => Array.from(row?.querySelectorAll("th, td") || []).map((cell) => sanitizeText(cell.innerText || cell.textContent || ""));
+    const headers = cellsOf(rows[0]);
+    const values = cellsOf(rows[1]);
+    const label = sanitizeText(table?.previousElementSibling?.innerText || table?.previousElementSibling?.textContent || "").slice(0, 40);
+    return { headers, values, cells: rows.flatMap(cellsOf), label };
+  }
+
+  // Where the group came from ("label:Group", "table:Group", "request type",
+  // "pattern", ...) is kept for the impact.groupRead log only.
+  function readGroup(panel, text, requestType, leadName) {
+    for (const label of SCRIPT_DETAIL_LABELS.group) {
+      const value = readLabelledValue(text, label);
+      if (value) return { group: value, source: `label:${label}` };
+    }
+    const table = collectRequestTable(panel);
+    // A group heading takes its value as written; a weaker one ("Account",
+    // "Source", ...) only when the value looks like a group code.
+    const labelKind = (text) => {
+      const key = String(text || "").replace(/:$/, "").trim().toLowerCase();
+      if (SCRIPT_DETAIL_LABELS.group.some((label) => label.toLowerCase() === key)) return "group";
+      return GROUP_HINT_LABELS.some((label) => label.toLowerCase() === key) ? "hint" : "";
+    };
+    const accept = (heading, value) => {
+      const kind = labelKind(heading);
+      if (!value || !kind) return "";
+      return kind === "group" ? value.slice(0, 60) : findGroupCode(value);
+    };
+    for (const [index, header] of table.headers.entries()) {
+      const value = accept(header, table.values[index]);
+      if (value) return { group: value, source: `table:${header}`, table };
+    }
+    const underLabel = accept(table.label, table.values[0]);
+    if (underLabel) return { group: underLabel, source: `table:${table.label}`, table };
+    const fromType = findGroupCode(String(requestType || "").replace(/response\s*cards?|reply\s*cards?|(?:union|association)?\s*member\s*request/gi, " "));
+    if (fromType) return { group: fromType, source: "request type", table };
+    for (const cell of table.cells) {
+      const found = findGroupCode(cell);
+      if (found) return { group: found, source: "request table", table };
+    }
+    for (const label of GROUP_HINT_LABELS) {
+      const found = findGroupCode(readLabelledValue(text, label));
+      if (found) return { group: found, source: `label:${label}`, table };
+    }
+    const found = findGroupCode(leadName ? text.split(leadName).join(" ") : text);
+    if (found) return { group: found, source: "pattern", table };
+    return { group: "", source: "none", table };
+  }
+
+  function collectScriptDetails(panel, requestType = "", leadName = "") {
     const text = sanitizeText(panel?.innerText || panel?.textContent || "");
     const details = {};
     for (const [field, labels] of Object.entries(SCRIPT_DETAIL_LABELS)) {
+      if (field === "group") continue;
       for (const label of labels) {
-        const match = text.match(new RegExp(`(?:^|[^A-Za-z#])${escapeRegExp(label)}\\s*:\\s*([^:]{1,80}?)(?=\\s+(?:[A-Z#][a-z']*(?: [A-Za-z#][a-z']*){0,4}|[A-Z]{2,5})\\s*:|$)`));
-        const value = sanitizeText(match?.[1] || "");
-        if (value && value.length <= 60) { details[field] = value; break; }
+        const value = readLabelledValue(text, label);
+        if (value) { details[field] = value; break; }
       }
     }
+    const group = readGroup(panel, text, requestType, leadName);
+    if (group.group) details.group = group.group;
+    details.groupSource = group.source;
+    // Headings only (no cell values), for the impact.groupRead log.
+    if (group.table) details.groupTableHeaders = [group.table.label, ...group.table.headers].filter(Boolean).slice(0, 12);
     return details;
+  }
+
+  // One impact.groupRead log per lead: what was found and where.
+  let lastGroupReadLead = "";
+  function logGroupRead(lead) {
+    const key = lead?.leadId || lead?.leadName || "";
+    if (!key || key === lastGroupReadLead) return;
+    lastGroupReadLead = key;
+    const details = lead.scriptDetails || {};
+    void log(details.group ? "info" : "warn", "impact.groupRead", {
+      requestType: lead.requestType || "", group: details.group || "", source: details.groupSource || "none",
+      tableHeaders: details.groupTableHeaders || []
+    }).catch(() => {});
   }
 
   function extractSimpleLabel(text, label) {

@@ -2,6 +2,7 @@ import { client, accessToken } from '../shared/auth-runtime.js';
 import { parseBridgeUrl } from '../shared/bridge-config.js';
 import { STORAGE_KEYS } from '../shared/storage-keys.js';
 import { cloudEnabled, cloudState, isOnline, PHONE_URL } from '../shared/cloud-sync.js';
+import { scriptStatusText } from '../background/salebase-scripts.js';
 const $ = selector => document.querySelector(selector);
 let session = null;
 let checking = false;
@@ -112,6 +113,15 @@ $('#objectionListening').addEventListener('change', async (event) => {
 });
 // Salebase script personalisation (on unless turned off).
 chrome.storage.local.get('impact.fillScript').then((stored) => { $('#fillScript').checked = stored['impact.fillScript'] !== false; });
+// Which Salebase script the current lead got (or why none), e.g. "Script: Response Card (matched)".
+function renderScriptStatus(entry) {
+  const line = $('#scriptStatus');
+  line.textContent = scriptStatusText(entry);
+  line.hidden = !line.textContent;
+  line.classList.toggle('warn', Boolean(entry?.status) && !['selected', 'already-selected', 'no-script-window'].includes(entry.status));
+}
+chrome.storage.session.get('impact.scriptSelect').then((stored) => renderScriptStatus(stored['impact.scriptSelect'])).catch(() => {});
+chrome.storage.onChanged.addListener((changes, area) => { if (area === 'session' && changes['impact.scriptSelect']) renderScriptStatus(changes['impact.scriptSelect'].newValue); });
 $('#fillScript').addEventListener('change', (event) => {
   void chrome.storage.local.set({ 'impact.fillScript': event.target.checked });
   say(event.target.checked ? 'Lead details will show in the Salebase script.' : 'The Salebase script shows its original placeholders.');

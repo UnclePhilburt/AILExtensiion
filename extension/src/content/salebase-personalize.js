@@ -75,12 +75,17 @@
   let timer = 0;
 
   const valueFor = (field) => (enabled && fields && typeof fields[field] === 'string' ? fields[field].trim() : '');
+  // "From IMPACT lead: IUOE 148 (SGK2Q) (AD&D)" when the script shows a shorter form.
+  const tooltipFor = (field, value) => {
+    const raw = fields && typeof fields[`${field}Raw`] === 'string' ? fields[`${field}Raw`].trim() : '';
+    return raw && raw !== value ? `${TOOLTIP}: ${raw}` : TOOLTIP;
+  };
 
   function makeSpan(item, value) {
     const span = document.createElement('span');
     span.setAttribute(FIELD_ATTR, item.field);
     span.setAttribute(ORIGINAL_ATTR, item.original);
-    span.setAttribute('title', TOOLTIP);
+    span.setAttribute('title', tooltipFor(item.field, value));
     span.setAttribute('style', STYLE);
     span.textContent = value;
     return span;
@@ -128,7 +133,10 @@
     let changes = 0;
     for (const span of Array.from(document.querySelectorAll(`[${FIELD_ATTR}]`))) {
       const value = valueFor(span.getAttribute(FIELD_ATTR));
-      if (!value) { restore(span); changes += 1; } else if (span.textContent !== value) { span.textContent = value; changes += 1; }
+      if (!value) { restore(span); changes += 1; continue; }
+      if (span.textContent !== value) { span.textContent = value; changes += 1; }
+      const title = tooltipFor(span.getAttribute(FIELD_ATTR), value);
+      if (span.getAttribute('title') !== title) span.setAttribute('title', title);
     }
     if (enabled && fields) {
       for (const node of candidateTextNodes(document.body)) changes += fillTextNode(node);

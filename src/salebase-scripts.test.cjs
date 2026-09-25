@@ -14,7 +14,8 @@ test('IMPACT request types choose the matching Salebase phone script', () => {
   assert.equal(choose('POS Beneficiary Request'), 'POS Beneficiary');
   assert.equal(choose('Globe Life Request'), 'Globe');
   assert.equal(choose('AILPlus Non-Customer'), 'AILPlus (Non-Customer)');
-  assert.equal(choose('Union Member'), '');
+  // Union / Association member requests are Salebase's Response Card leads.
+  assert.equal(choose('Union Member'), 'Response Card');
 });
 
 test('Salebase dashboard Call control is used before the direct script-page fallback', () => {

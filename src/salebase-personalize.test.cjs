@@ -120,6 +120,12 @@ const send = (m) => new Promise((resolve) => tabListener(m, {}, resolve));
   setLead({ firstName: 'Maria', fullName: 'Maria Lopez', address: '9 Oak Ave, Austin, TX 78701', dob: 'March 4, 1985', group: 'IBEW Local 58', beneficiary: '', kits: '' });
   await wait(150);
   out.leadB = scriptText();
+  out.groupTitle = document.querySelector('[data-impact-fill="group"]').title;
+  setLead({ firstName: 'Maria', fullName: 'Maria Lopez', address: '9 Oak Ave, Austin, TX 78701', dob: 'March 4, 1985', group: 'IUOE 148', groupRaw: 'IUOE 148 (SGK2Q) (AD&D)', beneficiary: '', kits: '' });
+  await wait(150);
+  out.unionGroup = [document.querySelector('[data-impact-fill="group"]').textContent, document.querySelector('[data-impact-fill="group"]').title];
+  setLead({ firstName: 'Maria', fullName: 'Maria Lopez', address: '9 Oak Ave, Austin, TX 78701', dob: 'March 4, 1985', group: 'IBEW Local 58', beneficiary: '', kits: '' });
+  await wait(150);
   // Salebase switches scripts: the new text is filled too.
   const dd = document.getElementById('myDropdown'); dd.value = 'beneficiary'; dd.dispatchEvent(new Event('change'));
   await wait(150);
@@ -171,6 +177,8 @@ test('headless: the lead fills the script, a new lead updates it, missing values
   const union = SALEBASE_SCRIPT_TEXT.union.join(' ');
   assert.equal(out.noLead, union, 'no lead yet: script exactly as written');
   assert.equal(out.leadA, "Hey, James??! Hey James, this is Cody with American Income Life. We handle some of your benefits through (Group). I'm reaching out because you're one of the members who hasn't received their benefits yet. Okay great, James! You listed your full name as James Carter. You also wrote down your date of birth as DOB. You listed your address as 123 Main St, Springfield, IL 62704.");
+  assert.equal(out.groupTitle, 'From IMPACT lead');
+  assert.deepEqual(out.unionGroup, ['IUOE 148', 'From IMPACT lead: IUOE 148 (SGK2Q) (AD&D)'], 'say the name and number; the full group is in the tooltip');
   assert.equal(out.leadB, "Hey, Maria??! Hey Maria, this is Cody with American Income Life. We handle some of your benefits through IBEW Local 58. I'm reaching out because you're one of the members who hasn't received their benefits yet. Okay great, Maria! You listed your full name as Maria Lopez. You also wrote down your date of birth as March 4, 1985. You listed your address as 9 Oak Ave, Austin, TX 78701.");
   assert.deepEqual(out.span, { title: 'From IMPACT lead', original: '(Member)', style: out.span.style });
   assert.match(out.span.style, /font-weight:600/);
@@ -217,7 +225,7 @@ test('wiring: manifest, service worker and IMPACT script keep script-only detail
   assert.match(worker, /chrome\.tabs\.onRemoved\.addListener\(\(tabId\) => \{ void clearScriptLeadForTab\(tabId\); \}\)/);
   assert.doesNotMatch(worker.slice(worker.indexOf('function makeLeadFingerprint'), worker.indexOf('async function appendLocalLog')), /scriptDetails|dob/);
   const impact = fs.readFileSync(path.join(__dirname, '../extension/src/content/impact-diagnostic.js'), 'utf8');
-  assert.match(impact, /lead\.scriptDetails = collectScriptDetails\(document\.querySelector\("#primaryPanel"\)\);\n\s*await publishCurrentLead\(lead\);/);
+  assert.match(impact, /lead\.scriptDetails = collectScriptDetails\(document\.querySelector\("#primaryPanel"\), lead\.requestType, lead\.leadName\);\n\s*logGroupRead\(lead\);\n\s*await publishCurrentLead\(lead\);/);
   assert.doesNotMatch(impact.slice(impact.indexOf('function collectLocalLeadPreview'), impact.indexOf('function collectRequestType')), /scriptDetails/, 'not in snapshots');
   const popup = fs.readFileSync(path.join(__dirname, '../extension/src/popup/popup.html'), 'utf8');
   assert.match(popup, /Fill lead details into the script/);

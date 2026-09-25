@@ -4,7 +4,7 @@ import { accessToken, client } from "../shared/auth-runtime.js";
 import { cloudEnabled } from '../shared/cloud-sync.js';
 import { publishCloud, takeCloudCommand, reportCloudResult, cloudLeadId } from './cloud-desktop.js';
 import { publisherDecision, createLatestWinsQueue, followLeadChange, verifyPhoneLead, LEAD_CHANGING_COMMANDS } from './phone-sync.js';
-import { SALEBASE_SCRIPTS_URL, salebaseOptionForRequestType } from './salebase-scripts.js';
+import { SALEBASE_SCRIPTS_URL, scriptChoiceForLead, matchScriptOption, readScriptDropdown, applyScriptOption } from './salebase-scripts.js';
 import { createObjectionDetector, REBUTTAL_LABELS } from './objection-matcher.js';
 import { findSalebaseTabs, findSalebaseScriptTabs, isSalebaseScriptUrl, revealRebuttalInScriptTab } from './salebase-rebuttal.js';
 import { scriptFieldsFromLead } from './script-fields.js';
@@ -16,7 +16,9 @@ const IMPACT_LEAD_PAGE = /^https:\/\/mobile\.impact\.ailife\.com\/Lead\/(InboxDe
 let lastAutoPublishFingerprint = "";
 let lastAutoPublishAt = 0;
 let lastPublishedLead = null;
-let pendingSalebaseOption = '';
+let pendingSalebaseChoice = null; // { label, rule, requestType, leadKey } for a script tab still loading
+let lastScriptGroup = { leadKey: '', group: '' }; // browser-only, from the IMPACT page
+let lastScriptSelectKey = '';
 let lastSalebaseOpenKey = '';
 let objectionListening = false;
 // Lead writes to the phone run one at a time; an older lead never lands last.
@@ -28,8 +30,8 @@ let lastPublishSkip = '';
 // One detected objection opens its rebuttal once, not on every repeat.
 const objectionDetector = createObjectionDetector();
 chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
-  if (change.status === 'complete' && isSalebaseScriptUrl(tab.url) && pendingSalebaseOption) {
-    void selectSalebaseScript(tabId, pendingSalebaseOption);
+  if (change.status === 'complete' && isSalebaseScriptUrl(tab.url) && pendingSalebaseChoice?.label) {
+    void selectSalebaseScript(tabId, pendingSalebaseChoice);
   }
 });
 chrome.storage.onChanged.addListener((changes) => {
@@ -317,6 +319,7 @@ async function autoPublishLead(incoming, senderTab) {
   const { scriptDetails, ...lead } = incoming || {};
   const skip = await publishSkipReason(senderTab);
   if (skip) return { skipped: true, reason: skip };
+  noteScriptGroup(lead, scriptDetails);
   await rememberScriptLead(lead, scriptDetails, senderTab.id).catch(() => {});
   const result = await chrome.storage.local.get(STORAGE_KEYS.autoPublish);
   const autoPublish = result[STORAGE_KEYS.autoPublish] !== false;
@@ -357,7 +360,8 @@ function publishLead(lead, options = {}) {
 
 async function writeLead(lead, seq, options = {}) {
   lastPublishedLead = structuredClone(lead);
-  void openMatchingSalebaseScript(lead.requestType, lead.leadId || lead.leadName || '');
+  // Every lead write (auto, follow-after-result, resync, Sync phone) checks the script.
+  void openMatchingSalebaseScript(lead);
   const leadChanged = Boolean(lead.leadId) && lead.leadId !== lastWrittenLeadId;
   let written;
   try {
@@ -417,13 +421,29 @@ async function sendLeadToPhone(lead, options = {}) {
   return response.json();
 }
 
-async function openMatchingSalebaseScript(requestType, leadKey = '') {
-  const option = salebaseOptionForRequestType(requestType);
-  if (!option) return;
-  pendingSalebaseOption = option;
-  const tabs = await findSalebaseScriptTabs(chrome);
+// The group (e.g. "IUOE 148 (SGK2Q)") only helps choose the script; it stays in this browser.
+function noteScriptGroup(lead, details) {
+  const leadKey = lead?.leadId || lead?.leadName || '';
+  if (leadKey) lastScriptGroup = { leadKey, group: String(details?.group || '') };
+}
+
+async function openMatchingSalebaseScript(lead) {
+  const requestType = String(lead?.requestType || '');
+  const leadKey = lead?.leadId || lead?.leadName || '';
+  const group = lastScriptGroup.leadKey === leadKey ? lastScriptGroup.group : '';
+  const choice = scriptChoiceForLead(requestType, { group });
+  const request = { label: choice.label, rule: choice.rule, requestType, leadKey };
+  pendingSalebaseChoice = request;
+  const option = choice.label;
+  const tabs = await findSalebaseScriptTabs(chrome).catch(() => []);
+  if (!option) {
+    await reportScriptSelect(request, { status: 'no-mapping', reason: choice.rule });
+    return;
+  }
   if (tabs.length) {
-    await Promise.all(tabs.map((tab) => selectSalebaseScript(tab.id, option)));
+    // Runs on every write, so a lead change always re-checks the dropdown
+    // (nothing changes when the right script is already selected).
+    await Promise.all(tabs.map((tab) => selectSalebaseScript(tab.id, request)));
     return;
   }
 
@@ -434,6 +454,7 @@ async function openMatchingSalebaseScript(requestType, leadKey = '') {
   const openKey = `${leadKey}|${option}`;
   if (openKey === lastSalebaseOpenKey) return;
   lastSalebaseOpenKey = openKey;
+  await reportScriptSelect(request, { status: 'no-script-window', reason: 'opening the Salebase script window' });
   const saved = await chrome.storage.session.get('impact.salebaseOpenKey').catch(() => ({}));
   if (saved['impact.salebaseOpenKey'] === openKey) return; // Survives a service-worker restart.
   await chrome.storage.session.set({ 'impact.salebaseOpenKey': openKey }).catch(() => {});
@@ -448,10 +469,10 @@ async function openMatchingSalebaseScript(requestType, leadKey = '') {
   if (dashboard?.id && await clickSalebaseCallLink(dashboard.id)) {
     // A slow popup or a browser that blocks the dashboard's window.open
     // falls back to the script page without delaying the IMPACT workflow.
-    setTimeout(() => { void openSalebaseFallback(option, before); }, 1800);
+    setTimeout(() => { void openSalebaseFallback(request, before); }, 1800);
     return;
   }
-  await openSalebaseFallback(option, before);
+  await openSalebaseFallback(request, before);
 }
 
 async function clickSalebaseCallLink(tabId) {
@@ -471,42 +492,72 @@ async function clickSalebaseCallLink(tabId) {
   }
 }
 
-async function openSalebaseFallback(option, before = new Set()) {
+async function openSalebaseFallback(request, before = new Set()) {
   const tabs = await findSalebaseScriptTabs(chrome);
   if (tabs.length) {
-    await Promise.all(tabs.map((tab) => selectSalebaseScript(tab.id, option)));
+    await Promise.all(tabs.map((tab) => selectSalebaseScript(tab.id, request)));
     return;
   }
   // If the dashboard's Call link already opened a Salebase window (even at a
   // URL we do not recognise), use it instead of adding another tab.
   const opened = (await findSalebaseTabs(chrome)).filter((tab) => !before.has(tab.id));
   if (opened.length) {
-    await Promise.all(opened.map((tab) => selectSalebaseScript(tab.id, option)));
+    await Promise.all(opened.map((tab) => selectSalebaseScript(tab.id, request)));
     return;
   }
   await chrome.tabs.create({ url: SALEBASE_SCRIPTS_URL, active: false });
 }
 
-async function selectSalebaseScript(tabId, option) {
+// Reads the script dropdown, picks the option for this lead (see
+// matchScriptOption) and selects it the way a click would. Every outcome is
+// logged as salebase.scriptSelect and shown in the popup's Script line.
+async function selectSalebaseScript(tabId, request) {
+  let page = null;
   try {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      func: (wanted) => {
-        const dropdown = document.querySelector('#myDropdown');
-        if (!(dropdown instanceof HTMLSelectElement)) return false;
-        const match = Array.from(dropdown.options).find((item) => item.text.trim().toLowerCase() === wanted.toLowerCase());
-        if (!match || dropdown.value === match.value) return Boolean(match);
-        dropdown.value = match.value;
-        dropdown.dispatchEvent(new Event('input', { bubbles: true }));
-        dropdown.dispatchEvent(new Event('change', { bubbles: true }));
-        return true;
-      },
-      args: [option]
-    });
-  } catch (_error) {
-    // The tab may still be signing in or loading. The completed-load listener
-    // above retries without interrupting the rep's IMPACT workflow.
+    [{ result: page }] = await chrome.scripting.executeScript({ target: { tabId }, func: readScriptDropdown });
+  } catch (error) {
+    // Still signing in or loading: the completed-load listener above retries.
+    await reportScriptSelect(request, { status: 'tab-not-ready', reason: error.message });
+    return;
   }
+  if (!page?.found) {
+    await reportScriptSelect(request, { status: 'no-dropdown', reason: 'no #myDropdown with options on the Salebase page' });
+    return;
+  }
+  const options = page.options || [];
+  const match = matchScriptOption(request.label, options, request.requestType);
+  const base = { options, selectedBefore: options[page.selectedIndex] ?? '' };
+  if (match.index < 0) {
+    await reportScriptSelect(request, { ...base, status: match.how === 'ambiguous' ? 'ambiguous' : 'no-match', reason: match.reason });
+    return;
+  }
+  if (page.selectedIndex === match.index) {
+    await reportScriptSelect(request, { ...base, status: 'already-selected', chosen: match.text, how: match.how });
+    return;
+  }
+  let applied = null;
+  try {
+    [{ result: applied }] = await chrome.scripting.executeScript({ target: { tabId }, func: applyScriptOption, args: [match.index, match.text] });
+  } catch (error) {
+    applied = { ok: false, reason: error.message };
+  }
+  await reportScriptSelect(request, { ...base, status: applied?.ok ? 'selected' : 'select-failed', chosen: match.text, how: match.how, reason: applied?.reason || '' });
+}
+
+async function reportScriptSelect(request, outcome) {
+  const entry = {
+    requestType: request?.requestType || '', rule: request?.rule || '', label: request?.label || '',
+    status: outcome.status, chosen: String(outcome.chosen || '').trim(), how: outcome.how || '',
+    reason: outcome.reason || '', selectedBefore: String(outcome.selectedBefore || '').trim(),
+    options: (outcome.options || []).map((text) => String(text).replace(/\s+/g, ' ').trim()).slice(0, 40)
+  };
+  // The same lead is re-published every 30 seconds: log each distinct outcome once.
+  const key = JSON.stringify([request?.leadKey || '', entry.label, entry.status, entry.chosen, entry.options]);
+  if (key === lastScriptSelectKey) return;
+  lastScriptSelectKey = key;
+  const ok = ['selected', 'already-selected'].includes(entry.status);
+  await appendLocalLog(ok || entry.status === 'no-script-window' ? 'info' : 'warn', 'salebase.scriptSelect', entry);
+  await chrome.storage.session.set({ 'impact.scriptSelect': { ...entry, at: Date.now() } }).catch(() => {});
 }
 
 // ---- Keeping the phone on IMPACT's lead ----
@@ -549,6 +600,7 @@ async function followAfterCommand(tabId, fromLeadId) {
       const response = await chrome.tabs.sendMessage(tabId, { type: 'impact/readCurrentLead' });
       if (!response?.lead?.available) return null;
       const { scriptDetails, ...lead } = response.lead;
+      noteScriptGroup(lead, scriptDetails);
       await rememberScriptLead(lead, scriptDetails, tabId).catch(() => {});
       return lead;
     },
