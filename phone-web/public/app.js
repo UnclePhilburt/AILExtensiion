@@ -3,6 +3,7 @@ import { cloudEnabled, cloudState, cloudTouchPhone, cloudSend, watchCloud, visib
 import { NETWORK_MESSAGE, SIGN_IN_MESSAGE, RESULT_COMMANDS, checkBeforeSend, isStateFresh, isAuthFailure, isNetworkFailure, friendlySendError, withTimeout } from './phone-actions.js';
 import { buildHeadsUp, splitHistory, localTimeNote } from './lead-highlights.js';
 import { doNotKnockWarning } from './lead-rules.js';
+import { loadPhoneSettings } from './settings-store.js';
 import { createPendingCall, readPendingCall, writePendingCall, pendingCallDecision, markPendingCallResult, isCallResultCommand } from './pending-call.js';
 const statusEl = document.querySelector("#status");
 const leadCard = document.querySelector("#leadCard");
@@ -65,6 +66,7 @@ if (localToken) {
 if (useCloud) document.querySelector('#bridgeSetup').hidden = true;
 document.querySelector('#connectionModeLabel').textContent = useCloud ? 'Cloud connection' : 'Local connection';
 if (!useCloud) document.querySelector('.accountLink').href = 'account.html?mode=local';
+if (!useCloud) document.querySelector('.settingsLink').href = 'settings.html?from=workspace-local';
 
 persistBridgeSettings();
 
@@ -80,7 +82,7 @@ previousLeadButton.addEventListener("click", showPreviousLead);
 nextLeadButton.addEventListener("click", showNextLead);
 noAnswerButton.addEventListener("click", () => sendCallResult("no-answer"));
 virtualAppointmentButton.addEventListener("click", () => sendCallResult("virtual-appointment"));
-refusedAppointmentButton.addEventListener("click", () => sendCallResult("refused-appointment"));
+refusedAppointmentButton.addEventListener("click", () => confirmResult("Refused Appointment") ? sendCallResult("refused-appointment") : false);
 dismissPendingCallButton.addEventListener("click", dismissPendingCall);
 
 client.auth.onAuthStateChange((_event, session) => {
@@ -391,8 +393,21 @@ async function sendCallResult(type, details = {}) {
     return false;
   }
   const sent = await sendComputerCommand(type, { ...details, leadId: call.leadId });
+  if (sent) tapAccepted();
   if (sent && isCallResultCommand(type) && pendingCall === call) setPendingCall(markPendingCallResult(call, Date.now()));
   return sent;
+}
+
+// Settings page: "Confirm before Refused Appointment" (on by default).
+function confirmResult(label) {
+  if (!loadPhoneSettings(localStorage).confirmResults || typeof globalThis.confirm !== "function") return true;
+  return globalThis.confirm(`Send ${label} to IMPACT for ${displayedLead?.leadName || "this lead"}?`);
+}
+
+// Settings page: "Vibrate when a tap is sent" (on by default; iPhone browsers can't vibrate).
+function tapAccepted() {
+  if (!loadPhoneSettings(localStorage).vibrate) return;
+  try { globalThis.navigator?.vibrate?.(40); } catch (_error) { /* vibration is optional */ }
 }
 
 async function showNextLead() {
@@ -421,6 +436,7 @@ async function sendNavigation(type) {
   navPending = pending;
   updateNavButtons();
   const sent = await sendComputerCommand(type);
+  if (sent) tapAccepted();
   if (navPending !== pending) return;
   if (!sent) {
     navPending = null;
