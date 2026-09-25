@@ -13,9 +13,25 @@ function renderListener(listening, error = '') {
     ? 'Listening locally for saved objection phrases. No audio is saved.'
     : 'Off — it never listens unless you turn this on.');
 }
+const OBJECTION_STATUS = {
+  looking: 'Looking for the Salebase script window…',
+  opened: 'Opened in your Salebase script window.',
+  'no-script-window': 'No Salebase script window is open, so nothing was opened.',
+  'rebuttal-not-found': 'Salebase script window found, but that rebuttal was not on the page.',
+  error: 'Could not open the rebuttal.'
+};
+function renderObjection(last) {
+  const status = $('#objectionStatus');
+  if (!last?.label) { status.hidden = true; return; }
+  const when = last.at ? new Date(last.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+  status.textContent = `Last objection${when ? ` (${when})` : ''}: “${last.label}” — ${OBJECTION_STATUS[last.status] || last.message || ''}`;
+  status.classList.toggle('error', last.status !== 'opened' && last.status !== 'looking');
+  status.hidden = false;
+}
 async function refreshListener() {
-  const local = await chrome.storage.local.get(['impact.objectionListening', 'impact.objectionListenerError']);
+  const local = await chrome.storage.local.get(['impact.objectionListening', 'impact.objectionListenerError', 'impact.lastObjection']);
   renderListener(local['impact.objectionListening'], local['impact.objectionListenerError']);
+  renderObjection(local['impact.lastObjection']);
 }
 async function languageSettingsUrl() {
   if (globalThis.navigator?.brave && await globalThis.navigator.brave.isBrave()) return 'brave://settings/languages';
@@ -67,7 +83,7 @@ $('#loginForm').addEventListener('submit', async event => {
 client.auth.onAuthStateChange((_event,next) => renderSession(next));
 chrome.storage.onChanged.addListener(changes => {
   if (changes['impact.supabase.session']) void client.auth.getSession().then(({data})=>renderSession(data.session));
-  if (changes['impact.objectionListening'] || changes['impact.objectionListenerError']) void refreshListener();
+  if (changes['impact.objectionListening'] || changes['impact.objectionListenerError'] || changes['impact.lastObjection']) void refreshListener();
 });
 $('#objectionListening').addEventListener('change', async (event) => {
   const enabled = event.target.checked;
