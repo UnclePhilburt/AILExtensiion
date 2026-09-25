@@ -553,6 +553,7 @@ function renderLead(lead, updatedAt, source) {
   }
   appendDetail("Email", lead.email);
   appendDetail("Address", lead.address);
+  renderComments(lead.comments);
 
   const phoneList = document.createElement("div");
   phoneList.className = "phoneList";
@@ -691,7 +692,7 @@ function renderCallHistory(lead) {
   historyLeadKey = key;
   card.hidden = !lead?.available;
   entries.replaceChildren();
-  // One line per IMPACT Status or Comment entry, even if its text arrived run together.
+  // One line per IMPACT Status entry, even if its text arrived run together.
   const history = splitHistory(lead?.callHistory);
   document.querySelector("#historyCount").textContent = history.length ? `(${history.length})` : "";
   for (const entry of history.length ? history : ["No previous activity found on this lead."]) {
@@ -699,6 +700,24 @@ function renderCallHistory(lead) {
     item.textContent = entry;
     entries.append(item);
   }
+}
+
+function renderComments(comments) {
+  const values = Array.isArray(comments) ? comments.map(value => String(value || "").trim()).filter(Boolean) : [];
+  if (!values.length) return;
+  const section = document.createElement("section");
+  section.className = "leadNotes";
+  section.setAttribute("aria-label", "IMPACT comments");
+  const heading = document.createElement("span");
+  heading.className = "leadNotesHeading";
+  heading.textContent = values.length === 1 ? "IMPACT COMMENT" : "IMPACT COMMENTS";
+  section.append(heading);
+  for (const value of values) {
+    const note = document.createElement("p");
+    note.textContent = value;
+    section.append(note);
+  }
+  leadCard.append(section);
 }
 
 function getLeadKey(lead) {
