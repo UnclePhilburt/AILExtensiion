@@ -146,6 +146,7 @@ test('the phone lead card shows heads-up chips above the details and hides them 
   const el=selector=>{if(!elements.has(selector))elements.set(selector,make());return elements.get(selector);};
   let authChanged;
   const lead={available:true,leadId:'test-a',leadName:'Fictional A',requestType:'Sample request',language:'English',email:'fictional@example.test',callHistory:realLead,phones:[{label:'Mobile',number:'555-0100',dialHref:'#sample-call'}]};
+  lead.comments=['Comment · 9/24/2026 7:56:31 PM IMV'];
   let state={lead,desktop_seen:new Date().toISOString(),lead_updated_at:new Date().toISOString(),device_id:'test-computer'};
   class FakeDate extends Date{constructor(...a){super(...(a.length?a:[now]));} static now(){return now;}}
   const context=vm.createContext({
@@ -164,7 +165,10 @@ test('the phone lead card shows heads-up chips above the details and hides them 
   const names=card.map(c=>c.className||c.textContent);
   assert.equal(card.some(c=>c.children?.[0]?.textContent==='Language'),false,'English is omitted to keep the lead card compact');
   const headsUp=card.find(c=>String(c.className).includes('headsUp'));
+  const comments=card.find(c=>String(c.className).includes('leadNotes'));
   assert.ok(headsUp,'heads-up section rendered');
+  assert.equal(comments.children[0].textContent,'IMPACT COMMENT');
+  assert.equal(comments.children[1].textContent,'Comment · 9/24/2026 7:56:31 PM IMV');
   assert.ok(names.findIndex(name=>String(name).includes('headsUp'))<names.indexOf('detail'),'shown before the contact details');
   assert.ok(names.findIndex(name=>String(name).includes('headsUp'))<names.indexOf('phoneList'),'shown before the Call buttons');
   assert.equal(headsUp.children[0].textContent,'SCHEDULED CALLBACK');

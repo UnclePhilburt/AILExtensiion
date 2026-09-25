@@ -248,6 +248,7 @@
       leadId: root === document ? getCurrentLeadId() : "",
       requestType: collectRequestType(panel),
       callHistory: collectCallHistory(panel),
+      comments: collectLeadComments(panel),
       language: extractSimpleLabel(text, "Language"),
       email: extractEmail(text),
       address: extractAddress(text),
@@ -273,12 +274,17 @@
       if (/^Status\b/i.test(text)) {
         const statuses = text.replace(/^Status\s*:?[\s]*/i, "").trim();
         entries.push(...statuses.split(/(?<=\bby [^.]{1,100}\.)\s+(?=[A-Z])/).map(value => value.trim()).filter(Boolean));
-      } else if (/^Comment(?=\s|\d|:|$)/i.test(text)) {
-        // IMPACT sometimes runs the Comment heading and timestamp together.
-        entries.push(text.replace(/^Comment\s*/i, "Comment · "));
       }
     }
     return entries;
+  }
+
+  function collectLeadComments(panel) {
+    return Array.from(panel.querySelectorAll("#myTabContentJust .inner-schedule"))
+      .map(section => sanitizeText(section.textContent || "").replace(/Show (?:Less|More)\s*\.{0,3}/gi, "").trim())
+      .filter(text => /^Comment(?=\s|\d|:|$)/i.test(text))
+      // IMPACT sometimes runs the Comment heading and timestamp together.
+      .map(text => text.replace(/^Comment\s*/i, "Comment · "));
   }
 
   async function prefetchNextLead() {
@@ -978,6 +984,7 @@
         leadId: lead.leadId,
         requestType: lead.requestType,
         callHistory: lead.callHistory,
+        comments: lead.comments,
         language: lead.language,
         email: lead.email,
         address: lead.address,

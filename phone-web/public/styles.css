@@ -48,6 +48,9 @@ h1 { font-size: 32px; font-weight: 650; letter-spacing: -1px; margin: 5px 0 8px;
 .detail { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; padding: 11px 0; border-top: 1px solid #edf1ee; line-height: 1.5; }
 .detailLabel { color: #73847e; font-size: 12px; padding-top: 1px; }
 .detailValue { color: #344b42; font-size: 14px; overflow-wrap: anywhere; }
+.leadNotes { display:grid; gap:6px; margin:12px 0 0; padding:11px 13px; border:1px solid #d7e6dc; border-left:4px solid #71a58c; border-radius:11px; background:#f7fbf8; color:#344b42; }
+.leadNotesHeading { color:#4a7461; font-size:10px; font-weight:800; letter-spacing:1px; }
+.leadNotes p { font-size:13px; line-height:1.45; overflow-wrap:anywhere; }
 .phoneList { display: grid; gap: 10px; margin-top: 23px; }
 .callLink { display: flex; align-items: center; gap: 14px; padding: 16px 19px; min-height: 76px; border-radius: 14px; background: #17684e; color: white; text-decoration: none; box-shadow: 0 4px 10px #17684e15; touch-action: manipulation; }
 .callIcon { display: grid; place-items: center; width: 39px; height: 39px; border-radius: 50%; background: #ffffff18; font-size: 23px; flex-shrink: 0; }
