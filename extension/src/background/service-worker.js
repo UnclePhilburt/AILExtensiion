@@ -3,10 +3,17 @@ import { parseBridgeUrl } from "../shared/bridge-config.js";
 import { accessToken } from "../shared/auth-runtime.js";
 import { cloudEnabled } from '../shared/cloud-sync.js';
 import { publishCloud, takeCloudCommand, reportCloudResult } from './cloud-desktop.js';
+import { SALEBASE_SCRIPTS_URL, salebaseOptionForRequestType } from './salebase-scripts.js';
 
 let lastAutoPublishFingerprint = "";
 let lastAutoPublishAt = 0;
 let lastPublishedLead = null;
+let pendingSalebaseOption = '';
+chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
+  if (change.status === 'complete' && tab.url?.startsWith(SALEBASE_SCRIPTS_URL) && pendingSalebaseOption) {
+    void selectSalebaseScript(tabId, pendingSalebaseOption);
+  }
+});
 chrome.storage.onChanged.addListener((changes) => {
   if (changes['impact.supabase.session']) {
     lastAutoPublishFingerprint = '';
@@ -170,6 +177,7 @@ async function publishLead(lead, options = {}) {
     throw new Error("No lead payload available to send.");
   }
   lastPublishedLead = structuredClone(lead);
+  void openMatchingSalebaseScript(lead.requestType);
   if (await cloudEnabled()) return publishCloud(lead);
 
   const result = await chrome.storage.local.get([
@@ -207,6 +215,40 @@ async function publishLead(lead, options = {}) {
   });
 
   return response.json();
+}
+
+async function openMatchingSalebaseScript(requestType) {
+  const option = salebaseOptionForRequestType(requestType);
+  if (!option) return;
+  pendingSalebaseOption = option;
+  const tabs = await chrome.tabs.query({ url: 'https://salebase.ai/phone_scripts/*' });
+  if (!tabs.length) {
+    await chrome.tabs.create({ url: SALEBASE_SCRIPTS_URL, active: false });
+    return;
+  }
+  await Promise.all(tabs.filter((tab) => tab.id).map((tab) => selectSalebaseScript(tab.id, option)));
+}
+
+async function selectSalebaseScript(tabId, option) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (wanted) => {
+        const dropdown = document.querySelector('#myDropdown');
+        if (!(dropdown instanceof HTMLSelectElement)) return false;
+        const match = Array.from(dropdown.options).find((item) => item.text.trim().toLowerCase() === wanted.toLowerCase());
+        if (!match || dropdown.value === match.value) return Boolean(match);
+        dropdown.value = match.value;
+        dropdown.dispatchEvent(new Event('input', { bubbles: true }));
+        dropdown.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      },
+      args: [option]
+    });
+  } catch (_error) {
+    // The tab may still be signing in or loading. The completed-load listener
+    // above retries without interrupting the rep's IMPACT workflow.
+  }
 }
 
 function makeLeadFingerprint(lead) {
