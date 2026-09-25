@@ -110,7 +110,7 @@ html[data-bg="sunset"], [data-bg-swatch="sunset"] { --page-bg: linear-gradient(1
 
 /* Display settings (settings-boot.js sets these on <html>) */
 html[data-hide-heads-up] .headsUp, html[data-hide-dnk] .quietHoursFlag { display:none; }
-html[data-text-size="large"] :is(.workspace,.calendarPage) { --text-zoom:1.15; }html[data-text-size="xlarge"] :is(.workspace,.calendarPage) { --text-zoom:1.3; }
+html[data-text-size="large"] :is(.workspace,.calendarPage,.home) { --text-zoom:1.15; }html[data-text-size="xlarge"] :is(.workspace,.calendarPage,.home) { --text-zoom:1.3; }
 .calendarPage { grid-template-columns:minmax(0, 1fr); }.calendarPage :is(.calCard,.calNotice) { zoom:var(--text-zoom, 1); }
 .workspace { grid-template-columns:minmax(0, 1fr); }.workspace .controls { grid-template-columns:repeat(2, minmax(0, 1fr)); }.workspace .controls button { overflow-wrap:break-word; hyphens:auto; }html[data-text-size] .workspace .controls { padding:16px 14px; }html[data-text-size] .workspace .controls button { padding:10px 6px; }
 .workspace :is(.bridgeSetup,.leadCard,.navControls,.pendingCallNotice,.controls,.appointmentPicker,.historyCard) { zoom:var(--text-zoom, 1); }
