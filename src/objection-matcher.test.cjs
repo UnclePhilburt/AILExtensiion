@@ -34,10 +34,13 @@ test('the extension offers a direct local English-pack install and detected brow
   assert.match(permissionPage, /navigator\.mediaDevices\.getUserMedia\(\{ audio: true \}\)/);
 });
 
-test('Salebase rebuttal lookup uses the saved phrase variants and div fallback', () => {
+test('Salebase rebuttal lookup uses the saved label and phrase variants in the existing script tab', () => {
   const worker = fs.readFileSync(path.join(__dirname, '../extension/src/background/service-worker.js'), 'utf8');
   assert.match(worker, /revealSalebaseRebuttal\(match\)/);
-  assert.match(worker, /args: \[match\.phrases\]/);
-  assert.match(worker, /document\.querySelectorAll\('body \*'\)/);
-  assert.match(worker, /chrome\.windows\.update\(opened\.tab\.windowId, \{ focused: true \}\)/);
+  assert.match(worker, /revealRebuttalInScriptTab\(chrome, match\)/);
+  const reveal = worker.slice(worker.indexOf('async function revealSalebaseRebuttal'), worker.indexOf('async function getPhoneCommand'));
+  assert.doesNotMatch(reveal, /tabs\.create|windows\.create|window\.open/);
+  const module = fs.readFileSync(path.join(__dirname, '../extension/src/background/salebase-rebuttal.js'), 'utf8');
+  assert.match(module, /label: match\?\.label \|\| '', phrases: match\?\.phrases \|\| \[\]/);
+  assert.doesNotMatch(module, /tabs\.create|windows\.create/);
 });

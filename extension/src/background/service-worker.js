@@ -5,14 +5,16 @@ import { cloudEnabled } from '../shared/cloud-sync.js';
 import { publishCloud, takeCloudCommand, reportCloudResult } from './cloud-desktop.js';
 import { SALEBASE_SCRIPTS_URL, salebaseOptionForRequestType } from './salebase-scripts.js';
 import { matchObjection } from './objection-matcher.js';
+import { findSalebaseTabs, findSalebaseScriptTabs, isSalebaseScriptUrl, revealRebuttalInScriptTab } from './salebase-rebuttal.js';
 
 let lastAutoPublishFingerprint = "";
 let lastAutoPublishAt = 0;
 let lastPublishedLead = null;
 let pendingSalebaseOption = '';
+let lastSalebaseOpenKey = '';
 let objectionListening = false;
 chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
-  if (change.status === 'complete' && tab.url?.startsWith(SALEBASE_SCRIPTS_URL) && pendingSalebaseOption) {
+  if (change.status === 'complete' && isSalebaseScriptUrl(tab.url) && pendingSalebaseOption) {
     void selectSalebaseScript(tabId, pendingSalebaseOption);
   }
 });
@@ -158,50 +160,35 @@ async function handleObjectionTranscript(transcript) {
   const match = matchObjection(transcript);
   if (!match) return;
   // Store only the matched rebuttal label, never the audio or full transcript.
-  await chrome.storage.local.set({ 'impact.lastObjection': { label: match.label, at: Date.now() } });
+  await chrome.storage.local.set({ 'impact.lastObjection': { label: match.label, at: Date.now(), status: 'looking' } });
   await revealSalebaseRebuttal(match);
 }
 
 async function revealSalebaseRebuttal(match) {
-  const tabs = (await chrome.tabs.query({ url: 'https://salebase.ai/phone_scripts/*' })).filter((tab) => tab.id);
-  if (!tabs.length) return;
-  const results = await Promise.all(tabs.map(async (tab) => {
-    try {
-      const [{ result }] = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-      func: (phrases) => {
-        const compact = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        const wanted = phrases.map(compact).filter((value) => value.length > 5);
-        // Salebase uses regular div panels for some rebuttals. Find the
-        // smallest text element containing a saved phrase, then let its click
-        // bubble to the panel's own handler if it has one.
-        const candidates = [...document.querySelectorAll('body *')].filter((element) => {
-          const text = compact(element.textContent);
-          return wanted.some((phrase) => text.includes(phrase));
-        }).sort((a, b) => (a.textContent || '').length - (b.textContent || '').length);
-        const target = candidates[0];
-        if (!target) return false;
-        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        const interactive = target.closest('button, a, summary, [role="button"], [onclick]');
-        (interactive || target).click();
-        const details = target.closest('details');
-        if (details) details.open = true;
-        return true;
-      },
-        args: [match.phrases]
-      });
-      return { tab, found: result === true };
-    } catch (_error) { return { tab, found: false }; }
-  }));
-  const opened = results.find((item) => item.found);
-  // The rebuttal and its lead script live together. Make that exact Salebase
-  // window visible so the rep sees the opened response immediately.
-  if (opened?.tab.id && opened.tab.windowId != null) {
-    try {
-      await chrome.windows.update(opened.tab.windowId, { focused: true });
-      await chrome.tabs.update(opened.tab.id, { active: true });
-    } catch (_error) { /* A closed popup does not interrupt calling. */ }
+  // Rebuttals are panels on the Salebase script page. Open the matching panel
+  // in the rep's existing script tab; never open a new tab or window for it.
+  let result;
+  try {
+    result = await revealRebuttalInScriptTab(chrome, match);
+  } catch (error) {
+    result = { status: 'error', message: `Could not open the rebuttal: ${error.message}` };
   }
+  await chrome.storage.local.set({
+    'impact.lastObjection': { label: match.label, at: Date.now(), status: result.status, message: result.message }
+  });
+  await appendLocalLog(result.status === 'opened' ? 'info' : 'warn', 'salebase.rebuttal', {
+    label: match.label,
+    status: result.status,
+    message: result.message,
+    tabId: result.tabId ?? null,
+    url: result.url || null,
+    tabsSeen: result.tabsSeen || [],
+    probe: result.probe || null,
+    closedTabs: result.closedTabs || [],
+    // What the content script saw on the page, so a mismatch can be diagnosed.
+    page: result.detail || null
+  });
+  return result;
 }
 
 async function getPhoneCommand(senderTab) {
@@ -297,7 +284,7 @@ async function publishLead(lead, options = {}) {
     throw new Error("No lead payload available to send.");
   }
   lastPublishedLead = structuredClone(lead);
-  void openMatchingSalebaseScript(lead.requestType);
+  void openMatchingSalebaseScript(lead.requestType, lead.leadId || lead.leadName || '');
   if (await cloudEnabled()) return publishCloud(lead);
 
   const result = await chrome.storage.local.get([
@@ -337,29 +324,41 @@ async function publishLead(lead, options = {}) {
   return response.json();
 }
 
-async function openMatchingSalebaseScript(requestType) {
+async function openMatchingSalebaseScript(requestType, leadKey = '') {
   const option = salebaseOptionForRequestType(requestType);
   if (!option) return;
   pendingSalebaseOption = option;
-  const tabs = await chrome.tabs.query({ url: 'https://salebase.ai/phone_scripts/*' });
+  const tabs = await findSalebaseScriptTabs(chrome);
   if (tabs.length) {
-    await Promise.all(tabs.filter((tab) => tab.id).map((tab) => selectSalebaseScript(tab.id, option)));
+    await Promise.all(tabs.map((tab) => selectSalebaseScript(tab.id, option)));
     return;
   }
+
+  // The same lead is re-published often (every 30 seconds, and whenever the
+  // IMPACT tab becomes visible again, e.g. after a rebuttal focused Salebase).
+  // Only try to open a script window once per lead so re-publishing can never
+  // keep adding Salebase tabs.
+  const openKey = `${leadKey}|${option}`;
+  if (openKey === lastSalebaseOpenKey) return;
+  lastSalebaseOpenKey = openKey;
+  const saved = await chrome.storage.session.get('impact.salebaseOpenKey').catch(() => ({}));
+  if (saved['impact.salebaseOpenKey'] === openKey) return; // Survives a service-worker restart.
+  await chrome.storage.session.set({ 'impact.salebaseOpenKey': openKey }).catch(() => {});
 
   // Salebase opens Phone Scripts in its own window from the dashboard. Use
   // that control when available so the rep sees the same script window they
   // would open themselves. The tabs.onUpdated listener above applies the
   // selected script as soon as that window finishes loading.
+  const before = new Set((await findSalebaseTabs(chrome)).map((tab) => tab.id));
   const dashboards = await chrome.tabs.query({ url: 'https://salebase.ai/dashboard/*' });
   const [dashboard] = dashboards.filter((tab) => tab.id);
   if (dashboard?.id && await clickSalebaseCallLink(dashboard.id)) {
     // A slow popup or a browser that blocks the dashboard's window.open
     // falls back to the script page without delaying the IMPACT workflow.
-    setTimeout(() => { void openSalebaseFallback(option); }, 1800);
+    setTimeout(() => { void openSalebaseFallback(option, before); }, 1800);
     return;
   }
-  await openSalebaseFallback(option);
+  await openSalebaseFallback(option, before);
 }
 
 async function clickSalebaseCallLink(tabId) {
@@ -379,13 +378,20 @@ async function clickSalebaseCallLink(tabId) {
   }
 }
 
-async function openSalebaseFallback(option) {
-  const tabs = await chrome.tabs.query({ url: 'https://salebase.ai/phone_scripts/*' });
-  if (!tabs.length) {
-    await chrome.tabs.create({ url: SALEBASE_SCRIPTS_URL, active: false });
+async function openSalebaseFallback(option, before = new Set()) {
+  const tabs = await findSalebaseScriptTabs(chrome);
+  if (tabs.length) {
+    await Promise.all(tabs.map((tab) => selectSalebaseScript(tab.id, option)));
     return;
   }
-  await Promise.all(tabs.filter((tab) => tab.id).map((tab) => selectSalebaseScript(tab.id, option)));
+  // If the dashboard's Call link already opened a Salebase window (even at a
+  // URL we do not recognise), use it instead of adding another tab.
+  const opened = (await findSalebaseTabs(chrome)).filter((tab) => !before.has(tab.id));
+  if (opened.length) {
+    await Promise.all(opened.map((tab) => selectSalebaseScript(tab.id, option)));
+    return;
+  }
+  await chrome.tabs.create({ url: SALEBASE_SCRIPTS_URL, active: false });
 }
 
 async function selectSalebaseScript(tabId, option) {
