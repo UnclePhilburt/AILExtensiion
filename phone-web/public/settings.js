@@ -8,7 +8,8 @@ const BACK = {
   workspace: ['workspace.html', '← Workspace'],
   'workspace-local': ['workspace.html?mode=local', '← Workspace'],
   home: ['./', '← Home'],
-  statistics: ['statistics.html', '← Statistics']
+  statistics: ['statistics.html', '← Statistics'],
+  calendar: ['calendar.html', '← Calendar']
 };
 const [backHref, backLabel] = BACK[new URLSearchParams(location.search).get('from')] || BACK.workspace;
 const back = document.querySelector('#settingsBack');

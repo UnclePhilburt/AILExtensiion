@@ -22,6 +22,12 @@ Real phone/Brave call handoff still needs the user's end-to-end check.
    lead from expiring while IMPACT sits on "Call - What Happened?" and the
    computer is still checking in. The 30-minute cleanup now counts from when
    the computer last checked in.
+   Then run `006`-`008` if you haven't, and `009_scheduled_events.sql` for the
+   phone Calendar. 009 adds the `scheduled_events` table (own rows only) and
+   the `companion_save_schedule` function, and schedules the
+   `companion-calendar-retention` job, which deletes entries 30 days after
+   their date. Until 009 is run, the Calendar page says "Calendar storage
+   isn't set up yet"; the rest of the app is not affected.
 4. Invite each account under Authentication > Users. Disable public signup.
    Set the Site URL and allowed redirect to
    `https://unclephilburt.github.io/AILExtensiion/account.html`.

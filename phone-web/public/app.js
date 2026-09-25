@@ -4,6 +4,7 @@ import { NETWORK_MESSAGE, SIGN_IN_MESSAGE, RESULT_COMMANDS, checkBeforeSend, isS
 import { buildHeadsUp, splitHistory, localTimeNote } from './lead-highlights.js';
 import { doNotKnockWarning } from './lead-rules.js';
 import { loadPhoneSettings } from './settings-store.js';
+import { saveLeadSchedule, saveAppointmentChoice } from './calendar-sync.js';
 import { createPendingCall, readPendingCall, writePendingCall, pendingCallDecision, markPendingCallResult, isCallResultCommand } from './pending-call.js';
 const statusEl = document.querySelector("#status");
 const leadCard = document.querySelector("#leadCard");
@@ -67,6 +68,7 @@ if (useCloud) document.querySelector('#bridgeSetup').hidden = true;
 document.querySelector('#connectionModeLabel').textContent = useCloud ? 'Cloud connection' : 'Local connection';
 if (!useCloud) document.querySelector('.accountLink').href = 'account.html?mode=local';
 if (!useCloud) document.querySelector('.settingsLink').href = 'settings.html?from=workspace-local';
+if (!useCloud) document.querySelector('.calendarLink').href = 'calendar.html?from=workspace-local';
 
 persistBridgeSettings();
 
@@ -351,6 +353,9 @@ function receiveBridgeLead(lead, updatedAt) {
   // Preload and contact updates can arrive without changing the lead's identity.
   displayedLead = lead;
   applyPendingCall(nextKey);
+  // Calendar (Cloud mode only; Local mode keeps lead data off the cloud): save the
+  // lead's scheduled appointment/callback. Never blocks or breaks the Workspace.
+  if (useCloud) void saveLeadSchedule(lead).catch(() => {});
 
   renderLead(displayedLead, updatedAt, displayedLead === bridgeLead ? "bridge" : "local");
 }
@@ -692,9 +697,10 @@ function renderAppointmentPicker(lead) {
     button.type = "button";
     button.textContent = time;
     button.disabled = !ready || !lead.leadId;
-    button.addEventListener("click", () => void sendCallResult("virtual-appointment-slot", {
-      dayId: selectedDay.id, time
-    }));
+    button.addEventListener("click", async () => {
+      const sent = await sendCallResult("virtual-appointment-slot", { dayId: selectedDay.id, time });
+      if (sent && useCloud) void saveAppointmentChoice(lead, selectedDay.label, time).catch(() => {});
+    });
     appointmentTimes.append(button);
   }
 }

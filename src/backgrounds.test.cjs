@@ -81,7 +81,7 @@ test('the boot script applies a saved background before paint and ignores junk',
 });
 
 test('the old slide-up panel is gone; pages load the boot script first and link to settings.html', () => {
-  for (const page of ['index.html', 'workspace.html', 'statistics.html', 'settings.html']) {
+  for (const page of ['index.html', 'workspace.html', 'statistics.html', 'settings.html', 'calendar.html']) {
     assert.match(read(page), /<script src="settings-boot\.js"><\/script><link rel="stylesheet" href="styles\.css">/, page);
     assert.doesNotMatch(read(page), /data-open-settings|background-boot|phone-settings/, page);
   }
@@ -89,7 +89,7 @@ test('the old slide-up panel is gone; pages load the boot script first and link 
   assert.match(read('statistics.html'), /<a class="settingsLink" href="settings\.html\?from=statistics">/);
   const workspace = read('workspace.html');
   const header = workspace.slice(workspace.indexOf('<header>'), workspace.indexOf('</header>'));
-  assert.match(header, /<div class="headerLinks"><a class="accountLink"[^>]*>Your account →<\/a><a class="settingsLink" href="settings\.html\?from=workspace">/, 'Settings sits under Your account in the header');
+  assert.match(header, /<div class="headerLinks"><a class="accountLink"[^>]*>Your account →<\/a><a class="calendarLink" href="calendar\.html\?from=workspace">.*?Calendar<\/a><a class="settingsLink" href="settings\.html\?from=workspace">/, 'Calendar and Settings sit under Your account in the header');
   assert.equal(workspace.match(/settings\.html/g).length, 1, 'no settings entry point in the lead area');
   assert.doesNotMatch(read('styles.css'), /settingsSheet|titleRow/);
   assert.doesNotMatch(read('workspace-entry.js') + read('phone-entry.js'), /phone-settings/);
