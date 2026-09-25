@@ -1,44 +1,63 @@
-.calendarPage { max-width:560px; gap:16px; padding-top:30px; }
-.calendarPage header { padding:4px 5px 14px; }
-.calendarPage .backLink { display:inline-block; margin-bottom:22px; color:#c8eddb; font-size:14px; font-weight:650; text-decoration:none; }
-.calendarPage h1 { margin:6px 0 8px; }
-.calendarPage .statsStatus { color:#c2d9d2; min-height:19px; font-size:13px; }
-.calNotice { display:grid; gap:6px; padding:17px 19px; border:1px solid #ecd3a4; border-left:5px solid #d49534; border-radius:16px; background:#fff7e8; color:#5b4418; font-size:13px; line-height:1.45; }
-.calNotice strong { font-size:15px; color:#6b4a0f; }.calNotice code { font-size:12px; overflow-wrap:anywhere; }
-.calCard { display:grid; gap:10px; padding:19px; border-radius:20px; background:#fff; border:1px solid #dce6df; box-shadow:0 8px 28px #173d3710; min-width:0; }
-.calCardHead .eyebrow { color:#5d806d; }.calCardHead h2 { color:#173e38; font-size:20px; margin-top:4px; }
+/* Calendar: calm cards on the shared band (styles.css: .wsBand, .wsHeader,
+   .wsBody, .calmCard). Soft tints instead of hard borders; today and days with
+   entries are marked clearly but gently. */
+.calCard { display:grid; gap:12px; padding:20px 18px; min-width:0; }
+.calCardHead .eyebrow, .calMonth .eyebrow { color:#6b8a7b; }
+.calCardHead h2 { margin-top:5px; color:#173e38; font-size:20px; font-weight:650; letter-spacing:-.3px; }
 .calCardHeadRow { display:flex; justify-content:space-between; align-items:center; gap:12px; }
-.calCard button { min-height:38px; padding:6px 12px; border-radius:10px; font-size:12px; }
+.calCard button { min-height:38px; padding:6px 14px; font-size:12.5px; font-weight:650; }
+
+/* Month grid */
 .calMonthHead { display:flex; justify-content:space-between; align-items:center; gap:8px; }
-.calMonthHead h2 { color:#173e38; font-size:19px; }
-.calMonthHead button { width:42px; min-height:42px; padding:0; font-size:22px; line-height:1; }
+.calMonthHead h2 { color:#173e38; font-size:19px; font-weight:650; letter-spacing:-.2px; text-align:center; }
+.calMonthHead button { display:grid; place-items:center; width:42px; min-height:42px; padding:0 0 3px; border-radius:50%; font-size:22px; line-height:1; }
 .calWeekdays,.calGrid { display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:4px; text-align:center; }
-.calWeekdays span { color:#7a8c84; font-size:11px; font-weight:750; }
-.calCard .calDay { position:relative; display:grid; justify-items:center; align-content:start; gap:3px; min-height:48px; padding:6px 0 5px; border:1px solid transparent; border-radius:11px; background:transparent; color:#253d36; font-size:14px; font-weight:650; }
-.calDay.outside { color:#a9b6b0; }
-.calDay.today .calDayNumber { display:grid; place-items:center; width:26px; height:26px; margin-top:-3px; border-radius:50%; background:#17684e; color:#fff; }
-.calCard .calDay.selected { border-color:#17684e; background:#e9f4ee; }
+.calWeekdays span { color:#8a9c94; font-size:11px; font-weight:650; letter-spacing:.5px; }
+.calCard .calDay { position:relative; display:grid; justify-items:center; align-content:start; gap:4px; min-height:48px; padding:6px 0 5px; border:0; border-radius:14px; background:transparent; box-shadow:none; color:#2b463e; font-size:14px; font-weight:550; }
+.calCard .calDay:not(:disabled):active { transform:none; filter:none; background:#f1f6f3; }
+.calDayNumber { display:grid; place-items:center; width:28px; height:28px; margin-top:-3px; border-radius:50%; }
+.calCard .calDay.outside { color:#b3c0ba; }
+.calCard .calDay:has(.dot) { color:#173e38; font-weight:700; }
+.calCard .calDay.today .calDayNumber { background:#dcefe5; color:#17684e; font-weight:750; box-shadow:0 0 0 1.5px #9fcfb8; }
+.calCard .calDay.selected { background:#f0f7f3; box-shadow:inset 0 0 0 1.5px #b9dcc9; }
+.calCard .calDay.today.selected .calDayNumber { background:#2f7d60; color:#fff; box-shadow:none; }
 .calDots { display:flex; gap:3px; height:6px; }
 .dot { display:inline-block; width:6px; height:6px; border-radius:50%; }
-.dot.appointment { background:#17684e; }.dot.callback { background:#d49534; }
-.calLegend { display:flex; align-items:center; gap:6px; color:#5f716a; font-size:12px; }.calLegend .dot + * { margin-right:8px; }
+.dot.appointment { background:#45a080; }.dot.callback { background:#e2a64e; }
+.calLegend { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding-top:10px; border-top:1px solid #eef2ef; color:#6b8076; font-size:12px; }
+.calLegend .dot + * { margin-right:8px; }
 .calLegend .dot.callback { margin-left:10px; }
 .calLegend button { margin-left:auto; }
-.calList { display:grid; gap:9px; }
-.calEmpty { color:#6b7d73; font-size:13px; padding:4px 0; }
-.calDayLabel { margin:8px 0 0; color:#40584f; font-size:12px; font-weight:800; letter-spacing:.4px; text-transform:uppercase; }
+
+/* Day and 14-day lists */
+.calList { display:grid; gap:10px; }
+.calEmpty { padding:6px 2px; color:#6f857b; font-size:13.5px; line-height:1.45; }
+.calDayLabel { margin:10px 2px 0; color:#6b8a7b; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; }
 .calDayLabel:first-child { margin-top:0; }
-.calEvent { display:grid; grid-template-columns:70px minmax(0, 1fr); gap:10px; padding:12px 12px 12px 11px; border:1px solid #dce6df; border-left:5px solid; border-radius:13px; background:#f7faf8; }
-.calEvent.appointment { border-left-color:#17684e; background:#eef7f2; }
-.calEvent.callback { border-left-color:#d49534; background:#fff8ea; }
-.calEvent.past { opacity:.55; }
+.calEvent { display:grid; grid-template-columns:70px minmax(0, 1fr); gap:10px; padding:13px 14px 13px 15px; border:0; border-radius:16px; background:#f4f7f5; }
+.calEvent.appointment { background:#eef7f2; box-shadow:inset 3px 0 0 #9fcfb8; }
+.calEvent.callback { background:#fdf6ea; box-shadow:inset 3px 0 0 #ecc98a; }
+.calEvent.past { opacity:.6; }
 .calTime { display:grid; align-content:start; gap:2px; }
-.calTime strong { color:#1f3531; font-size:15px; }
-.calTime small { color:#6b7d73; font-size:11px; line-height:1.3; }
+.calTime strong { color:#1f3a33; font-size:15px; font-weight:650; }
+.calTime small { color:#6f857b; font-size:11px; line-height:1.3; }
 .calBody { display:grid; gap:3px; min-width:0; }
-.calKind { font-size:10px; font-weight:800; letter-spacing:.9px; text-transform:uppercase; }
-.appointment .calKind { color:#17684e; }.callback .calKind { color:#9a6515; }
-.calName { color:#163c37; font-size:16px; overflow-wrap:anywhere; }
-.calMeta,.calAddress { color:#4f625b; font-size:13px; line-height:1.35; overflow-wrap:anywhere; }
-.calPhone { justify-self:start; margin:3px 0 1px; padding:6px 11px; border-radius:9px; background:#17684e; color:#fff; font-size:14px; font-weight:700; text-decoration:none; white-space:nowrap; }
-.calFootnote { color:var(--page-ink); font-size:12px; line-height:1.5; padding:0 5px 10px; }
+.calKind { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; }
+.appointment .calKind { color:#2c7556; }.callback .calKind { color:#976519; }
+.calName { color:#173e38; font-size:16px; font-weight:650; overflow-wrap:anywhere; }
+.calMeta,.calAddress { color:#587068; font-size:13px; line-height:1.4; overflow-wrap:anywhere; }
+.calPhone { justify-self:start; max-width:100%; margin:4px 0 2px; padding:7px 13px; border-radius:999px; background:linear-gradient(135deg, #1c7658, #145c45); color:#fff; font-size:14px; font-weight:650; text-decoration:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; box-shadow:0 4px 12px #17684e24; -webkit-tap-highlight-color:transparent; }
+
+/* Storage not set up yet: a calm, informative card, not an error */
+.calNotice { display:grid; grid-template-columns:40px minmax(0, 1fr); column-gap:14px; row-gap:4px; align-items:start; padding:18px; color:#587068; font-size:13.5px; line-height:1.5; }
+.calNoticeIcon { grid-row:1 / span 2; display:grid; place-items:center; width:40px; height:40px; border-radius:14px; background:#eaf4ee; color:#2c7556; }
+.calNoticeIcon::before { content:""; width:20px; height:20px; background:currentColor; -webkit-mask:var(--cal-icon) center / contain no-repeat; mask:var(--cal-icon) center / contain no-repeat; }
+.calNotice strong { align-self:center; color:#173e38; font-size:15.5px; font-weight:650; }
+.calNotice code { padding:1px 5px; border-radius:6px; background:#f1f5f2; color:#40584f; font-size:12px; overflow-wrap:anywhere; }
+.calendarPage { --cal-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='3'/%3E%3Cpath d='M16 2v4M8 2v4M3 10h18'/%3E%3C/svg%3E"); }
+
+.calFootnote { padding:2px 8px 6px; color:var(--page-ink); font-size:12px; line-height:1.55; }
+
+@media (max-width: 360px) { .calCard { padding:18px 12px; } .calEvent { grid-template-columns:68px minmax(0, 1fr); gap:8px; padding:12px 11px 12px 13px; } .calTime strong { font-size:14px; white-space:nowrap; } }
+/* Large text on a phone: time above the details so names, numbers and addresses keep the full width */
+@media (max-width: 440px) { html[data-text-size] .calEvent { grid-template-columns:minmax(0, 1fr); gap:6px; } html[data-text-size] .calTime { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 8px; } }
