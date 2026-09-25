@@ -6,6 +6,7 @@ import { doNotKnockWarning } from './lead-rules.js';
 import { loadPhoneSettings } from './settings-store.js';
 import { saveLeadSchedule, saveAppointmentChoice } from './calendar-sync.js';
 import { encourageLead, encourageResult } from './encouragement-ui.js';
+import { leadTransitionKind, snapshotLeadCard, playLeadTransition } from './lead-transition.js';
 import { createPendingCall, readPendingCall, writePendingCall, pendingCallDecision, markPendingCallResult, isCallResultCommand } from './pending-call.js';
 const statusEl = document.querySelector("#status");
 const leadCard = document.querySelector("#leadCard");
@@ -54,6 +55,10 @@ let navPending = null;
 // "How did it go?" controls for the lead that was called.
 let currentUserId = "";
 let pendingCall = null;
+// Lead-change animation (presentation only, see lead-transition.js): the last
+// lead shown on the card and the Next/Previous tap that may explain a change.
+let lastShownLeadKey = "";
+let navIntent = null;
 
 const savedBridgeUrl = localStorage.getItem("impact.bridgeUrl") || "";
 const savedBridgeToken = localStorage.getItem("impact.bridgeToken") || "";
@@ -341,6 +346,9 @@ function receiveBridgeLead(lead, updatedAt) {
   }
 
   const nextKey = getLeadKey(lead);
+  // Decided here, played after the render; state below updates immediately either way.
+  const transition = leadTransitionKind(lastShownLeadKey, nextKey, navIntent, Date.now());
+  if (nextKey !== lastShownLeadKey) { lastShownLeadKey = nextKey; navIntent = null; }
   if (!displayedLead || nextKey !== displayedLeadKey) {
     displayedLead = lead;
     displayedLeadKey = nextKey;
@@ -356,7 +364,7 @@ function receiveBridgeLead(lead, updatedAt) {
   // lead's scheduled appointment/callback. Never blocks or breaks the Workspace.
   if (useCloud) void saveLeadSchedule(lead).catch(() => {});
 
-  renderLead(displayedLead, updatedAt, displayedLead === bridgeLead ? "bridge" : "local");
+  renderLead(displayedLead, updatedAt, displayedLead === bridgeLead ? "bridge" : "local", transition);
   // Header encouragement line: a fresh one only when the lead itself changes.
   encourageLead(nextKey);
 }
@@ -399,7 +407,7 @@ async function sendCallResult(type, details = {}) {
     return false;
   }
   const sent = await sendComputerCommand(type, { ...details, leadId: call.leadId });
-  if (sent) tapAccepted();
+  if (sent) { tapAccepted(); navIntent = null; }
   // A short, gentle message for No Answer / Refused / an appointment set (Settings can turn it off).
   if (sent) encourageResult(type);
   if (sent && isCallResultCommand(type) && pendingCall === call) setPendingCall(markPendingCallResult(call, Date.now()));
@@ -442,12 +450,14 @@ async function sendNavigation(type) {
   if (navigationPending()) { showFeedback("Still waiting for IMPACT to move. One moment…"); return; }
   const pending = { until: Date.now() + 10000 };
   navPending = pending;
+  navIntent = { type, at: Date.now() };
   updateNavButtons();
   const sent = await sendComputerCommand(type);
   if (sent) tapAccepted();
   if (navPending !== pending) return;
   if (!sent) {
     navPending = null;
+    navIntent = null;
     updateNavButtons();
     if (useCloud) void refreshCloud();
     return;
@@ -456,6 +466,7 @@ async function sendNavigation(type) {
   for (const delay of [700, 1800, 4000]) setTimeout(() => { if (navPending === pending) void refreshLead(); }, delay);
   setTimeout(() => {
     if (navPending !== pending) return;
+    navIntent = null;
     clearNavigationPending();
     if (!document.hidden) showFeedback(`IMPACT didn't move to the ${type === "next" ? "next" : "previous"} lead. Check IMPACT on your computer, then try again.`, "error");
   }, 10100);
@@ -527,7 +538,7 @@ function expectComputerResult(type) {
   }, 16000);
 }
 
-function renderLead(lead, updatedAt, source) {
+function renderLead(lead, updatedAt, source, transition = "") {
   renderCallHistory(lead);
   renderAppointmentPicker(lead);
   if (!lead?.available) {
@@ -545,6 +556,7 @@ function renderLead(lead, updatedAt, source) {
     : source === "local"
       ? "Loaded from phone preload."
       : "Lead loaded.";
+  const outgoing = transition ? safely(() => snapshotLeadCard(leadCard)) : null;
   leadCard.className = "leadCard";
   leadCard.replaceChildren();
 
@@ -617,6 +629,12 @@ function renderLead(lead, updatedAt, source) {
   }
   leadCard.append(phoneList);
   updateNavButtons();
+  // The new lead is fully rendered and tappable; the animation only decorates it.
+  if (transition) safely(() => playLeadTransition(leadCard, transition, outgoing));
+}
+
+function safely(fn) {
+  try { return fn(); } catch (_error) { return null; }
 }
 
 // Things to know before dialing (upcoming appointment, callback, bad number,

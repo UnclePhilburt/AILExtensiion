@@ -8,6 +8,7 @@ const phoneActionsSource=read('phone-actions.js').replace(/^export /gm,'');
 const leadHighlightsSource=(require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/time-zone.js'),'utf8')+'\n'+require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/lead-highlights.js'),'utf8')).replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
 const leadRulesSource=read('lead-rules.js').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
 const settingsStoreSource=require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/settings-store.js'),'utf8').replace(/^export /gm,'');
+const leadTransitionSource=require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/lead-transition.js'),'utf8').replace(/^export /gm,'');
 const pendingCallSource=read('pending-call.js').replace(/^export /gm,'');
 const appSource=read('app.js').replace(/^import .*;\r?\n/gm,'');
 const MIN=60000;
@@ -45,7 +46,7 @@ async function loadPage(server,globals={}){
     URLSearchParams, Date:FakeDate, JSON, crypto:require('node:crypto'), structuredClone,
     setInterval(){}, setTimeout:(fn,ms)=>{timers.push({fn,ms});return timers.length;}, clearTimeout(){}, console, ...globals
   });
-  vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context); vm.runInContext(leadHighlightsSource,context); vm.runInContext(leadRulesSource,context); vm.runInContext(settingsStoreSource,context);
+  vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context); vm.runInContext(leadHighlightsSource,context); vm.runInContext(leadRulesSource,context); vm.runInContext(settingsStoreSource,context); vm.runInContext(leadTransitionSource,context);
   const app=await vm.runInContext(`(async()=>{${appSource}\nreturn {refreshCloud};})()`,context);
   authChanged('SIGNED_IN',auth.session);
   await settle();
