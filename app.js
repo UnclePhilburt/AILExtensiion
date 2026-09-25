@@ -8,6 +8,7 @@ import { saveLeadSchedule, saveAppointmentChoice } from './calendar-sync.js';
 import { encourageLead, encourageResult } from './encouragement-ui.js';
 import { leadTransitionKind, snapshotLeadCard, playLeadTransition } from './lead-transition.js';
 import { createPendingCall, readPendingCall, writePendingCall, pendingCallDecision, markPendingCallResult, isCallResultCommand } from './pending-call.js';
+import { findBestCallingTime } from './timing-insights.js';
 const statusEl = document.querySelector("#status");
 const leadCard = document.querySelector("#leadCard");
 const bridgeUrlInput = document.querySelector("#bridgeUrl");
@@ -59,6 +60,8 @@ let pendingCall = null;
 // lead shown on the card and the Next/Previous tap that may explain a change.
 let lastShownLeadKey = "";
 let navIntent = null;
+let timingOutcomes = null;
+let timingOutcomesFetchedAt = 0;
 
 const savedBridgeUrl = localStorage.getItem("impact.bridgeUrl") || "";
 const savedBridgeToken = localStorage.getItem("impact.bridgeToken") || "";
@@ -95,6 +98,8 @@ client.auth.onAuthStateChange((_event, session) => {
   const userId = signedIn ? String(session.user?.id || "") : "";
   if (userId !== currentUserId) {
     currentUserId = userId;
+    timingOutcomes = null;
+    timingOutcomesFetchedAt = 0;
     pendingCall = userId ? readPendingCall(localStorage, userId, Date.now()) : null;
   }
   if (!signedIn) {
@@ -581,6 +586,7 @@ function renderLead(lead, updatedAt, source, transition = "") {
   name.textContent = lead.leadName || "Current lead";
   leadCard.append(name);
   renderHeadsUp(lead);
+  renderTimingInsight(lead);
 
   // English is the usual case, so only spend screen space on language when
   // the caller needs to know something different.
@@ -775,6 +781,45 @@ function renderComments(comments) {
     section.append(note);
   }
   leadCard.append(section);
+}
+
+function renderTimingInsight(lead) {
+  if (!useCloud) return;
+  const leadKey = getLeadKey(lead);
+  const section = document.createElement("section");
+  section.className = "timingInsight learning";
+  section.setAttribute("aria-label", "Personal calling-time insight");
+  const label = document.createElement("span");
+  label.className = "timingInsightLabel";
+  const detail = document.createElement("p");
+  label.textContent = "PERSONAL CALLING INSIGHT";
+  detail.textContent = "Learning your best calling times from completed calls.";
+  section.append(label, detail);
+  leadCard.append(section);
+  void loadTimingInsight(lead, leadKey, section, detail);
+}
+
+async function loadTimingInsight(lead, leadKey, section, detail) {
+  try {
+    if (!timingOutcomes || Date.now() - timingOutcomesFetchedAt > 10 * 60 * 1000) {
+      const since = new Date();
+      since.setDate(since.getDate() - 180);
+      const { data, error } = await client.from("companion_call_outcomes")
+        .select("outcome,request_type,local_hour,created_at")
+        .gte("created_at", since.toISOString());
+      if (error) throw error;
+      timingOutcomes = data || [];
+      timingOutcomesFetchedAt = Date.now();
+    }
+    if (getLeadKey(displayedLead) !== leadKey || !section.isConnected) return;
+    const insight = findBestCallingTime(timingOutcomes, lead.requestType);
+    if (!insight) return;
+    section.classList.remove("learning");
+    detail.textContent = `${insight.timeLabel} has been your strongest window for ${insight.scope}: ${insight.reached} reached out of ${insight.total} completed calls (${insight.rate}%).`;
+  } catch (_error) {
+    // This is optional guidance. A connection or setup issue must never block a lead.
+    section.hidden = true;
+  }
 }
 
 function getLeadKey(lead) {

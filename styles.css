@@ -51,6 +51,11 @@ h1 { font-size: 32px; font-weight: 650; letter-spacing: -1px; margin: 5px 0 8px;
 .leadNotes { display:grid; gap:6px; margin:12px 0 0; padding:11px 13px; border:1px solid #d7e6dc; border-left:4px solid #71a58c; border-radius:11px; background:#f7fbf8; color:#344b42; }
 .leadNotesHeading { color:#4a7461; font-size:10px; font-weight:800; letter-spacing:1px; }
 .leadNotes p { font-size:13px; line-height:1.45; overflow-wrap:anywhere; }
+.timingInsight { display:grid; gap:4px; margin:0 0 17px; padding:11px 13px; border:1px solid #b9d6c5; border-left:4px solid #17684e; border-radius:11px; background:#eff8f2; color:#315443; }
+.timingInsight.learning { border-color:#dce6df; border-left-color:#91aaa0; background:#f8faf9; color:#61736b; }
+.timingInsightLabel { color:#17684e; font-size:10px; font-weight:800; letter-spacing:1px; }
+.timingInsight.learning .timingInsightLabel { color:#688077; }
+.timingInsight p { font-size:13px; line-height:1.4; overflow-wrap:anywhere; }
 .phoneList { display: grid; gap: 10px; margin-top: 23px; }
 .callLink { display: flex; align-items: center; gap: 14px; padding: 16px 19px; min-height: 76px; border-radius: 14px; background: #17684e; color: white; text-decoration: none; box-shadow: 0 4px 10px #17684e15; touch-action: manipulation; }
 .callIcon { display: grid; place-items: center; width: 39px; height: 39px; border-radius: 50%; background: #ffffff18; font-size: 23px; flex-shrink: 0; }
