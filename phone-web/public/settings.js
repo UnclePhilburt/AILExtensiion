@@ -75,7 +75,9 @@ textSize.addEventListener('change', (event) => {
 });
 
 const organization = document.querySelector('#organization');
-for (const item of ORGANIZATIONS) {
+// Options are also present in the HTML so the control is usable even before
+// this script has loaded on a slow or cached phone connection.
+if (!organization.options.length) for (const item of ORGANIZATIONS) {
   const option = document.createElement('option');
   option.value = item.id;
   option.textContent = item.label;
