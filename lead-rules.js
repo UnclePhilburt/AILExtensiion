@@ -5,42 +5,11 @@
 // zone (Options > IMPACT time zone, default Eastern) as lead.impactTimeZone,
 // and lead.quietHoursNoticeAt when IMPACT itself shows its after-8 PM notice.
 
-export const DEFAULT_IMPACT_TIME_ZONE = 'America/New_York';
+import { validTimeZone, localTimeZone, zonedParts, zonedInstant, timeZoneName } from './time-zone.js';
+
 export const QUIET_START_HOUR = 20; // 8 PM in IMPACT's time zone
 export const QUIET_END_HOUR = 6;    // until 6 AM the next morning
 const NOTICE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
-
-export function validTimeZone(timeZone, fallback = DEFAULT_IMPACT_TIME_ZONE) {
-  if (!timeZone || typeof timeZone !== 'string') return fallback;
-  try { new Intl.DateTimeFormat('en-US', { timeZone }); return timeZone; } catch (_error) { return fallback; }
-}
-
-export function localTimeZone() {
-  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (_error) { return 'UTC'; }
-}
-
-// Wall-clock fields of an instant in a time zone.
-export function zonedParts(date, timeZone) {
-  const parts = {};
-  for (const part of new Intl.DateTimeFormat('en-US', {
-    timeZone, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric'
-  }).formatToParts(date)) parts[part.type] = Number(part.value);
-  return { year: parts.year, month: parts.month, day: parts.day, hour: parts.hour % 24, minute: parts.minute };
-}
-
-// The instant when it is `hour`:00 in `timeZone` on that zone's calendar day of `date`.
-export function zonedInstant(date, timeZone, hour) {
-  const { year, month, day } = zonedParts(date, timeZone);
-  let guess = Date.UTC(year, month - 1, day, hour);
-  for (let i = 0; i < 3; i++) {
-    const p = zonedParts(new Date(guess), timeZone);
-    const shown = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute);
-    const wanted = Date.UTC(year, month - 1, day, hour);
-    if (shown === wanted) break;
-    guess += wanted - shown;
-  }
-  return new Date(guess);
-}
 
 export function isQuietHours(now, timeZone) {
   const { hour } = zonedParts(now, timeZone);
@@ -54,14 +23,6 @@ export function quietHoursNoticeActive(noticeAt, now, timeZone) {
   if (!Number.isFinite(at) || at > now.getTime() + 60000 || now.getTime() - at > NOTICE_MAX_AGE_MS) return false;
   const { hour } = zonedParts(now, timeZone);
   return !(hour >= QUIET_END_HOUR && hour < 17);
-}
-
-export function timeZoneName(timeZone, date = new Date()) {
-  try {
-    const name = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'long' })
-      .formatToParts(date).find((part) => part.type === 'timeZoneName')?.value || timeZone;
-    return name.replace(/\s+(Daylight|Standard)\s+Time$/i, '').replace(/\s+Time$/i, '');
-  } catch (_error) { return timeZone; }
 }
 
 function shortTime(date, timeZone) {
