@@ -110,6 +110,12 @@ $('#objectionListening').addEventListener('change', async (event) => {
     renderListener(false, error.message || 'Could not start local listening.');
   } finally { event.target.disabled = false; }
 });
+// Salebase script personalisation (on unless turned off).
+chrome.storage.local.get('impact.fillScript').then((stored) => { $('#fillScript').checked = stored['impact.fillScript'] !== false; });
+$('#fillScript').addEventListener('change', (event) => {
+  void chrome.storage.local.set({ 'impact.fillScript': event.target.checked });
+  say(event.target.checked ? 'Lead details will show in the Salebase script.' : 'The Salebase script shows its original placeholders.');
+});
 $('#requestMicrophone').addEventListener('click', async () => {
   await chrome.tabs.create({ url: chrome.runtime.getURL('src/offscreen/microphone-permission.html') });
   window.close();

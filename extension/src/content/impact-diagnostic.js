@@ -1105,6 +1105,9 @@
         lead.nextLead = nextLeadCache.lead;
       }
       await addQuietHoursContext(lead);
+      // Script-only values (DOB, group, ...) for the Salebase phone script. The
+      // service worker removes them before anything is sent to the phone/cloud.
+      lead.scriptDetails = collectScriptDetails(document.querySelector("#primaryPanel"));
       await publishCurrentLead(lead);
       if (!lead.nextLead) {
         // Preloading must not lock out publication of a newly opened lead.
@@ -1160,6 +1163,30 @@
   function extractLeadName(text) {
     const match = text.match(/\b([A-Z][A-Z'\-]+,\s+[A-Z][A-Z'\-]+)\b/);
     return sanitizeText(match?.[1] || "");
+  }
+
+  // Optional "Label: value" pairs on the lead panel that the Salebase script
+  // has placeholders for. Only read when IMPACT shows such a label; unknown
+  // or odd-looking values are left out so the script keeps its placeholder.
+  const SCRIPT_DETAIL_LABELS = {
+    dob: ["Date of Birth", "Birth Date", "Birthdate", "DOB"],
+    group: ["Group Name", "Group", "Union Name", "Union Local", "Local", "Association Name", "Organization"],
+    beneficiary: ["Beneficiary Name", "Beneficiary"],
+    spouse: ["Spouse Name", "Spouse"],
+    kits: ["Number of Kits", "# of Kits", "Kits Requested", "Kits", "Number of Children", "# of Children", "Children"]
+  };
+
+  function collectScriptDetails(panel) {
+    const text = sanitizeText(panel?.innerText || panel?.textContent || "");
+    const details = {};
+    for (const [field, labels] of Object.entries(SCRIPT_DETAIL_LABELS)) {
+      for (const label of labels) {
+        const match = text.match(new RegExp(`(?:^|[^A-Za-z#])${escapeRegExp(label)}\\s*:\\s*([^:]{1,80}?)(?=\\s+(?:[A-Z#][a-z']*(?: [A-Za-z#][a-z']*){0,4}|[A-Z]{2,5})\\s*:|$)`));
+        const value = sanitizeText(match?.[1] || "");
+        if (value && value.length <= 60) { details[field] = value; break; }
+      }
+    }
+    return details;
   }
 
   function extractSimpleLabel(text, label) {

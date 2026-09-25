@@ -85,5 +85,5 @@ test('the IMPACT time zone setting is gone from Options', () => {
   const html = read('extension/src/options/options.html');
   assert.doesNotMatch(html, /impactTimeZone|IMPACT time zone/);
   assert.doesNotMatch(read('extension/src/options/options.js'), /impactTimeZone|IMPACT_TIME_ZONE/);
-  assert.equal(JSON.parse(read('extension/manifest.json')).version, '0.4.13');
+  assert.equal(JSON.parse(read('extension/manifest.json')).version, '0.4.14');
 });

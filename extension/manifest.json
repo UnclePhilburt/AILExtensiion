@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "IMPACT Companion",
-  "version": "0.4.13",
+  "version": "0.4.14",
   "update_url": "https://unclephilburt.github.io/AILExtensiion/updates/updates.xml",
   "description": "Connect your IMPACT lead workflow to your phone: contact details, navigation, call registration and call results.",
   "action": {
@@ -20,6 +20,11 @@
         "src/content/selector-config.js",
         "src/content/impact-diagnostic.js"
       ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://salebase.ai/phone_scripts/*"],
+      "js": ["src/content/salebase-personalize.js"],
       "run_at": "document_idle"
     }
   ],
