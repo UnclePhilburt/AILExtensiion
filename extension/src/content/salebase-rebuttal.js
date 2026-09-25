@@ -115,22 +115,11 @@
     }
     // Best: strongest text match, visible, openable in place, header-like, innermost.
     matches.sort((a, b) => (b.rank - a.rank) || (b.shown - a.shown) || (b.safe - a.safe) || (b.header - a.header) || (a.length - b.length));
-    const best = matches[0] || null;
-    if (best) best.element = innermost(best.element);
-    return { best, count: matches.length, top: matches.slice(0, 3) };
-  }
-
-  // <p><span>Title</span></p>: use the span itself so a click lands on the
-  // exact element Salebase's (delegated) handler listens to.
-  function innermost(element) {
-    let node = element;
-    const text = compact(node.textContent);
-    for (;;) {
-      const children = Array.from(node.children || []).filter((child) => !SKIP_TAGS.has(tagOf(child)));
-      const same = children.filter((child) => compact(child.textContent) === text);
-      if (children.length !== 1 || same.length !== 1) return node;
-      node = same[0];
-    }
+    // For <p><span>Title</span></p> this is the outer <p> (or the wrapper when
+    // it holds only the title) - the element 0.4.10 clicked on the real page.
+    // Do not descend to the inner span: a handler like
+    // $(e.target).next().toggle() only works when the <p> is the target.
+    return { best: matches[0] || null, count: matches.length, top: matches.slice(0, 3) };
   }
 
   function byId(value) {
@@ -235,18 +224,6 @@
     return changed;
   }
 
-  function waitFor(check, ms) {
-    return new Promise((resolve) => {
-      const started = Date.now();
-      const tick = () => {
-        if (check()) { resolve(true); return; }
-        if (Date.now() - started >= ms) { resolve(false); return; }
-        setTimeout(tick, 50);
-      };
-      tick();
-    });
-  }
-
   function forceShow(body, toggle) {
     body.hidden = false;
     body.removeAttribute?.('hidden');
@@ -300,18 +277,24 @@
     return { ok: true, isScriptPage: isScriptPage(), hasRebuttal: Boolean(found.best), matchKind: found.best?.kind || '' };
   }
 
-  function finish(result, anchor) {
+  function focusPanel(anchor) {
     try { anchor.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_error) { anchor.scrollIntoView?.(); }
     highlight(anchor);
+  }
+
+  function finish(result, anchor) {
+    focusPanel(anchor);
     return result;
   }
+
+  const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
   async function reveal(label, phrases, otherLabels = []) {
     const found = findRebuttal(label, phrases);
     const debug = { isScriptPage: isScriptPage(), candidates: found.count, top: found.top.map((item) => ({ kind: item.kind, ...describe(item.element) })) };
     if (!found.best) return { ok: true, found: false, reason: 'No element on the page contains the rebuttal label or phrases.', ...debug };
 
-    const header = found.best.element; // innermost title element
+    const header = found.best.element; // the title element 0.4.10 clicked
     const toggle = findToggle(header);
     const clickTarget = toggle || header;
     const unsafe = [classify(clickTarget), classify(header), classify(closestLink(clickTarget))].find((item) => !item.safe);
@@ -342,20 +325,26 @@
         body: describe(bodies[0]),
         bodyShown: isOpenBody(bodies)
       });
+      // 0.4.10's proven behaviour: always click the title, like the rep would.
+      // Never skip the click on a guess that the panel is already open: a
+      // max-height/opacity accordion looks "visible" while it is collapsed,
+      // which made 0.4.11/0.4.12 skip every rebuttal on the real page.
       let action; let blocked = []; let forced = 0;
-      if (isOpenBody(bodies)) {
-        // Clicking would toggle it closed. Leave it open.
-        action = 'already-open';
-      } else if (safety.safe) {
-        blocked = clickWithoutNavigation(header);
-        const opened = isOpenBody(bodies) || await waitFor(() => isOpenBody(bodies), OPEN_WAIT_MS);
-        action = opened ? 'clicked-title' : 'clicked-title-then-revealed';
-        if (!opened) forced = revealBodies(bodies);
+      if (safety.safe) {
+        blocked = clickWithoutNavigation(clickTarget);
+        action = 'clicked-title';
       } else {
         action = 'skipped-navigating-link';
-        forced = revealBodies(bodies);
       }
-      return finish({ ...base, action, forcedVisible: forced > 0, blockedNavigation: blocked, ...summary() }, section.section);
+      focusPanel(section.section);
+      // Safe addition: once the page's own toggle has finished, if this
+      // rebuttal's body is still plainly hidden (display:none / hidden), show it.
+      await sleep(OPEN_WAIT_MS);
+      if (!isOpenBody(bodies)) {
+        forced = revealBodies(bodies);
+        if (forced && safety.safe) action = `${action}-then-revealed`;
+      }
+      return { ...base, action, forcedVisible: forced > 0, blockedNavigation: blocked, ...summary() };
     }
 
     // Other shapes: <details>, Bootstrap-style toggles, or a hidden next sibling.

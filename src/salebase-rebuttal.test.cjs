@@ -7,7 +7,7 @@ const path = require('node:path');
 function loadModule() {
   const source = fs.readFileSync(path.join(__dirname, '../extension/src/background/salebase-rebuttal.js'), 'utf8').replace(/^export /gm, '');
   const context = vm.createContext({ URL, setTimeout, console, Promise });
-  vm.runInContext(`${source}\nthis.api = { salebaseUrlInfo, isSalebaseScriptUrl, rankScriptTabs, chooseScriptTab, revealRebuttalInScriptTab, SALEBASE_TAB_QUERY, REBUTTAL_CONTENT_SCRIPT };`, context);
+  vm.runInContext(`${source}\nthis.api = { describeOutcome, salebaseUrlInfo, isSalebaseScriptUrl, rankScriptTabs, chooseScriptTab, revealRebuttalInScriptTab, SALEBASE_TAB_QUERY, REBUTTAL_CONTENT_SCRIPT };`, context);
   return context.api;
 }
 
@@ -215,7 +215,8 @@ function loadContentScript(build) {
   let listener = null;
   const context = vm.createContext({
     URL, console, Date, Promise, document,
-    setTimeout: (fn, ms) => setTimeout(fn, Math.min(ms, 20)),
+    // Waits run fast; the 2.5 s highlight fade never runs so it can be checked.
+    setTimeout: (fn, ms) => (ms >= 2000 ? 0 : setTimeout(fn, Math.min(ms, 20))),
     location: { href: SCRIPT_URL },
     chrome: { runtime: { onMessage: { addListener: (fn) => { listener = fn; } } } },
     addEventListener: (_type, fn) => win.listeners.add(fn),
@@ -360,20 +361,26 @@ for (const placement of ['inside-wrapper', 'after-wrapper']) {
       const message = { ...reveal, otherLabels: OTHER_LABELS };
       const first = await page.send(message);
       assert.equal(first.found, true);
-      assert.equal(first.header.tag, 'span');
+      // 0.4.13: the element 0.4.10 clicked (the <p>, or the wrapper when it
+      // only holds the title), clicked every time, then revealed if needed.
+      const clicked = placement === 'inside-wrapper' ? state.wraps[0].p : state.wraps[0].wrap;
+      const titleOpens = placement === 'inside-wrapper' && handlerOn === 'title-or-p';
+      assert.equal(first.header.tag, placement === 'inside-wrapper' ? 'p' : 'span');
       assert.equal(first.header.text, "I'm not interested.");
       assert.equal(first.bodyPlacement, placement);
       assert.equal(first.bodyParts, 2);
-      assert.equal(first.action, handlerOn === 'none' ? 'clicked-title-then-revealed' : 'clicked-title');
-      assert.equal(first.forcedVisible, handlerOn === 'none');
-      assert.equal(state.wraps[0].titleSpan.clicks, 1, 'the innermost title span is clicked');
+      assert.equal(first.action, titleOpens ? 'clicked-title' : 'clicked-title-then-revealed');
+      assert.equal(first.forcedVisible, !titleOpens);
+      assert.equal(clicked.clicks, 1, 'the title element 0.4.10 clicked is clicked');
+      assert.equal(state.wraps[0].titleSpan.clicks, 0);
       assert.deepEqual(open(), ['11', '00', '00', '00', '00']);
       assert.ok(state.wraps[0].wrap.scrolled, 'scrolls to the wrapper');
       assert.equal(state.wraps[0].wrap.style.outline, '3px solid #f59e0b');
-      // Same objection again: already open, not clicked (a click would close it).
+      // Same objection again: clicked again (no "already open" guess), and a
+      // toggle that closed it is re-revealed, so it ends up open.
       const again = await page.send(message);
-      assert.equal(again.action, 'already-open');
-      assert.equal(state.wraps[0].titleSpan.clicks, 1);
+      assert.equal(again.action, titleOpens ? 'clicked-title-then-revealed' : 'clicked-title');
+      assert.equal(clicked.clicks, 2);
       assert.deepEqual(open(), ['11', '00', '00', '00', '00']);
       // A different objection opens only its own panel.
       const zoom = await page.send({ type: 'impact/revealRebuttal', label: 'Do we have to do a Zoom meeting?', phrases: ['zoom meeting'], otherLabels: [MATCH.label, ...OTHER_LABELS.filter((label) => !/Zoom/.test(label))] });
@@ -385,6 +392,75 @@ for (const placement of ['inside-wrapper', 'after-wrapper']) {
     });
   }
 }
+
+// 0.4.13 regression: a panel whose body has layout boxes and text while it is
+// collapsed (max-height:0 / overflow:hidden, opacity) looked "already open" to
+// 0.4.12, which then clicked nothing and still reported "opened".
+test('a collapsed panel that still has layout boxes is clicked open, never skipped as already open', async () => {
+  let p; let answer;
+  const page = loadContentScript((h) => {
+    const wraps = ["I'm not interested.", 'Can you mail it to me?', "I don't remember doing this!", 'What is this all about?'].map((title, index) => {
+      const titleP = h('p', {}, [h('span', {}, [], title)]);
+      const body = h('div', { class: 'answer' }, [], `Rebuttal ${index} text.`); // "visible" in the fake DOM
+      titleP.onClick = (event) => { if (event.target === titleP) body.setAttribute('data-open', body.getAttribute('data-open') === '1' ? '0' : '1'); };
+      if (index === 0) { p = titleP; answer = body; }
+      return h('span', {}, [titleP, body]);
+    });
+    const container = h('div', {}, [h('span', {}, [], 'Expand All'), h('span', {}, [], 'Collapse All'), ...wraps]);
+    return [h('select', { id: 'myDropdown' }, [h('option', {}, [], 'Response Card')]), container];
+  });
+  const result = await page.send({ ...reveal, otherLabels: OTHER_LABELS });
+  assert.equal(result.found, true);
+  assert.notEqual(result.action, 'already-open');
+  assert.equal(result.action, 'clicked-title');
+  assert.equal(p.clicks, 1, 'the <p> title is clicked like 0.4.10 did');
+  assert.equal(answer.getAttribute('data-open'), '1', 'the page handler opened it');
+});
+
+test('if the panel boundaries cannot be worked out it still clicks the title and reveals the text (0.4.10 fail-open)', async () => {
+  let header; let body;
+  const page = loadContentScript((h) => {
+    header = h('div', { class: 'q' }, [], "I'm not interested.");
+    body = h('div', { class: 'a', 'data-display': 'none' }, [], 'Totally understand...');
+    return [h('div', {}, [header, body])];
+  });
+  const result = await page.send(reveal); // no otherLabels, no Expand All
+  assert.equal(result.found, true);
+  assert.equal(header.clicks, 1);
+  assert.equal(body.getClientRects().length, 1);
+  assert.match(result.action, /^clicked-/);
+});
+
+test('the service worker reports which stage failed and never stores the transcript', () => {
+  const { describeOutcome } = loadModule();
+  const label = "I'm not interested";
+  assert.deepEqual({ ...describeOutcome(null, label) }, { status: 'page-not-reachable', stage: 'talk-to-page', message: describeOutcome(null, label).message });
+  assert.equal(describeOutcome({ ok: false, error: 'boom' }, label).stage, 'open-panel');
+  assert.match(describeOutcome({ ok: false, error: 'boom' }, label).message, /boom/);
+  assert.equal(describeOutcome({ ok: true, found: false }, label).status, 'rebuttal-not-found');
+  assert.equal(describeOutcome({ ok: true, found: false }, label).stage, 'find-panel');
+  const opened = describeOutcome({ ok: true, found: true, action: 'clicked-title-then-revealed' }, label);
+  assert.equal(opened.status, 'opened');
+  assert.equal(opened.stage, 'done');
+  assert.equal(opened.action, 'clicked-title-then-revealed');
+  assert.match(opened.message, /clicked its title and showed the hidden text/);
+
+  const worker = fs.readFileSync(path.join(__dirname, '../extension/src/background/service-worker.js'), 'utf8');
+  const handler = worker.slice(worker.indexOf('async function handleObjectionTranscript'), worker.indexOf('async function revealSalebaseRebuttal'));
+  assert.match(handler, /try \{[\s\S]*objectionDetector\.detect[\s\S]*\} catch \(error\) \{[\s\S]*outcome: 'matcher-error'/);
+  assert.match(handler, /'impact\.lastHeard': \{ at: Date\.now\(\), outcome: detection\.reason/);
+  assert.match(handler, /'objection\.cooldown'/);
+  assert.doesNotMatch(handler, /transcript[,}]\s*\}|text: transcript|lastTranscript/);
+  assert.match(worker, /'impact\.lastObjection': \{ label: match\.label, at: Date\.now\(\), status: result\.status, stage: result\.stage/);
+  assert.match(worker, /'salebase\.rebuttal', \{[\s\S]*stage: result\.stage[\s\S]*matchScore: match\.score/);
+
+  const popup = fs.readFileSync(path.join(__dirname, '../extension/src/popup/popup.js'), 'utf8');
+  for (const status of ['no-script-window', 'page-not-reachable', 'page-error', 'rebuttal-not-found', 'error']) {
+    assert.match(popup, new RegExp(`'?${status}'?: 'Stopped at: `), status);
+  }
+  assert.match(popup, /changes\['impact\.lastHeard'\]/);
+  assert.match(popup, /no objection matched/);
+});
 
 test('the lead-script opener re-uses Salebase windows and only tries to open one once per lead', () => {
   const worker = fs.readFileSync(path.join(__dirname, '../extension/src/background/service-worker.js'), 'utf8');

@@ -14,24 +14,36 @@ function renderListener(listening, error = '') {
     : 'Off — it never listens unless you turn this on.');
 }
 const OBJECTION_STATUS = {
-  looking: 'Looking for the Salebase script window…',
+  looking: 'Matched — looking for the Salebase script window…',
   opened: 'Opened in your Salebase script window.',
-  'no-script-window': 'No Salebase script window is open, so nothing was opened.',
-  'rebuttal-not-found': 'Salebase script window found, but that rebuttal was not on the page.',
-  error: 'Could not open the rebuttal.'
+  'no-script-window': 'Stopped at: finding the script window. No Salebase script window is open.',
+  'page-not-reachable': 'Stopped at: talking to the Salebase page. Reload the Salebase tab and try again.',
+  'page-error': 'Stopped at: opening the panel. The Salebase page script failed.',
+  'rebuttal-not-found': 'Stopped at: finding the panel. That rebuttal was not found on the Salebase page.',
+  error: 'Stopped at: opening the rebuttal. Something went wrong.'
 };
-function renderObjection(last) {
+const time = (at) => (at ? new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' }) : '');
+function renderObjection(last, heard) {
   const status = $('#objectionStatus');
-  if (!last?.label) { status.hidden = true; return; }
-  const when = last.at ? new Date(last.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
-  status.textContent = `Last objection${when ? ` (${when})` : ''}: “${last.label}” — ${OBJECTION_STATUS[last.status] || last.message || ''}`;
-  status.classList.toggle('error', last.status !== 'opened' && last.status !== 'looking');
+  const lines = [];
+  if (last?.label) {
+    const detail = last.status === 'opened' && last.message ? last.message : (OBJECTION_STATUS[last.status] || last.message || '');
+    lines.push(`Last objection (${time(last.at)}): “${last.label}” — ${detail}`);
+  }
+  if (heard?.at && (!last?.at || heard.at > last.at + 1000)) {
+    const outcome = heard.outcome === 'cooldown' ? `heard “${heard.label}” again, ignored for a few seconds`
+      : heard.outcome === 'matcher-error' ? 'the matcher failed' : 'no objection matched';
+    lines.push(`Last speech (${time(heard.at)}): ${outcome}.`);
+  }
+  if (!lines.length) { status.hidden = true; return; }
+  status.textContent = lines.join(' ');
+  status.classList.toggle('error', Boolean(last?.label) && !['opened', 'looking'].includes(last.status));
   status.hidden = false;
 }
 async function refreshListener() {
-  const local = await chrome.storage.local.get(['impact.objectionListening', 'impact.objectionListenerError', 'impact.lastObjection']);
+  const local = await chrome.storage.local.get(['impact.objectionListening', 'impact.objectionListenerError', 'impact.lastObjection', 'impact.lastHeard']);
   renderListener(local['impact.objectionListening'], local['impact.objectionListenerError']);
-  renderObjection(local['impact.lastObjection']);
+  renderObjection(local['impact.lastObjection'], local['impact.lastHeard']);
 }
 async function languageSettingsUrl() {
   if (globalThis.navigator?.brave && await globalThis.navigator.brave.isBrave()) return 'brave://settings/languages';
@@ -83,7 +95,7 @@ $('#loginForm').addEventListener('submit', async event => {
 client.auth.onAuthStateChange((_event,next) => renderSession(next));
 chrome.storage.onChanged.addListener(changes => {
   if (changes['impact.supabase.session']) void client.auth.getSession().then(({data})=>renderSession(data.session));
-  if (changes['impact.objectionListening'] || changes['impact.objectionListenerError'] || changes['impact.lastObjection']) void refreshListener();
+  if (changes['impact.objectionListening'] || changes['impact.objectionListenerError'] || changes['impact.lastObjection'] || changes['impact.lastHeard']) void refreshListener();
 });
 $('#objectionListening').addEventListener('change', async (event) => {
   const enabled = event.target.checked;

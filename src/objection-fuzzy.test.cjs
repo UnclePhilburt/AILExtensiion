@@ -412,3 +412,39 @@ test('long utterances: rep script paragraphs stay silent, a customer objection a
   assert.equal(api.matchObjection('the agent just goes over the benefits and answers questions it takes about twenty minutes honestly I am not interested thanks').id, 'not-interested');
   assert.equal(api.matchObjection('okay so we set that up for saturday and you will get a text reminder wait do we have to do a zoom meeting for this').id, 'zoom');
 });
+
+// 0.4.13 regression: real speech-to-text gives lowercase, unpunctuated text,
+// and a short final result often merges the rep's question with the
+// customer's answer. 0.4.12 applied rep-talk vetoes to the whole result, so
+// "do you remember ... no i dont remember doing this" fired nothing.
+test('speech-to-text style results fire: lowercase, no punctuation, rep question merged with the answer', () => {
+  const cases = {
+    "i'm not interested": 'not-interested',
+    'im not interested thanks': 'not-interested',
+    'im not interested': 'not-interested',
+    'no im not interested': 'not-interested',
+    'i dont remember doing this': 'forgot',
+    'i dont remember doing that': 'forgot',
+    'can you just mail it to me': 'mail-it',
+    'what is this all about': 'what-is-this',
+    'do we have to do a zoom meeting': 'zoom',
+    'are you interested in saving money no im not interested': 'not-interested',
+    'okay if you have a second im not interested': 'not-interested',
+    'do you remember filling that out no i dont remember doing this': 'forgot',
+    'we will send you the information can you just mail it to me': 'mail-it'
+  };
+  const misses = Object.entries(cases).filter(([text, id]) => api.matchObjection(text)?.id !== id)
+    .map(([text, id]) => `${text} => ${api.matchObjection(text)?.id || 'nothing'} (want ${id})`);
+  assert.deepEqual(misses, []);
+});
+
+test('rep talk alone still fires nothing, even when a window of it looks like an objection', () => {
+  const repOnly = [
+    'let me tell you what this is all about',
+    'you filled out a card do you remember filling that out',
+    'if you are not interested thats fine but you still get the kit',
+    "we'll set up a quick zoom meeting tomorrow",
+    'so we just set up a quick zoom meeting tomorrow at five and the agent will go over everything'
+  ];
+  assert.deepEqual(repOnly.filter((line) => api.matchObjection(line)).map((line) => `${line} => ${api.matchObjection(line).id}`), []);
+});
