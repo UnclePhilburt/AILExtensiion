@@ -10,8 +10,11 @@
     selectorConfig: "impact.selectorConfig",
     autoPublish: "impact.autoPublish",
     inboxQueue: "impact.inboxQueue",
-    lastSnapshot: "impact.lastSnapshot"
+    lastSnapshot: "impact.lastSnapshot",
+    impactTimeZone: "impact.timeZone",
+    quietHoursNoticeAt: "impact.quietHoursNoticeAt"
   };
+  const DEFAULT_IMPACT_TIME_ZONE = "America/New_York";
 
   let pickerState = null;
   let lastAutoPublishFingerprint = "";
@@ -24,8 +27,9 @@
   let lastAppointmentOptionsFingerprint = "";
   let resultDialogsBeforeSubmit = new WeakSet();
   const dismissedQuietHoursDialogs = new WeakSet();
+  const recordedQuietHoursDialogs = new WeakSet();
   chrome.storage.onChanged.addListener((changes) => {
-    if (changes['impact.connectionMode']) lastAutoPublishFingerprint = '';
+    if (changes['impact.connectionMode'] || changes[STORAGE_KEYS.impactTimeZone]) lastAutoPublishFingerprint = '';
     if (changes['impact.supabase.session']) {
       lastAutoPublishFingerprint = '';
       nextLeadCache = null;
@@ -87,6 +91,10 @@
     for (const dialog of dialogs) {
       const text = sanitizeText(dialog.innerText || dialog.textContent || "");
       if (!/do\s+not\s+(?:knock|visit).{0,100}\b8\s*(?::\s*00)?\s*(?:p\.?m\.?|pm)\b/i.test(text)) continue;
+      if (!recordedQuietHoursDialogs.has(dialog)) {
+        recordedQuietHoursDialogs.add(dialog);
+        void recordQuietHoursNotice();
+      }
       const close = Array.from(dialog.querySelectorAll('button, input[type="button"], input[type="submit"], .close'))
         .find((button) => /^(ok|close|×)$/i.test(sanitizeText(button.value || button.innerText || button.textContent || "")));
       if (!close || close.disabled || close.getAttribute("aria-disabled") === "true") continue;
@@ -94,6 +102,27 @@
       close.click();
       void log("info", "quietHoursNotice.dismissed", {});
     }
+  }
+
+  // IMPACT showing its own after-8 PM notice is the most reliable sign that
+  // its quiet hours have started, whatever time zone IMPACT runs on. The
+  // phone uses this timestamp to show its warning for the rest of the evening.
+  async function recordQuietHoursNotice() {
+    try {
+      await chrome.storage.local.set({ [STORAGE_KEYS.quietHoursNoticeAt]: new Date().toISOString() });
+      lastAutoPublishFingerprint = "";
+      window.setTimeout(runAutoPublishCheck, 0);
+    } catch (_error) {
+      // Recording the notice must never interrupt the IMPACT page.
+    }
+  }
+
+  async function addQuietHoursContext(lead) {
+    if (!lead?.available) return lead;
+    const stored = await chrome.storage.local.get([STORAGE_KEYS.impactTimeZone, STORAGE_KEYS.quietHoursNoticeAt]);
+    lead.impactTimeZone = stored[STORAGE_KEYS.impactTimeZone] || DEFAULT_IMPACT_TIME_ZONE;
+    if (stored[STORAGE_KEYS.quietHoursNoticeAt]) lead.quietHoursNoticeAt = stored[STORAGE_KEYS.quietHoursNoticeAt];
+    return lead;
   }
 
   async function getSnapshot({ includeNextLead = true } = {}) {
@@ -106,6 +135,7 @@
       ? nextLeadCache.lead : null;
     const prefetchedNextLead = localLeadPreview?.available
       ? (includeNextLead ? await prefetchNextLead() : cachedNextLead) : null;
+    if (localLeadPreview?.available) await addQuietHoursContext(localLeadPreview);
     if (localLeadPreview?.available && prefetchedNextLead) {
       localLeadPreview.nextLead = prefetchedNextLead;
     }
@@ -963,6 +993,7 @@
       if (nextLeadCache?.pageUrl === pageUrl && Date.now() < nextLeadCache.expiresAt) {
         lead.nextLead = nextLeadCache.lead;
       }
+      await addQuietHoursContext(lead);
       await publishCurrentLead(lead);
       if (!lead.nextLead) {
         // Preloading must not lock out publication of a newly opened lead.
@@ -989,6 +1020,8 @@
         email: lead.email,
         address: lead.address,
         phones: lead.phones,
+        impactTimeZone: lead.impactTimeZone || "",
+        quietHoursNoticeAt: lead.quietHoursNoticeAt || "",
         nextLeadName: lead.nextLead?.leadName || "",
         nextLeadRequestType: lead.nextLead?.requestType || "",
         nextLeadError: lead.nextLead?.error || "",
