@@ -87,3 +87,53 @@ test('phone locks Previous/Next until the moved-to lead arrives, so stale taps a
   await app.refreshCloud();
   assert.equal(el('#previousLead').disabled,false,'a result from the computer unlocks the buttons');
 });
+
+test('phone refetches on realtime (re)subscribe, rebuilds a failed channel, and keeps checking after a result until the next lead shows', async()=>{
+  const elements=new Map();
+  const make=()=>({children:[],listeners:{},value:'',hidden:false,open:true,disabled:false,
+    append(...items){this.children.push(...items);},replaceChildren(...items){this.children=items;},
+    setAttribute(){},addEventListener(name,fn){this.listeners[name]=fn;}});
+  const el=selector=>{if(!elements.has(selector))elements.set(selector,make());return elements.get(selector);};
+  let authChanged; const statusHandlers=[]; let watches=0, reads=0; const timers=[];
+  const lead={available:true,leadId:'test-a',leadName:'Fictional A',phones:[{label:'Mobile',number:'555-0100',dialHref:'#sample-call'}]};
+  let state={lead,desktop_seen:new Date().toISOString(),lead_updated_at:new Date().toISOString(),device_id:'test-computer'};
+  const context=vm.createContext({
+    client:{auth:{onAuthStateChange:fn=>{authChanged=fn;}}}, saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, encourageLead:()=>{}, encourageResult:()=>{}, cloudEnabled:async()=>true,
+    cloudState:async()=>{reads++;return state;},cloudTouchPhone:async()=>{}, cloudSend:async()=>{},
+    watchCloud:async(_onChange,onStatus)=>{watches++;statusHandlers.push(onStatus);return()=>{};},visibleLead:s=>s?.lead,isOnline:()=>true,
+    document:{hidden:false,querySelector:selector=>selector.startsWith('meta')?null:el(selector),createElement:make,addEventListener(){}},
+    localStorage:{getItem:()=>null,setItem(){}},location:{search:'',origin:'https://example.test',replace(){}},
+    URLSearchParams, Date, crypto:require('node:crypto'), setInterval(){},setTimeout:(fn,ms)=>{timers.push({fn,ms});return timers.length;}, clearTimeout(){}, console
+  });
+  vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context); vm.runInContext(leadHighlightsSource,context); vm.runInContext(leadRulesSource,context); vm.runInContext(settingsStoreSource,context); vm.runInContext(leadTransitionSource,context);
+  const source=fs.readFileSync(path.join(__dirname,'../phone-web/public/app.js'),'utf8').replace(/^import .*;\r?\n/gm,'');
+  const app=await vm.runInContext(`(async()=>{${source}\nreturn {refreshCloud,sendComputerCommand};})()`,context);
+  authChanged('SIGNED_IN',{user:{id:'test-user'}});
+  await new Promise(setImmediate);
+  assert.equal(watches,1);
+  // Realtime reconnects after the phone slept: SUBSCRIBED again means refetch.
+  state={...state,lead:{...lead,leadId:'test-b',leadName:'Fictional B'}};
+  const before=reads;
+  statusHandlers[0]('SUBSCRIBED'); await new Promise(setImmediate);
+  assert.equal(reads,before+1);
+  assert.equal(el('#leadCard').children.length>0,true);
+  // A channel error rebuilds the live connection after a short wait.
+  timers.length=0;
+  statusHandlers[0]('CHANNEL_ERROR');
+  const rebuild=timers.find(t=>t.ms===3000); assert.ok(rebuild,'reconnect scheduled');
+  rebuild.fn(); await new Promise(setImmediate);
+  assert.equal(watches,2);
+  statusHandlers[0]('CLOSED'); // the old channel closing is ignored
+  assert.equal(timers.filter(t=>t.ms===3000).length,1);
+  // No Answer sent: the phone keeps checking until IMPACT's next lead shows up.
+  timers.length=0;
+  await app.sendComputerCommand('no-answer',{leadId:'test-b'});
+  const follow=timers.slice(-7); // scheduled last, after the feedback timers
+  assert.deepEqual(follow.map(t=>t.ms),[2000,4000,7000,10000,15000,20000,30000]);
+  let n=reads; follow[0].fn(); await new Promise(setImmediate);
+  assert.equal(reads,n+1,'still on the called lead: fetch again');
+  state={...state,lead:{...lead,leadId:'test-c',leadName:'Fictional C'}};
+  follow[1].fn(); await new Promise(setImmediate);
+  n=reads; follow[2].fn(); follow[3].fn(); await new Promise(setImmediate);
+  assert.equal(reads,n,'the next lead arrived: follow-up checks stop');
+});

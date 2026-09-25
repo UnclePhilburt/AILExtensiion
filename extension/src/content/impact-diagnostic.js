@@ -22,6 +22,11 @@
   let nextLeadCache = null;
   let nextLeadRequest = null;
   let autoPublishBusy = false;
+  let autoPublishAgain = false;
+  // A lead whose name or phones IMPACT shows in an unexpected format still
+  // goes to the phone once it has been on screen this long.
+  const INCOMPLETE_LEAD_SETTLE_MS = 2000;
+  let incompleteLead = { leadId: "", since: 0, logged: false };
   let lastAppointmentOptionsFingerprint = "";
   let resultDialogsBeforeSubmit = new WeakSet();
   const dismissedQuietHoursDialogs = new WeakSet();
@@ -48,6 +53,15 @@
     if (message?.type === "impact/getSnapshot") {
       getSnapshot({ includeNextLead: message.includeNextLead !== false })
         .then((snapshot) => sendResponse({ ok: true, snapshot }))
+        .catch((error) => sendResponse({ ok: false, error: error.message }));
+      return true;
+    }
+
+    if (message?.type === "impact/readCurrentLead") {
+      // The service worker asks after a phone result/Previous/Next, to publish
+      // the lead IMPACT moved to without waiting for this page's own check.
+      readCurrentLeadForPhone()
+        .then((lead) => sendResponse({ ok: true, lead }))
         .catch((error) => sendResponse({ ok: false, error: error.message }));
       return true;
     }
@@ -1068,9 +1082,37 @@
       || buttons.find((button) => sanitizeText(button.innerText || button.textContent || "") === iconName);
   }
 
+  async function readCurrentLeadForPhone() {
+    if (location.pathname !== "/Lead/InboxDetail" || !(await isOriginAllowed())) return null;
+    const lead = collectLocalLeadPreview();
+    if (!lead.available || !lead.leadId || !leadReadyForPhone(lead)) return null;
+    await addQuietHoursContext(lead);
+    if (nextLeadCache?.pageUrl === location.href && Date.now() < nextLeadCache.expiresAt) lead.nextLead = nextLeadCache.lead;
+    lead.scriptDetails = collectScriptDetails(document.querySelector("#primaryPanel"));
+    return lead;
+  }
+
+  // Name and phones normally arrive together. If IMPACT shows one in a format
+  // this page does not recognise, still publish once the lead has settled, so
+  // the phone never stays on the previous lead.
+  function leadReadyForPhone(lead) {
+    if (lead.leadName && lead.phones?.length) return true;
+    if (!lead.leadId) return false;
+    if (incompleteLead.leadId !== lead.leadId) incompleteLead = { leadId: lead.leadId, since: Date.now(), logged: false };
+    if (Date.now() - incompleteLead.since < INCOMPLETE_LEAD_SETTLE_MS) return false;
+    if (!incompleteLead.logged) {
+      incompleteLead.logged = true;
+      void log("warn", "phoneSync.incompleteLead", { hasName: Boolean(lead.leadName), phoneCount: lead.phones?.length || 0 }).catch(() => {});
+    }
+    return true;
+  }
+
   async function runAutoPublishCheck() {
-    if (autoPublishBusy) return;
+    // A check requested while one is running (e.g. the new lead finished
+    // rendering) runs right after it instead of being dropped.
+    if (autoPublishBusy) { autoPublishAgain = true; return; }
     autoPublishBusy = true;
+    autoPublishAgain = false;
     try {
       if (!(await chrome.runtime.sendMessage({ type: 'impact/authStatus' }))?.ok) return;
       const allowed = await isOriginAllowed();
@@ -1096,7 +1138,7 @@
       if (location.pathname !== "/Lead/InboxDetail") return;
 
       const lead = collectLocalLeadPreview();
-      if (!lead.available || !lead.leadName || !lead.phones?.length) {
+      if (!lead.available || !leadReadyForPhone(lead)) {
         return;
       }
 
@@ -1119,6 +1161,7 @@
       // Auto-publish should never interrupt the IMPACT page.
     } finally {
       autoPublishBusy = false;
+      if (autoPublishAgain) { autoPublishAgain = false; window.setTimeout(runAutoPublishCheck, 0); }
     }
   }
 
@@ -1161,7 +1204,8 @@
   }
 
   function extractLeadName(text) {
-    const match = text.match(/\b([A-Z][A-Z'\-]+,\s+[A-Z][A-Z'\-]+)\b/);
+    // "CARTER, JAMES", also "CARTER JR., JAMES" (a suffix with a period).
+    const match = text.match(/\b([A-Z][A-Z'\-]+(?:\s+(?:JR|SR|II|III|IV)\.?)?,\s+[A-Z][A-Z'\-]+)\b/);
     return sanitizeText(match?.[1] || "");
   }
 

@@ -26,9 +26,17 @@ chrome.storage.onChanged.addListener(changes => {
 });
 export async function publishCloud(lead) {
   await ready();
-  const {error} = await client.rpc('companion_desktop',{p_device:await device(),p_lead:lead});
+  // Bounded, so a hung request cannot hold up the (ordered) lead writes forever.
+  const {error} = await client.rpc('companion_desktop',{p_device:await device(),p_lead:lead}).abortSignal(AbortSignal.timeout(10000));
   checkCloud(error); lastHeartbeat = Date.now();
   return {ok:true};
+}
+// The lead id the phone will read from the cloud right now ('' if none).
+export async function cloudLeadId() {
+  const {data,error} = await client.from('companion_sync').select('lead_id:lead->>leadId')
+    .eq('user_id',await cloudUser()).eq('device_id',await device()).abortSignal(AbortSignal.timeout(8000)).maybeSingle();
+  checkCloud(error);
+  return data?.lead_id || '';
 }
 export async function takeCloudCommand() {
   if (busy || Date.now() < nextPoll) return {command:null};
