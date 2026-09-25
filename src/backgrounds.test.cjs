@@ -65,26 +65,33 @@ test('every non-default choice has page and swatch colors in styles.css, and the
   assert.match(css, /body \{ margin: 0; background: var\(--page-bg\);/);
 });
 
-test('the boot script applies a saved choice before paint and ignores junk', () => {
-  const boot = read('background-boot.js');
+test('the boot script applies a saved background before paint and ignores junk', () => {
+  const boot = read('settings-boot.js');
   assert.ok(boot.includes(`'${bg.BACKGROUND_STORAGE_KEY}'`), 'same storage key as backgrounds.js');
   const run = (saved) => {
     const root = fakeRoot();
-    vm.runInNewContext(boot, { localStorage: memoryStorage(saved === undefined ? {} : { 'impact.phoneBackground': saved }), document: { documentElement: root } });
+    vm.runInNewContext(boot, { localStorage: memoryStorage(saved === undefined ? {} : { 'impact.phoneBackground': saved }), document: { documentElement: root }, window: { addEventListener() {} } });
     return root.attrs['data-bg'];
   };
   assert.equal(run('aurora'), 'aurora');
   assert.equal(run(undefined), undefined);
   assert.equal(run('default'), undefined);
   assert.equal(run('"><img src=x>'), undefined);
-  assert.doesNotThrow(() => vm.runInNewContext(boot, { localStorage: { getItem() { throw new Error('blocked'); } }, document: {} }));
+  assert.doesNotThrow(() => vm.runInNewContext(boot, { localStorage: { getItem() { throw new Error('blocked'); } }, document: { documentElement: fakeRoot() }, window: { addEventListener() {} } }));
 });
 
-test('pages load the boot script before the stylesheet and offer the Settings button', () => {
-  for (const page of ['index.html', 'workspace.html', 'statistics.html']) {
-    assert.match(read(page), /<script src="background-boot\.js"><\/script><link rel="stylesheet" href="styles\.css">/, page);
+test('the old slide-up panel is gone; pages load the boot script first and link to settings.html', () => {
+  for (const page of ['index.html', 'workspace.html', 'statistics.html', 'settings.html']) {
+    assert.match(read(page), /<script src="settings-boot\.js"><\/script><link rel="stylesheet" href="styles\.css">/, page);
+    assert.doesNotMatch(read(page), /data-open-settings|background-boot|phone-settings/, page);
   }
-  for (const page of ['index.html', 'workspace.html']) assert.match(read(page), /data-open-settings aria-label="Settings"/, page);
-  assert.match(read('workspace-entry.js'), /import '\.\/phone-settings\.js';/);
-  assert.match(read('phone-entry.js'), /import\('\.\/phone-settings\.js'\)/);
+  assert.match(read('index.html'), /<a class="settingsButton" href="settings\.html\?from=home" aria-label="Settings"/);
+  assert.match(read('statistics.html'), /<a class="settingsLink" href="settings\.html\?from=statistics">/);
+  const workspace = read('workspace.html');
+  const header = workspace.slice(workspace.indexOf('<header>'), workspace.indexOf('</header>'));
+  assert.match(header, /<div class="headerLinks"><a class="accountLink"[^>]*>Your account →<\/a><a class="settingsLink" href="settings\.html\?from=workspace">/, 'Settings sits under Your account in the header');
+  assert.equal(workspace.match(/settings\.html/g).length, 1, 'no settings entry point in the lead area');
+  assert.doesNotMatch(read('styles.css'), /settingsSheet|titleRow/);
+  assert.doesNotMatch(read('workspace-entry.js') + read('phone-entry.js'), /phone-settings/);
+  assert.match(read('workspace-entry.js'), /import '\.\/wake-lock\.js';/);
 });

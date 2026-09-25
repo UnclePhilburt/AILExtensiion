@@ -208,7 +208,7 @@ test('the phone lead card shows heads-up chips above the details and hides them 
     localStorage:{getItem:()=>null,setItem(){},removeItem(){}},location:{search:'',origin:'https://example.test',replace(){}},
     URLSearchParams, Date:FakeDate, crypto:require('node:crypto'), setInterval(){},setTimeout(){}, console
   });
-  for(const file of ['time-zone.js','pending-call.js','phone-actions.js','lead-highlights.js','lead-rules.js']) vm.runInContext(strip(read(`phone-web/public/${file}`)),context);
+  for(const file of ['time-zone.js','pending-call.js','phone-actions.js','lead-highlights.js','lead-rules.js','settings-store.js']) vm.runInContext(strip(read(`phone-web/public/${file}`)),context);
   const app=await vm.runInContext(`(async()=>{${read('phone-web/public/app.js').replace(/^import .*;\r?\n/gm,'')}\nreturn {refreshCloud};})()`,context);
   authChanged('SIGNED_IN',{user:{id:'test-user'}});
   await new Promise(setImmediate);

@@ -7,6 +7,7 @@ const read=file=>fs.readFileSync(path.join(__dirname,'../phone-web/public',file)
 const phoneActionsSource=read('phone-actions.js').replace(/^export /gm,'');
 const leadHighlightsSource=(require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/time-zone.js'),'utf8')+'\n'+require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/lead-highlights.js'),'utf8')).replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
 const leadRulesSource=read('lead-rules.js').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
+const settingsStoreSource=require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/settings-store.js'),'utf8').replace(/^export /gm,'');
 const pendingCallSource=read('pending-call.js').replace(/^export /gm,'');
 const appSource=read('app.js').replace(/^import .*;\r?\n/gm,'');
 const MIN=60000;
@@ -15,7 +16,7 @@ function actions(){const context=vm.createContext({setTimeout,clearTimeout});vm.
 
 // Loads app.js with a controllable clock, captured timers and page events, so a
 // phone going to the background (timers frozen) and coming back can be replayed.
-async function loadPage(server){
+async function loadPage(server,globals={}){
   const clock={now:Date.parse('2026-09-24T20:00:00Z')};
   class FakeDate extends Date{constructor(...args){super(...(args.length?args:[clock.now]));} static now(){return clock.now;}}
   const elements=new Map(), timers=[], docEvents={}, winEvents={};
@@ -42,13 +43,13 @@ async function loadPage(server){
     location:{search:'',origin:'https://example.test',replace(){}},
     addEventListener:(name,fn)=>{winEvents[name]=fn;},
     URLSearchParams, Date:FakeDate, JSON, crypto:require('node:crypto'), structuredClone,
-    setInterval(){}, setTimeout:(fn,ms)=>{timers.push({fn,ms});return timers.length;}, clearTimeout(){}, console
+    setInterval(){}, setTimeout:(fn,ms)=>{timers.push({fn,ms});return timers.length;}, clearTimeout(){}, console, ...globals
   });
-  vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context); vm.runInContext(leadHighlightsSource,context); vm.runInContext(leadRulesSource,context);
+  vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context); vm.runInContext(leadHighlightsSource,context); vm.runInContext(leadRulesSource,context); vm.runInContext(settingsStoreSource,context);
   const app=await vm.runInContext(`(async()=>{${appSource}\nreturn {refreshCloud};})()`,context);
   authChanged('SIGNED_IN',auth.session);
   await settle();
-  const page={el,app,clock,timers,auth,document,
+  const page={el,app,clock,timers,auth,document,storage:context.localStorage,
     callLink:()=>el('#leadCard').children.find(child=>child.className==='phoneList').children[0],
     async hide(){document.hidden=true;docEvents.visibilitychange();},
     async show({fireEvent=true}={}){document.hidden=false;if(fireEvent)docEvents.visibilitychange();await settle();},
@@ -63,9 +64,9 @@ const leadB={...leadA,leadId:'test-b',leadName:'Fictional B'};
 function makeServer(){return {reads:0,sent:[],attempts:[],failNext:null,nextRead:null,state:null};}
 function freshState(server,page,lead=leadA){const now=new Date(page?page.clock.now:Date.parse('2026-09-24T20:00:00Z')).toISOString();server.state={lead,desktop_seen:now,lead_updated_at:now,device_id:'test-computer'};}
 
-async function calledPage(){
+async function calledPage(globals){
   const server=makeServer(); freshState(server,null);
-  const page=await loadPage(server);
+  const page=await loadPage(server,globals);
   page.callLink().listeners.click(); await settle();
   assert.deepEqual(server.sent.map(c=>c.type),['call']);
   assert.equal(page.el('#callResults').hidden,false);
@@ -206,4 +207,37 @@ test('a brief network error after waking keeps the lead on screen', async()=>{
   await page.app.refreshCloud();
   assert.equal(page.el('#callResults').hidden,false);
   assert.equal(page.el('#status').textContent,'Reconnecting…');
+});
+
+test('Settings: Refused Appointment asks first (default on) and a sent tap vibrates (default on)', async()=>{
+  const asked=[], buzz=[]; let answer=false;
+  const {server,page}=await calledPage({confirm:message=>{asked.push(message);return answer;},navigator:{vibrate:ms=>{buzz.push(ms);return true;}}});
+  await page.el('#refusedAppointment').listeners.click(); await settle();
+  assert.deepEqual(server.sent.map(c=>c.type),['call'],'declined: nothing sent');
+  assert.match(asked[0],/Send Refused Appointment to IMPACT for Fictional A\?/);
+  assert.deepEqual(buzz,[],'no buzz for a declined tap');
+  answer=true;
+  await page.el('#refusedAppointment').listeners.click(); await settle();
+  assert.deepEqual(server.sent.map(c=>c.type),['call','refused-appointment']);
+  assert.deepEqual(buzz,[40],'one short buzz once the tap is sent');
+});
+
+test('Settings: with confirm and vibrate turned off, Refused Appointment sends straight away without a buzz', async()=>{
+  const asked=[], buzz=[];
+  const {server,page}=await calledPage({confirm:()=>{asked.push(1);return false;},navigator:{vibrate:ms=>{buzz.push(ms);}}});
+  page.storage.setItem('impact.phoneSettings',JSON.stringify({confirmResults:false,vibrate:false}));
+  await page.el('#refusedAppointment').listeners.click(); await settle();
+  assert.deepEqual(server.sent.map(c=>c.type),['call','refused-appointment']);
+  assert.equal(asked.length,0); assert.deepEqual(buzz,[]);
+});
+
+test('Settings: No Answer never asks, and a failed send does not vibrate', async()=>{
+  const asked=[], buzz=[];
+  const {server,page}=await calledPage({confirm:()=>{asked.push(1);return true;},navigator:{vibrate:ms=>{buzz.push(ms);}}});
+  server.failNext=new Error('Failed to fetch');
+  await page.el('#noAnswer').listeners.click(); await settle();
+  assert.deepEqual(buzz,[],'not sent, no buzz');
+  await page.el('#noAnswer').listeners.click(); await settle();
+  assert.deepEqual(server.sent.map(c=>c.type),['call','no-answer']);
+  assert.equal(asked.length,0); assert.deepEqual(buzz,[40]);
 });
