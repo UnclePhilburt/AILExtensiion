@@ -201,7 +201,7 @@ test('the phone lead card shows heads-up chips above the details and hides them 
   let state={lead,desktop_seen:new Date().toISOString(),lead_updated_at:new Date().toISOString(),device_id:'test-computer'};
   class FakeDate extends Date{constructor(...a){super(...(a.length?a:[now]));} static now(){return now;}}
   const context=vm.createContext({
-    client:{auth:{onAuthStateChange:fn=>{authChanged=fn;}}}, saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, cloudEnabled:async()=>true,
+    client:{auth:{onAuthStateChange:fn=>{authChanged=fn;}}}, saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, encourageLead:()=>{}, encourageResult:()=>{}, cloudEnabled:async()=>true,
     cloudState:async()=>state,cloudTouchPhone:async()=>{}, cloudSend:async()=>{},
     watchCloud:async()=>()=>{},visibleLead:s=>s?.lead,isOnline:()=>true,
     document:{querySelector:selector=>selector.startsWith('meta')?null:el(selector),createElement:make,addEventListener(){}},

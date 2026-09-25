@@ -2,6 +2,7 @@
 // to this page; other pages pick it up on load (settings-boot.js).
 import { BACKGROUNDS, readBackground, saveBackground } from './backgrounds.js';
 import { TEXT_SIZES, loadPhoneSettings, savePhoneSettings, resetPhoneSettings } from './settings-store.js';
+import { refreshEncouragement } from './encouragement-ui.js';
 
 // Back link: only known pages (never an arbitrary URL from the query string).
 const BACK = {
@@ -74,11 +75,12 @@ textSize.addEventListener('change', (event) => {
 });
 
 // Switches
-const SWITCHES = ['keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock'];
+const SWITCHES = ['keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'showEncouragement', 'encourageAfterResults'];
 for (const key of SWITCHES) {
   document.querySelector(`#${key}`).addEventListener('change', (event) => {
     savePhoneSettings(localStorage, { [key]: event.target.checked });
     saved();
+    if (key === 'showEncouragement') { renderEncouragementRow(); refreshEncouragement(); }
   });
 }
 
@@ -98,6 +100,12 @@ if (typeof globalThis.navigator?.vibrate !== 'function') {
   unsupported('vibrate', 'This browser can\u2019t vibrate. iPhone browsers don\u2019t allow web pages to vibrate.');
 }
 
+// "Messages after results" only matters while "Show encouraging messages" is on.
+function renderEncouragementRow() {
+  const on = loadPhoneSettings(localStorage).showEncouragement;
+  document.querySelector('#encourageAfterResults').closest('.settingRow').classList.toggle('dependentOff', !on);
+}
+
 function render() {
   const settings = loadPhoneSettings(localStorage);
   const background = readBackground(localStorage);
@@ -107,6 +115,7 @@ function render() {
     const input = document.querySelector(`#${key}`);
     input.checked = input.disabled ? false : settings[key];
   }
+  renderEncouragementRow();
 }
 
 document.querySelector('#resetSettings').addEventListener('click', () => {
@@ -114,6 +123,7 @@ document.querySelector('#resetSettings').addEventListener('click', () => {
   resetPhoneSettings(localStorage);
   saveBackground('default', localStorage);
   render();
+  refreshEncouragement();
   saved('Defaults restored');
 });
 

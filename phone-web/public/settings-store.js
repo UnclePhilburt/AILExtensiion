@@ -16,10 +16,12 @@ export const DEFAULT_SETTINGS = Object.freeze({
   confirmResults: true, // ask before sending Refused Appointment
   textSize: 'normal', // Workspace text size
   showHeadsUp: true, // heads-up notes on the lead card
-  showDoNotKnock: true // the DO NOT KNOCK flag on the lead card
+  showDoNotKnock: true, // the DO NOT KNOCK flag on the lead card
+  showEncouragement: true, // calm rotating lines on each page (encouragement-ui.js)
+  encourageAfterResults: true // a short gentle message after a result is sent
 });
 
-const BOOLEAN_KEYS = ['keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock'];
+const BOOLEAN_KEYS = ['keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'showEncouragement', 'encourageAfterResults'];
 
 // Known keys with valid values; anything missing or invalid keeps its value from
 // `base` (the defaults unless given).
