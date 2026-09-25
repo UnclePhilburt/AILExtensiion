@@ -222,6 +222,45 @@ async function openMatchingSalebaseScript(requestType) {
   if (!option) return;
   pendingSalebaseOption = option;
   const tabs = await chrome.tabs.query({ url: 'https://salebase.ai/phone_scripts/*' });
+  if (tabs.length) {
+    await Promise.all(tabs.filter((tab) => tab.id).map((tab) => selectSalebaseScript(tab.id, option)));
+    return;
+  }
+
+  // Salebase opens Phone Scripts in its own window from the dashboard. Use
+  // that control when available so the rep sees the same script window they
+  // would open themselves. The tabs.onUpdated listener above applies the
+  // selected script as soon as that window finishes loading.
+  const dashboards = await chrome.tabs.query({ url: 'https://salebase.ai/dashboard/*' });
+  const [dashboard] = dashboards.filter((tab) => tab.id);
+  if (dashboard?.id && await clickSalebaseCallLink(dashboard.id)) {
+    // A slow popup or a browser that blocks the dashboard's window.open
+    // falls back to the script page without delaying the IMPACT workflow.
+    setTimeout(() => { void openSalebaseFallback(option); }, 1800);
+    return;
+  }
+  await openSalebaseFallback(option);
+}
+
+async function clickSalebaseCallLink(tabId) {
+  try {
+    const [{ result }] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const link = document.querySelector('#callLink');
+        if (!(link instanceof HTMLAnchorElement)) return false;
+        link.click();
+        return true;
+      }
+    });
+    return result === true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+async function openSalebaseFallback(option) {
+  const tabs = await chrome.tabs.query({ url: 'https://salebase.ai/phone_scripts/*' });
   if (!tabs.length) {
     await chrome.tabs.create({ url: SALEBASE_SCRIPTS_URL, active: false });
     return;

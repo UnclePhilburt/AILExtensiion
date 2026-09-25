@@ -16,3 +16,11 @@ test('IMPACT request types choose the matching Salebase phone script', () => {
   assert.equal(choose('AILPlus Non-Customer'), 'AILPlus (Non-Customer)');
   assert.equal(choose('Union Member'), '');
 });
+
+test('Salebase dashboard Call control is used before the direct script-page fallback', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../extension/src/background/service-worker.js'), 'utf8');
+  assert.match(source, /https:\/\/salebase\.ai\/dashboard\/\*/);
+  assert.match(source, /document\.querySelector\('#callLink'\)/);
+  assert.match(source, /link\.click\(\)/);
+  assert.match(source, /openSalebaseFallback/);
+});
