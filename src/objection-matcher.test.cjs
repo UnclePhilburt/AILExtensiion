@@ -28,4 +28,6 @@ test('the extension offers a direct local English-pack install and detected brow
   assert.match(popup, /brave:\/\/settings\/languages/);
   assert.match(popup, /edge:\/\/settings\/languages/);
   assert.match(popup, /chrome:\/\/settings\/languages/);
+  assert.match(popup, /navigator\.mediaDevices\.getUserMedia\(\{ audio: true \}\)/);
+  assert.match(popup, /chrome:\/\/settings\/content\/microphone/);
 });

@@ -24,6 +24,18 @@ async function languageSettingsUrl() {
   if (/Chrome\//.test(agent)) return 'chrome://settings/languages';
   return null;
 }
+async function microphoneSettingsUrl() {
+  if (globalThis.navigator?.brave && await globalThis.navigator.brave.isBrave()) return 'brave://settings/content/microphone';
+  const agent = navigator.userAgent;
+  if (/Edg\//.test(agent)) return 'edge://settings/content/microphone';
+  if (/Chrome\//.test(agent)) return 'chrome://settings/content/microphone';
+  return null;
+}
+async function requestMicrophone() {
+  if (!navigator.mediaDevices?.getUserMedia) throw new Error('This browser cannot request microphone access.');
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  for (const track of stream.getTracks()) track.stop();
+}
 function renderSession(next) {
   session = next;
   $('#loading').hidden = true;
@@ -62,12 +74,25 @@ $('#objectionListening').addEventListener('change', async (event) => {
   event.target.disabled = true;
   renderListener(enabled, enabled ? 'Starting local listening…' : 'Turning listening off…');
   try {
+    if (enabled) await requestMicrophone();
     const result = await chrome.runtime.sendMessage({ type: 'impact/setObjectionListening', enabled });
     if (!result?.ok) throw new Error(result?.error || 'Could not change listening.');
     renderListener(result.listening);
   } catch (error) {
     renderListener(false, error.message || 'Could not start local listening.');
   } finally { event.target.disabled = false; }
+});
+$('#requestMicrophone').addEventListener('click', async () => {
+  const button = $('#requestMicrophone');
+  button.disabled = true; say('Requesting microphone access…');
+  try { await requestMicrophone(); say('Microphone allowed. Turn listening on.'); }
+  catch (error) { say('Microphone access was blocked. Use Open microphone settings, allow IMPACT Companion, then try again.', true); }
+  finally { button.disabled = false; }
+});
+$('#openMicrophoneSettings').addEventListener('click', async () => {
+  const url = await microphoneSettingsUrl();
+  if (!url) { say('Open your browser microphone settings and allow IMPACT Companion.', true); return; }
+  await chrome.tabs.create({ url });
 });
 $('#installEnglishPack').addEventListener('click', async () => {
   const button = $('#installEnglishPack');
