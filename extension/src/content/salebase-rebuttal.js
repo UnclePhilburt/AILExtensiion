@@ -11,6 +11,12 @@
   const HEADER_HINT = /panel|accordion|collapse|rebuttal|objection|heading|header|title|toggle|card|question/i;
   const UNSAFE_SCRIPT = /window\.open|\bopen\s*\(|location|\.href\s*=|\.submit\s*\(/i;
 
+  const NON_CONTENT = new Set([...SKIP_TAGS, 'BR', 'HR', 'IMG', 'BUTTON']);
+  // Salebase's rebuttal list starts with "Expand All" / "Collapse All". Those
+  // must never be clicked: they would open or close every rebuttal.
+  const BULK_TEXT = /^(expandall|collapseall|expand|collapse|showall|hideall|openall|closeall)$/;
+  const OPEN_WAIT_MS = 700;
+
   const compact = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const attr = (element, name) => (element?.getAttribute ? element.getAttribute(name) : null);
   const tagOf = (element) => String(element?.tagName || '').toUpperCase();
@@ -96,7 +102,8 @@
     const matches = [];
     for (const element of elementsUnder(document.body)) {
       const text = compact(element.textContent);
-      if (!text) continue;
+      if (!text || BULK_TEXT.test(text)) continue;
+      if (text.includes('expandall') || text.includes('collapseall')) continue; // the whole list, not one rebuttal
       let rank = 0; let kind = '';
       if (wantedLabel.length > 5 && text === wantedLabel) { rank = 3; kind = 'label-exact'; }
       else if (wantedLabel.length > 5 && text.includes(wantedLabel)) { rank = 2; kind = 'label'; }
@@ -108,7 +115,22 @@
     }
     // Best: strongest text match, visible, openable in place, header-like, innermost.
     matches.sort((a, b) => (b.rank - a.rank) || (b.shown - a.shown) || (b.safe - a.safe) || (b.header - a.header) || (a.length - b.length));
-    return { best: matches[0] || null, count: matches.length, top: matches.slice(0, 3) };
+    const best = matches[0] || null;
+    if (best) best.element = innermost(best.element);
+    return { best, count: matches.length, top: matches.slice(0, 3) };
+  }
+
+  // <p><span>Title</span></p>: use the span itself so a click lands on the
+  // exact element Salebase's (delegated) handler listens to.
+  function innermost(element) {
+    let node = element;
+    const text = compact(node.textContent);
+    for (;;) {
+      const children = Array.from(node.children || []).filter((child) => !SKIP_TAGS.has(tagOf(child)));
+      const same = children.filter((child) => compact(child.textContent) === text);
+      if (children.length !== 1 || same.length !== 1) return node;
+      node = same[0];
+    }
   }
 
   function byId(value) {
@@ -140,6 +162,89 @@
       if (next && !SKIP_TAGS.has(tagOf(next))) return isShown(next) ? null : next;
     }
     return null;
+  }
+
+  const isPageRoot = (node) => !node || node === document.body || tagOf(node) === 'BODY' || tagOf(node) === 'HTML';
+
+  function visibleText(element) {
+    if (!isShown(element)) return '';
+    return compact(typeof element.innerText === 'string' ? element.innerText : element.textContent);
+  }
+
+  function mentionsOtherRebuttals(element, otherLabels) {
+    const text = compact(element.textContent);
+    return text.includes('expandall') || text.includes('collapseall') || otherLabels.some((label) => text.includes(label));
+  }
+
+  function signature(element) {
+    const parts = [];
+    for (let node = element, depth = 0; node && depth < 3; node = node.firstElementChild, depth += 1) parts.push(tagOf(node));
+    return parts.join('>');
+  }
+
+  // Salebase: container div > [Expand All, Collapse All, span wrapper per
+  // rebuttal]. Each wrapper starts with <p><span>Title</span></p>; the body is
+  // either the wrapper's later children or the siblings up to the next wrapper.
+  function findSection(title, otherLabels) {
+    const titleText = compact(title.textContent);
+    let block = title;
+    while (!isPageRoot(block.parentElement) && compact(block.parentElement.textContent) === titleText) block = block.parentElement;
+    let section = block;
+    for (let depth = 0; depth < 6 && !isPageRoot(section.parentElement); depth += 1) {
+      if (mentionsOtherRebuttals(section.parentElement, otherLabels)) {
+        return { block, section, container: section.parentElement };
+      }
+      section = section.parentElement;
+    }
+    return { block, section: block, container: null };
+  }
+
+  function sectionBodies(section, block) {
+    const inner = [];
+    for (let node = block; node && node !== section; node = node.parentElement) {
+      for (let next = node.nextElementSibling; next; next = next.nextElementSibling) {
+        if (!NON_CONTENT.has(tagOf(next))) inner.push(next);
+      }
+    }
+    if (inner.length) return { placement: 'inside-wrapper', bodies: inner };
+    const outer = [];
+    const own = signature(section);
+    for (let next = section.nextElementSibling; next; next = next.nextElementSibling) {
+      if (NON_CONTENT.has(tagOf(next))) continue;
+      const text = compact(next.textContent);
+      if (signature(next) === own || BULK_TEXT.test(text) || text.includes('expandall')) break; // next rebuttal
+      outer.push(next);
+    }
+    return { placement: outer.length ? 'after-wrapper' : 'none', bodies: outer };
+  }
+
+  const hasText = (element) => compact(element.textContent).length > 0;
+  const isOpenBody = (bodies) => bodies.some((body) => hasText(body) && visibleText(body).length > 0);
+
+  // Show this rebuttal's hidden body parts only; other rebuttals are untouched.
+  function revealBodies(bodies) {
+    let changed = 0;
+    for (const body of bodies) {
+      if (!hasText(body)) continue;
+      if (!isShown(body)) { forceShow(body); changed += 1; }
+      if (visibleText(body)) continue;
+      for (const inner of elementsUnder(body)) {
+        if (hasText(inner) && !isShown(inner) && (inner.parentElement === body || isShown(inner.parentElement))) { forceShow(inner); changed += 1; }
+      }
+    }
+    return changed;
+  }
+
+  function waitFor(check, ms) {
+    return new Promise((resolve) => {
+      const started = Date.now();
+      const tick = () => {
+        if (check()) { resolve(true); return; }
+        if (Date.now() - started >= ms) { resolve(false); return; }
+        setTimeout(tick, 50);
+      };
+      tick();
+    });
   }
 
   function forceShow(body, toggle) {
@@ -195,21 +300,66 @@
     return { ok: true, isScriptPage: isScriptPage(), hasRebuttal: Boolean(found.best), matchKind: found.best?.kind || '' };
   }
 
-  function reveal(label, phrases) {
+  function finish(result, anchor) {
+    try { anchor.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_error) { anchor.scrollIntoView?.(); }
+    highlight(anchor);
+    return result;
+  }
+
+  async function reveal(label, phrases, otherLabels = []) {
     const found = findRebuttal(label, phrases);
     const debug = { isScriptPage: isScriptPage(), candidates: found.count, top: found.top.map((item) => ({ kind: item.kind, ...describe(item.element) })) };
     if (!found.best) return { ok: true, found: false, reason: 'No element on the page contains the rebuttal label or phrases.', ...debug };
 
-    const header = found.best.element;
+    const header = found.best.element; // innermost title element
     const toggle = findToggle(header);
     const clickTarget = toggle || header;
-    const link = closestLink(clickTarget);
-    const safety = classify(clickTarget).safe ? classify(link) : classify(clickTarget);
-    const chain = ancestors(clickTarget, 3);
-    const body = explicitBody(chain);
-    const guessed = body ? null : hiddenSiblingBody(clickTarget);
+    const unsafe = [classify(clickTarget), classify(header), classify(closestLink(clickTarget))].find((item) => !item.safe);
+    const safety = unsafe || { safe: true };
+    const body = explicitBody(ancestors(clickTarget, 3));
     const details = ancestors(header, 8).find((node) => tagOf(node) === 'DETAILS') || null;
+    const others = (otherLabels || []).map(compact).filter((value) => value.length > 5 && value !== compact(label));
+    const section = details || body ? null : findSection(header, others);
+    const parts = section ? sectionBodies(section.section, section.block) : { placement: 'none', bodies: [] };
+    const base = {
+      ok: true,
+      found: true,
+      matchKind: found.best.kind,
+      skippedLink: safety.safe ? null : { reason: safety.reason, href: String(safety.href || '').split(/[?]/)[0].slice(0, 120) },
+      header: describe(header),
+      toggle: describe(toggle),
+      ...debug
+    };
 
+    // Salebase shape: a wrapper per rebuttal whose body parts we can see.
+    if (parts.bodies.length) {
+      const bodies = parts.bodies;
+      const summary = () => ({
+        panel: describe(section.section),
+        container: describe(section.container),
+        bodyPlacement: parts.placement,
+        bodyParts: bodies.length,
+        body: describe(bodies[0]),
+        bodyShown: isOpenBody(bodies)
+      });
+      let action; let blocked = []; let forced = 0;
+      if (isOpenBody(bodies)) {
+        // Clicking would toggle it closed. Leave it open.
+        action = 'already-open';
+      } else if (safety.safe) {
+        blocked = clickWithoutNavigation(header);
+        const opened = isOpenBody(bodies) || await waitFor(() => isOpenBody(bodies), OPEN_WAIT_MS);
+        action = opened ? 'clicked-title' : 'clicked-title-then-revealed';
+        if (!opened) forced = revealBodies(bodies);
+      } else {
+        action = 'skipped-navigating-link';
+        forced = revealBodies(bodies);
+      }
+      return finish({ ...base, action, forcedVisible: forced > 0, blockedNavigation: blocked, ...summary() }, section.section);
+    }
+
+    // Other shapes: <details>, Bootstrap-style toggles, or a hidden next sibling.
+    const guessed = body ? null : hiddenSiblingBody(clickTarget);
     let action;
     let blocked = [];
     if (details) {
@@ -221,35 +371,30 @@
     } else {
       action = 'skipped-navigating-link';
     }
-
     const panelBody = body || guessed;
     let forced = false;
     if (panelBody && action !== 'already-open' && !isShown(panelBody)) { forceShow(panelBody, toggle); forced = true; }
-
-    const anchor = toggle || header;
-    try { anchor.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_error) { anchor.scrollIntoView?.(); }
-    highlight(anchor);
-
-    return {
-      ok: true,
-      found: true,
-      matchKind: found.best.kind,
+    return finish({
+      ...base,
       action,
       forcedVisible: forced,
-      skippedLink: safety.safe ? null : { reason: safety.reason, href: String(safety.href || '').split(/[?]/)[0].slice(0, 120) },
       blockedNavigation: blocked,
-      header: describe(header),
-      toggle: describe(toggle),
+      panel: section ? describe(section.section) : null,
+      bodyPlacement: body ? 'controlled' : guessed ? 'next-sibling' : 'none',
       body: describe(panelBody),
-      bodyShown: panelBody ? isShown(panelBody) : null,
-      ...debug
-    };
+      bodyShown: panelBody ? isShown(panelBody) : null
+    }, toggle || header);
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     try {
       if (message?.type === 'impact/probeRebuttal') { sendResponse(probe(message.label, message.phrases)); return false; }
-      if (message?.type === 'impact/revealRebuttal') { sendResponse(reveal(message.label, message.phrases)); return false; }
+      if (message?.type === 'impact/revealRebuttal') {
+        reveal(message.label, message.phrases, message.otherLabels)
+          .then(sendResponse)
+          .catch((error) => sendResponse({ ok: false, found: false, error: error.message }));
+        return true;
+      }
     } catch (error) {
       sendResponse({ ok: false, found: false, error: error.message });
     }

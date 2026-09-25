@@ -13,3 +13,7 @@ export function matchObjection(transcript) {
   if (!text) return null;
   return RULES.find((rule) => rule.phrases.some((phrase) => text.includes(phrase))) || null;
 }
+
+// Every rebuttal title, so the Salebase page script can tell where one
+// rebuttal panel ends and the next begins.
+export const REBUTTAL_LABELS = RULES.map((rule) => rule.label);

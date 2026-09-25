@@ -123,7 +123,7 @@ async function guardAgainstNewTabs(chromeApi, tabId) {
 }
 
 export async function revealRebuttalInScriptTab(chromeApi, match, options = {}) {
-  const request = { label: match?.label || '', phrases: match?.phrases || [] };
+  const request = { label: match?.label || '', phrases: match?.phrases || [], otherLabels: options.otherLabels || [] };
   const salebaseTabs = await findSalebaseTabs(chromeApi);
   const seen = salebaseTabs.map((tab) => ({ id: tab.id, url: pathOnly(tab.url), active: Boolean(tab.active) }));
   if (!salebaseTabs.length) {
