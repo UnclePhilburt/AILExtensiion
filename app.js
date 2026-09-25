@@ -553,7 +553,7 @@ function renderLead(lead, updatedAt, source) {
   }
   appendDetail("Email", lead.email);
   appendDetail("Address", lead.address);
-  renderComments(lead.comments, lead);
+  renderComments(lead.comments);
 
   const phoneList = document.createElement("div");
   phoneList.className = "phoneList";
@@ -599,7 +599,7 @@ function renderLead(lead, updatedAt, source) {
 // earlier tries), read from the lead's IMPACT Status history.
 function renderHeadsUp(lead) {
   let chips = [];
-  try { chips = buildHeadsUp(lead.callHistory, Date.now(), { impactTimeZone: lead.impactTimeZone }); } catch (_error) { chips = []; }
+  try { chips = buildHeadsUp(lead.callHistory, Date.now()); } catch (_error) { chips = []; }
   if (!chips.length) return;
   const section = document.createElement("section");
   section.className = "headsUp";
@@ -698,16 +698,16 @@ function renderCallHistory(lead) {
   for (const entry of history.length ? history : ["No previous activity found on this lead."]) {
     const item = document.createElement("li");
     item.textContent = entry;
-    appendLocalTimeNote(item, entry, lead);
+    appendLocalTimeNote(item, entry);
     entries.append(item);
   }
 }
 
 // IMPACT's text shows IMPACT's clock; add the rep's own time beside it when
-// the two differ, e.g. "No Answer on Sep 23 2026 09:38 PM by Me · 8:38 PM your time".
-function appendLocalTimeNote(element, text, lead) {
+// the two differ (not on a Central phone), e.g. "… 09:38 PM by Me · 10:38 PM your time" in Eastern.
+function appendLocalTimeNote(element, text) {
   let note = "";
-  try { note = localTimeNote(text, { impactTimeZone: lead?.impactTimeZone }); } catch (_error) { note = ""; }
+  try { note = localTimeNote(text); } catch (_error) { note = ""; }
   if (!note) return;
   const span = document.createElement("span");
   span.className = "localTimeNote";
@@ -715,7 +715,7 @@ function appendLocalTimeNote(element, text, lead) {
   element.append(span);
 }
 
-function renderComments(comments, lead) {
+function renderComments(comments) {
   const values = Array.isArray(comments) ? comments.map(value => String(value || "").trim()).filter(Boolean) : [];
   if (!values.length) return;
   const section = document.createElement("section");
@@ -728,7 +728,7 @@ function renderComments(comments, lead) {
   for (const value of values) {
     const note = document.createElement("p");
     note.textContent = value;
-    appendLocalTimeNote(note, value, lead);
+    appendLocalTimeNote(note, value);
     section.append(note);
   }
   leadCard.append(section);
