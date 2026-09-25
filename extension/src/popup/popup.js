@@ -73,9 +73,15 @@ $('#installEnglishPack').addEventListener('click', async () => {
   const button = $('#installEnglishPack');
   button.disabled = true; say('Downloading the local English voice pack…');
   try {
-    const result = await chrome.runtime.sendMessage({ type: 'impact/installEnglishSpeechPack' });
-    if (!result?.ok) throw new Error(result?.error || 'Could not install the English voice pack.');
-    say(result.message || 'English voice pack installed. Turn listening on.');
+    // Chrome requires install() to be called from the actual button gesture.
+    // Passing it through the service worker or an offscreen document removes
+    // that activation and makes Chrome reject the request.
+    const Recognition = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
+    if (!Recognition || typeof Recognition.install !== 'function') throw new Error('This browser cannot install an on-device English speech pack.');
+    const install = Recognition.install({ langs: ['en-US'], processLocally: true });
+    const installed = await install;
+    if (!installed) throw new Error('The English voice pack could not be installed.');
+    say('English voice pack installed. Turn listening on.');
   } catch (error) { say(error.message, true); }
   finally { button.disabled = false; }
 });

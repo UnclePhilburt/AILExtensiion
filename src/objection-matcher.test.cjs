@@ -23,9 +23,8 @@ test('listener is opt-in, asks for local processing, and does not send or save a
 });
 
 test('the extension offers a direct local English-pack install and detected browser language settings', () => {
-  const listener = fs.readFileSync(path.join(__dirname, '../extension/src/offscreen/listener.js'), 'utf8');
   const popup = fs.readFileSync(path.join(__dirname, '../extension/src/popup/popup.js'), 'utf8');
-  assert.match(listener, /Recognition\.install\(\{ langs: \['en-US'\], processLocally: true \}\)/);
+  assert.match(popup, /const install = Recognition\.install\(\{ langs: \['en-US'\], processLocally: true \}\)/);
   assert.match(popup, /brave:\/\/settings\/languages/);
   assert.match(popup, /edge:\/\/settings\/languages/);
   assert.match(popup, /chrome:\/\/settings\/languages/);
