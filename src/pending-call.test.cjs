@@ -7,6 +7,7 @@ const phoneActionsSource=require('node:fs').readFileSync(require('node:path').jo
 const leadHighlightsSource=(require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/time-zone.js'),'utf8')+'\n'+require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/lead-highlights.js'),'utf8')).replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
 const leadRulesSource=require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/lead-rules.js'),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
 const settingsStoreSource=require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/settings-store.js'),'utf8').replace(/^export /gm,'');
+const leadTransitionSource=require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/lead-transition.js'),'utf8').replace(/^export /gm,'');
 const pendingCallSource=fs.readFileSync(path.join(__dirname,'../phone-web/public/pending-call.js'),'utf8').replace(/^export /gm,'');
 const appSource=fs.readFileSync(path.join(__dirname,'../phone-web/public/app.js'),'utf8').replace(/^import .*;\r?\n/gm,'');
 const HOUR=60*60*1000;
@@ -16,7 +17,7 @@ function memoryStorage(){
   return {data,getItem:k=>data.has(k)?data.get(k):null,setItem:(k,v)=>{data.set(k,String(v));},removeItem:k=>{data.delete(k);}};
 }
 const savedCalls=storage=>[...storage.data.keys()].filter(key=>key.startsWith('impact.pendingCall.')).length;
-function helpers(){const context=vm.createContext({JSON,Number,String});vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context); vm.runInContext(leadHighlightsSource,context); vm.runInContext(leadRulesSource,context); vm.runInContext(settingsStoreSource,context);return context;}
+function helpers(){const context=vm.createContext({JSON,Number,String});vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context); vm.runInContext(leadHighlightsSource,context); vm.runInContext(leadRulesSource,context); vm.runInContext(settingsStoreSource,context); vm.runInContext(leadTransitionSource,context);return context;}
 
 // Loads app.js the way the phone page does. Each call is one "page load";
 // sharing `storage` between calls simulates the phone reloading the tab.
@@ -35,7 +36,7 @@ async function loadPage({storage,shared,userId='user-1'}){
     localStorage:storage,location:{search:'',origin:'https://example.test',replace(){}},
     URLSearchParams, Date, crypto:require('node:crypto'), JSON, setInterval(){},setTimeout(){}, console
   });
-  vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context); vm.runInContext(leadHighlightsSource,context); vm.runInContext(leadRulesSource,context); vm.runInContext(settingsStoreSource,context);
+  vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context); vm.runInContext(leadHighlightsSource,context); vm.runInContext(leadRulesSource,context); vm.runInContext(settingsStoreSource,context); vm.runInContext(leadTransitionSource,context);
   const app=await vm.runInContext(`(async()=>{${appSource}\nreturn {refreshCloud};})()`,context);
   authChanged('SIGNED_IN',{user:{id:userId}});
   await new Promise(setImmediate);

@@ -86,7 +86,7 @@ test('the old slide-up panel is gone; pages load the boot script first and link 
     assert.doesNotMatch(read(page), /data-open-settings|background-boot|phone-settings/, page);
   }
   assert.match(read('index.html'), /<a class="settingsButton" href="settings\.html\?from=home" aria-label="Settings"/);
-  assert.match(read('statistics.html'), /<a class="settingsLink" href="settings\.html\?from=statistics">/);
+  for (const page of ['statistics.html', 'calendar.html']) assert.doesNotMatch(read(page), /settings\.html|settingsLink/, `${page}: Settings is reached from Home, not the header`);
   const workspace = read('workspace.html');
   const header = workspace.slice(workspace.indexOf('<header'), workspace.indexOf('</header>'));
   assert.match(header, /<a class="brand homeBrand" href="\.\/"/, 'the IMPACT logo goes back to Home');
