@@ -9,6 +9,11 @@ export const TEXT_SIZES = [
   { id: 'large', label: 'Large' },
   { id: 'xlarge', label: 'Extra large' }
 ];
+export const ORGANIZATIONS = [
+  { id: 'shaefinator', label: 'Shaefinator Org' },
+  { id: 'shaefer', label: 'Shaefer Org' },
+  { id: 'hidden', label: 'Hide organization label' }
+];
 
 export const DEFAULT_SETTINGS = Object.freeze({
   keepAwake: true, // Screen Wake Lock on the Workspace page (where supported)
@@ -18,7 +23,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   showHeadsUp: true, // heads-up notes on the lead card
   showDoNotKnock: true, // the DO NOT KNOCK flag on the lead card
   showEncouragement: true, // calm rotating lines on each page (encouragement-ui.js)
-  encourageAfterResults: true // a short gentle message after a result is sent
+  encourageAfterResults: true, // a short gentle message after a result is sent
+  organization: 'shaefinator' // small organization label at the top of Home and Workspace
 });
 
 const BOOLEAN_KEYS = ['keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'showEncouragement', 'encourageAfterResults'];
@@ -30,6 +36,7 @@ export function normalizeSettings(value, base = DEFAULT_SETTINGS) {
   const settings = { ...DEFAULT_SETTINGS, ...base };
   for (const key of BOOLEAN_KEYS) if (typeof source[key] === 'boolean') settings[key] = source[key];
   if (TEXT_SIZES.some((size) => size.id === source.textSize)) settings.textSize = source.textSize;
+  if (ORGANIZATIONS.some((organization) => organization.id === source.organization)) settings.organization = source.organization;
   return settings;
 }
 

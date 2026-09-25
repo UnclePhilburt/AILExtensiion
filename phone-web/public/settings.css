@@ -23,6 +23,8 @@
 .segment.size-normal { font-size:13px; }.segment.size-large { font-size:15px; }.segment.size-xlarge { font-size:17px; }
 .segment:has(input:checked) { background:#fff; color:#17684e; font-weight:800; box-shadow:0 1px 4px #0b1f1c24; }
 .segment:has(input:focus-visible) { outline:3px solid #d49534; outline-offset:1px; }
+.settingSelect { width:100%; min-height:44px; padding:0 12px; border:1px solid #cfdcd5; border-radius:11px; background:#fff; color:#1f3531; font:inherit; font-weight:650; }
+.settingSelect:focus-visible { outline:3px solid #d49534; outline-offset:2px; }
 .settingsReset { display:grid; gap:8px; justify-items:center; padding:6px 5px; }
 .settingsReset button { width:100%; background:#fff; color:#8a3a22; border-color:#ecc9bd; }
 .settingsReset p { color:var(--page-ink); font-size:12px; text-align:center; }

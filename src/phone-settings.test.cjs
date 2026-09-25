@@ -5,20 +5,21 @@ const vm = require('node:vm');
 const path = require('node:path');
 const read = (file) => fs.readFileSync(path.join(__dirname, '../phone-web/public', file), 'utf8');
 const store = vm.createContext({ JSON, Object });
-vm.runInContext(`${read('settings-store.js').replace(/^export /gm, '')}\nObject.assign(this, { SETTINGS_KEY, TEXT_SIZES, DEFAULT_SETTINGS, normalizeSettings, loadPhoneSettings, savePhoneSettings, resetPhoneSettings, displayAttributes });`, store);
+vm.runInContext(`${read('settings-store.js').replace(/^export /gm, '')}\nObject.assign(this, { SETTINGS_KEY, TEXT_SIZES, ORGANIZATIONS, DEFAULT_SETTINGS, normalizeSettings, loadPhoneSettings, savePhoneSettings, resetPhoneSettings, displayAttributes });`, store);
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
 function memoryStorage(initial = {}) {
   const data = { ...initial };
   return { data, getItem: (k) => (k in data ? data[k] : null), setItem: (k, v) => { data[k] = String(v); }, removeItem: (k) => { delete data[k]; } };
 }
-const DEFAULTS = { keepAwake: true, vibrate: true, confirmResults: true, textSize: 'normal', showHeadsUp: true, showDoNotKnock: true, showEncouragement: true, encourageAfterResults: true };
+const DEFAULTS = { keepAwake: true, vibrate: true, confirmResults: true, textSize: 'normal', showHeadsUp: true, showDoNotKnock: true, showEncouragement: true, encourageAfterResults: true, organization: 'shaefinator' };
 
 test('defaults: everything on, Normal text, one JSON key', () => {
   assert.equal(store.SETTINGS_KEY, 'impact.phoneSettings');
   assert.deepEqual(plain(store.DEFAULT_SETTINGS), DEFAULTS);
   assert.deepEqual(plain(store.loadPhoneSettings(memoryStorage())), DEFAULTS);
   assert.deepEqual(plain(store.TEXT_SIZES.map((s) => s.id)), ['normal', 'large', 'xlarge']);
+  assert.deepEqual(plain(store.ORGANIZATIONS.map((s) => s.id)), ['shaefinator', 'shaefer', 'hidden']);
 });
 
 test('invalid or partial saved data falls back per setting', () => {
@@ -75,12 +76,24 @@ test('the CSS implements every display setting', () => {
 
 test('the settings page has a control for every setting, and the back link only goes to known pages', () => {
   const html = read('settings.html');
-  for (const id of ['bgGrid', 'keepAwake', 'vibrate', 'confirmResults', 'textSize', 'showHeadsUp', 'showDoNotKnock', 'showEncouragement', 'encourageAfterResults', 'resetSettings', 'savedHint', 'settingsBack']) assert.match(html, new RegExp(`id="${id}"`), id);
+  for (const id of ['bgGrid', 'keepAwake', 'vibrate', 'confirmResults', 'textSize', 'organization', 'showHeadsUp', 'showDoNotKnock', 'showEncouragement', 'encourageAfterResults', 'resetSettings', 'savedHint', 'settingsBack']) assert.match(html, new RegExp(`id="${id}"`), id);
   assert.doesNotMatch(html, /Bad Number/, 'Bad Number is not wired to IMPACT, so it is not offered');
   const js = read('settings.js');
   assert.match(js, /const SWITCHES = \['keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'showEncouragement', 'encourageAfterResults'\];/);
   assert.match(js, /BACK\[new URLSearchParams\(location\.search\)\.get\('from'\)\] \|\| BACK\.workspace/);
   assert.match(js, /'workspace-local': \['workspace\.html\?mode=local'/);
+});
+
+test('the Shaefinator label is the default and can be changed or hidden on Home and Workspace', () => {
+  const storage = memoryStorage();
+  assert.equal(store.loadPhoneSettings(storage).organization, 'shaefinator');
+  assert.equal(store.savePhoneSettings(storage, { organization: 'shaefer' }).organization, 'shaefer');
+  assert.equal(store.savePhoneSettings(storage, { organization: 'hidden' }).organization, 'hidden');
+  assert.equal(store.savePhoneSettings(storage, { organization: 'unknown' }).organization, 'hidden');
+  for (const page of ['index.html', 'workspace.html']) {
+    assert.match(read(page), /data-organization-label/, page);
+    assert.match(read(page), /organization-label\.js/, page);
+  }
 });
 
 test('wake lock follows the Keep screen awake setting and is re-taken when the page is visible again', async () => {
