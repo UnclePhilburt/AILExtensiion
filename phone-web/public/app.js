@@ -164,7 +164,7 @@ async function connectLiveUpdates() {
     const generation = ++cloudGeneration;
     stopCloudWatch?.(); stopCloudWatch = null;
     try {
-      const stop = await watchCloud(() => { void refreshCloud(); });
+      const stop = await watchCloud(() => { void refreshCloud(); }, (status) => cloudChannelStatus(status, generation));
       if (!signedIn || generation !== cloudGeneration) { stop(); return; }
       stopCloudWatch = stop;
       await refreshCloud();
@@ -215,6 +215,34 @@ async function connectLiveUpdates() {
     if (stream !== leadEvents) return;
     eventsConnected = false;
     if (signedIn) setTimeout(connectLiveUpdates, 1500);
+  }
+}
+
+// Live updates can drop (phone asleep, signal lost) and reconnect without
+// replaying what changed meanwhile: fetch the lead every time the channel
+// (re)subscribes, and rebuild a channel that failed.
+function cloudChannelStatus(status, generation) {
+  if (!signedIn || generation !== cloudGeneration) return;
+  if (status === "SUBSCRIBED") { void refreshCloud(); return; }
+  if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
+    setTimeout(() => { if (signedIn && generation === cloudGeneration && !document.hidden) void connectLiveUpdates(); }, 3000);
+  }
+}
+
+// After a result that moves IMPACT to the next lead, keep checking for the new
+// lead until it shows up (on top of live updates and the 5-second poll).
+const LEAD_ADVANCING_RESULTS = ["no-answer", "refused-appointment", "virtual-appointment-slot"];
+const RESULT_FOLLOW_DELAYS = [2000, 4000, 7000, 10000, 15000, 20000, 30000];
+let resultFollow = null;
+function followLeadAfterResult(type) {
+  if (!LEAD_ADVANCING_RESULTS.includes(type)) return;
+  const follow = { fromKey: displayedLeadKey };
+  resultFollow = follow;
+  for (const delay of RESULT_FOLLOW_DELAYS) {
+    setTimeout(() => {
+      if (resultFollow !== follow || displayedLeadKey !== follow.fromKey || document.hidden) return;
+      void refreshLead();
+    }, delay);
   }
 }
 
@@ -497,6 +525,7 @@ async function sendComputerCommand(type, details = {}) {
       }
       showFeedback(type === 'call' ? 'Call sent to IMPACT.' : type === 'virtual-appointment' ? 'Opening Virtual Appointment in IMPACT…' : type === 'virtual-appointment-day' ? 'Selecting that day in IMPACT…' : type === 'virtual-appointment-slot' ? 'Setting that appointment in IMPACT…' : type === 'refused-appointment' ? 'Sending Refused Appointment to IMPACT…' : type === 'no-answer' ? 'Sending No Answer to IMPACT…' : type === 'previous' ? 'Moving IMPACT back on computer…' : type === 'next' ? 'Advancing IMPACT on computer…' : 'Action sent to your computer…', "loading", 4000);
       expectComputerResult(type);
+      followLeadAfterResult(type);
       return true;
     }
     const bridgeUrl = bridgeUrlInput.value.trim().replace(/\/$/, "");
@@ -524,6 +553,7 @@ async function sendComputerCommand(type, details = {}) {
       ? "Advancing IMPACT on computer..."
       : "Moving IMPACT back on computer...", "loading", 4000);
     if (eventsConnected) expectComputerResult(type);
+    followLeadAfterResult(type);
     return true;
   } catch (error) {
     showFeedback(friendlySendError(error.message, type), "error");

@@ -2,7 +2,8 @@ import { LOG_LIMIT, STORAGE_KEYS } from "../shared/storage-keys.js";
 import { parseBridgeUrl } from "../shared/bridge-config.js";
 import { accessToken, client } from "../shared/auth-runtime.js";
 import { cloudEnabled } from '../shared/cloud-sync.js';
-import { publishCloud, takeCloudCommand, reportCloudResult } from './cloud-desktop.js';
+import { publishCloud, takeCloudCommand, reportCloudResult, cloudLeadId } from './cloud-desktop.js';
+import { publisherDecision, createLatestWinsQueue, followLeadChange, verifyPhoneLead, LEAD_CHANGING_COMMANDS } from './phone-sync.js';
 import { SALEBASE_SCRIPTS_URL, salebaseOptionForRequestType } from './salebase-scripts.js';
 import { createObjectionDetector, REBUTTAL_LABELS } from './objection-matcher.js';
 import { findSalebaseTabs, findSalebaseScriptTabs, isSalebaseScriptUrl, revealRebuttalInScriptTab } from './salebase-rebuttal.js';
@@ -18,6 +19,12 @@ let lastPublishedLead = null;
 let pendingSalebaseOption = '';
 let lastSalebaseOpenKey = '';
 let objectionListening = false;
+// Lead writes to the phone run one at a time; an older lead never lands last.
+const leadWrites = createLatestWinsQueue();
+let latestLeadId = '';      // the newest lead IMPACT has shown (what the phone should have)
+let lastWrittenLeadId = '';
+let followGeneration = 0;
+let lastPublishSkip = '';
 // One detected objection opens its rebuttal once, not on every repeat.
 const objectionDetector = createObjectionDetector();
 chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
@@ -106,7 +113,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === "impact/publishLead") {
-    publishLead(message.lead)
+    // "Sync phone": always writes, whatever was sent before.
+    publishLead(message.lead, { force: true, eventName: 'phoneSync.manualSync' })
       .then((result) => sendResponse({ ok: true, result }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
@@ -245,6 +253,16 @@ async function getPhoneCommand(senderTab) {
       !/^https:\/\/mobile\.impact\.ailife\.com\/Lead\/(InboxDetail|WhatHappend|SetAppointment)(?:[?#]|$)/.test(senderTab.url || "")) {
     return { command: null };
   }
+  const taken = await takePhoneCommand();
+  const command = taken?.command;
+  // After a result or Previous/Next, follow IMPACT to the lead it moves to.
+  if (command?.type && LEAD_CHANGING_COMMANDS.includes(command.type)) {
+    void followAfterCommand(senderTab.id, command.leadId || latestLeadId);
+  }
+  return taken;
+}
+
+async function takePhoneCommand() {
   if (await cloudEnabled()) return takeCloudCommand();
   const result = await chrome.storage.local.get([
     STORAGE_KEYS.bridgeUrl,
@@ -272,10 +290,9 @@ async function getPhoneCommand(senderTab) {
 }
 
 async function publishAppointmentOptions(appointmentOptions, senderTab) {
-  const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  if (!senderTab?.id || senderTab.id !== active?.id ||
-      !/^https:\/\/mobile\.impact\.ailife\.com\/Lead\/SetAppointment(?:[?#]|$)/.test(active?.url || "")) {
-    return { skipped: true, reason: "inactive appointment tab" };
+  const skip = await publishSkipReason(senderTab);
+  if (skip || !/^https:\/\/mobile\.impact\.ailife\.com\/Lead\/SetAppointment(?:[?#]|$)/.test(senderTab?.url || "")) {
+    return { skipped: true, reason: skip || "not the appointment page" };
   }
   if (!lastPublishedLead?.available || !appointmentOptions?.leadId || appointmentOptions.leadId !== lastPublishedLead.leadId) {
     throw new Error("Appointment options do not match the current lead.");
@@ -298,8 +315,8 @@ async function autoPublishLead(incoming, senderTab) {
   // Script-only details (DOB, group, ...) stay in this browser: they fill the
   // Salebase script and are never sent to the phone, bridge or cloud.
   const { scriptDetails, ...lead } = incoming || {};
-  const [active] = await chrome.tabs.query({active:true,lastFocusedWindow:true});
-  if (!senderTab?.id || senderTab.id !== active?.id) return {skipped:true,reason:'inactive tab'};
+  const skip = await publishSkipReason(senderTab);
+  if (skip) return { skipped: true, reason: skip };
   await rememberScriptLead(lead, scriptDetails, senderTab.id).catch(() => {});
   const result = await chrome.storage.local.get(STORAGE_KEYS.autoPublish);
   const autoPublish = result[STORAGE_KEYS.autoPublish] !== false;
@@ -328,12 +345,39 @@ async function autoPublishLead(incoming, senderTab) {
   }
 }
 
-async function publishLead(lead, options = {}) {
+// Every lead write goes through here, in order (see createLatestWinsQueue).
+// force: skip nothing (Sync phone, follow-after-command and resync).
+function publishLead(lead, options = {}) {
   if (!lead?.available) {
-    throw new Error("No lead payload available to send.");
+    return Promise.reject(new Error("No lead payload available to send."));
   }
+  if (lead.leadId) latestLeadId = lead.leadId;
+  return leadWrites.run((seq) => writeLead(lead, seq, options), { mustRun: Boolean(options.force) });
+}
+
+async function writeLead(lead, seq, options = {}) {
   lastPublishedLead = structuredClone(lead);
   void openMatchingSalebaseScript(lead.requestType, lead.leadId || lead.leadName || '');
+  const leadChanged = Boolean(lead.leadId) && lead.leadId !== lastWrittenLeadId;
+  let written;
+  try {
+    written = await sendLeadToPhone(lead, options);
+  } catch (error) {
+    await appendLocalLog('warn', 'phoneSync.publishFailed', { reason: error.message, leadChanged, via: options.eventName || 'auto' });
+    throw error;
+  }
+  if (leadChanged || options.force) {
+    await appendLocalLog('info', 'phoneSync.published', { leadChanged, via: options.eventName || 'auto', seq, hasName: Boolean(lead.leadName), phoneCount: lead.phones?.length || 0 });
+  }
+  if (leadChanged) {
+    lastWrittenLeadId = lead.leadId;
+    // Belt and braces: read back what the phone sees; resync if it differs.
+    void checkPhoneHasLead(lead.leadId);
+  }
+  return written;
+}
+
+async function sendLeadToPhone(lead, options = {}) {
   if (await cloudEnabled()) return publishCloud(lead);
 
   const result = await chrome.storage.local.get([
@@ -463,6 +507,55 @@ async function selectSalebaseScript(tabId, option) {
     // The tab may still be signing in or loading. The completed-load listener
     // above retries without interrupting the rep's IMPACT workflow.
   }
+}
+
+// ---- Keeping the phone on IMPACT's lead ----
+async function publishSkipReason(senderTab) {
+  const [focused] = await chrome.tabs.query({ active: true, lastFocusedWindow: true }).catch(() => []);
+  const reason = publisherDecision(senderTab, focused);
+  if (reason && reason !== lastPublishSkip) await appendLocalLog('info', 'phoneSync.publishSkipped', { reason });
+  lastPublishSkip = reason;
+  return reason;
+}
+
+async function readPhoneLeadId() {
+  if (await cloudEnabled()) return cloudLeadId();
+  const settings = await chrome.storage.local.get([STORAGE_KEYS.bridgeUrl, STORAGE_KEYS.bridgeToken]);
+  const bridgeUrl = parseBridgeUrl(settings[STORAGE_KEYS.bridgeUrl]).replace(/\/$/, '');
+  const response = await fetch(`${bridgeUrl}/api/current-lead?token=${encodeURIComponent(settings[STORAGE_KEYS.bridgeToken] || '')}`, {
+    headers: { Authorization: `Bearer ${await accessToken()}` }, signal: AbortSignal.timeout(8000), cache: 'no-store'
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+  return payload.lead?.leadId || '';
+}
+
+function checkPhoneHasLead(leadId) {
+  return verifyPhoneLead({
+    expectedLeadId: leadId,
+    currentLeadId: () => latestLeadId,
+    readPhoneLeadId,
+    republish: () => (lastPublishedLead?.leadId === leadId ? publishLead(lastPublishedLead, { force: true, eventName: 'phoneSync.resync' }) : Promise.resolve()),
+    log: appendLocalLog
+  }).catch(() => {});
+}
+
+async function followAfterCommand(tabId, fromLeadId) {
+  const generation = ++followGeneration;
+  await followLeadChange({
+    fromLeadId,
+    isCurrent: () => generation === followGeneration,
+    readLead: async () => {
+      const response = await chrome.tabs.sendMessage(tabId, { type: 'impact/readCurrentLead' });
+      if (!response?.lead?.available) return null;
+      const { scriptDetails, ...lead } = response.lead;
+      await rememberScriptLead(lead, scriptDetails, tabId).catch(() => {});
+      return lead;
+    },
+    publish: (lead) => publishLead(lead, { force: true, eventName: 'phoneSync.followPublished' }).catch(() => {}),
+    verify: async () => {}, // writeLead already checks the phone when the lead changes
+    log: appendLocalLog
+  }).catch(() => {});
 }
 
 // ---- Lead details for the Salebase phone script ----
