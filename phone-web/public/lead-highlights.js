@@ -12,13 +12,13 @@
 // listed below a 2:56 PM No Answer; a Sep 24 callback sits between Sep 22 and
 // Sep 23 lines).
 //
-// Times are IMPACT's wall clock in IMPACT's time zone (lead.impactTimeZone,
-// default Eastern). They are converted to real instants, compared with the
+// Times are IMPACT's wall clock in Central time (IMPACT_TIME_ZONE; the lead's
+// impactTimeZone field is ignored). They are converted to real instants, compared with the
 // real "now", and shown in the phone's own time zone. A date with no time
 // (a "No Time Preference" callback) is an IMPACT calendar day, so "today" for
 // those follows IMPACT's calendar.
 
-import { DEFAULT_IMPACT_TIME_ZONE, validTimeZone, localTimeZone, wallClockToInstant, zonedParts, zonedDayNumber, timeZoneAbbr, clockTime } from './time-zone.js';
+import { IMPACT_TIME_ZONE, validTimeZone, localTimeZone, wallClockToInstant, zonedParts, zonedDayNumber, timeZoneAbbr, clockTime } from './time-zone.js';
 
 const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, sept: 8, oct: 9, nov: 10, dec: 11 };
 const DAY = 24 * 60 * 60 * 1000;
@@ -30,13 +30,14 @@ const DATE_PATTERN = new RegExp(
 const ACTION_START = /(?:No Answer|Schedule|Reschedule|Checkin|Check-?in|SetVirtualAppt|Set [A-Z]|Refused|Call ?Back|Left |Voice ?mail|Bad |Wrong |Do Not|Not Interested|Appointment|Cancel|Comment)/;
 const SPLIT = new RegExp(`(?<=\\bby [A-Z][a-z]*\\.?)\\s*(?=${ACTION_START.source})`);
 
-// { impact, phone } time zones used for parsing and display.
-export function resolveZones({ impactTimeZone, phoneTimeZone } = {}) {
-  return { impact: validTimeZone(impactTimeZone), phone: validTimeZone(phoneTimeZone || localTimeZone(), 'UTC') };
+// { impact, phone } time zones used for parsing and display. IMPACT is always
+// Central; any impactTimeZone passed in is ignored.
+export function resolveZones({ phoneTimeZone } = {}) {
+  return { impact: IMPACT_TIME_ZONE, phone: validTimeZone(phoneTimeZone || localTimeZone(), 'UTC') };
 }
 
-export function findDates(text, timeZone = DEFAULT_IMPACT_TIME_ZONE) {
-  const zone = validTimeZone(timeZone);
+export function findDates(text) {
+  const zone = IMPACT_TIME_ZONE;
   const found = [];
   for (const match of String(text || '').matchAll(DATE_PATTERN)) {
     const month = match[1] ? MONTHS[match[1].toLowerCase()] : Number(match[4]) - 1;
@@ -70,9 +71,9 @@ function sentenceCase(value) {
   return /\d/.test(value) ? value : value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
 }
 
-export function parseHistoryEntry(text, timeZone = DEFAULT_IMPACT_TIME_ZONE) {
+export function parseHistoryEntry(text) {
   const value = String(text || '').replace(/\s+/g, ' ').trim();
-  const dates = findDates(value, timeZone);
+  const dates = findDates(value);
   const first = dates[0];
   const byMatch = value.match(/\s+by\s+([^.]{1,100}?)\.?\s*$/i);
   const body = byMatch ? value.slice(0, byMatch.index) : value.replace(/\.$/, '');
@@ -142,7 +143,7 @@ export function relativeTime(at, now, hasTime = true, zones = resolveZones()) {
 // Empty when the line has no time or both clocks agree.
 export function localTimeNote(text, options = {}) {
   const zones = options.zones || resolveZones(options);
-  const date = findDates(text, zones.impact).find((found) => found.hasTime);
+  const date = findDates(text).find((found) => found.hasTime);
   if (!date || sameClock(date.at, zones)) return '';
   const impactDay = zonedParts(date.at, zones.impact), phoneDay = zonedParts(date.at, zones.phone);
   const differentDay = impactDay.day !== phoneDay.day || impactDay.month !== phoneDay.month;
@@ -176,9 +177,9 @@ function appointmentName(entry) {
 // tone: 'appointment' | 'callback' | 'danger' | 'neutral'
 // Times in titles/details are phone time; scheduled times also show IMPACT's
 // clock when it differs, e.g. "Tue, Sep 22, 2:00 PM (3:00 PM ET)".
-export function buildHeadsUp(callHistory, now, { max = 4, impactTimeZone, phoneTimeZone } = {}) {
-  const zones = resolveZones({ impactTimeZone, phoneTimeZone });
-  const entries = splitHistory(callHistory).map((entry) => parseHistoryEntry(entry, zones.impact));
+export function buildHeadsUp(callHistory, now, { max = 4, phoneTimeZone } = {}) {
+  const zones = resolveZones({ phoneTimeZone });
+  const entries = splitHistory(callHistory).map((entry) => parseHistoryEntry(entry));
   const days = (date) => dayDiff(date.at, now, date.hasTime, zones);
   const rel = (date) => relativeTime(date.at, now, date.hasTime, zones);
   const when = (date, options = {}) => formatWhen(date.at, date.hasTime, { zones, ...options });
