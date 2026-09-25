@@ -4,7 +4,7 @@ import { accessToken } from "../shared/auth-runtime.js";
 import { cloudEnabled } from '../shared/cloud-sync.js';
 import { publishCloud, takeCloudCommand, reportCloudResult } from './cloud-desktop.js';
 import { SALEBASE_SCRIPTS_URL, salebaseOptionForRequestType } from './salebase-scripts.js';
-import { matchObjection, REBUTTAL_LABELS } from './objection-matcher.js';
+import { createObjectionDetector, REBUTTAL_LABELS } from './objection-matcher.js';
 import { findSalebaseTabs, findSalebaseScriptTabs, isSalebaseScriptUrl, revealRebuttalInScriptTab } from './salebase-rebuttal.js';
 
 let lastAutoPublishFingerprint = "";
@@ -13,6 +13,8 @@ let lastPublishedLead = null;
 let pendingSalebaseOption = '';
 let lastSalebaseOpenKey = '';
 let objectionListening = false;
+// One detected objection opens its rebuttal once, not on every repeat.
+const objectionDetector = createObjectionDetector();
 chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
   if (change.status === 'complete' && isSalebaseScriptUrl(tab.url) && pendingSalebaseOption) {
     void selectSalebaseScript(tabId, pendingSalebaseOption);
@@ -157,10 +159,13 @@ async function installEnglishSpeechPack() {
 }
 
 async function handleObjectionTranscript(transcript) {
-  const match = matchObjection(transcript);
+  // Optional extra phrases per objection id, e.g.
+  // { "forgot": ["that was my late husband"] }, merged with the built-in ones.
+  const stored = await chrome.storage.local.get('impact.objectionPhrases').catch(() => ({}));
+  const { match } = objectionDetector.detect(transcript, Date.now(), { customPhrases: stored['impact.objectionPhrases'] });
   if (!match) return;
   // Store only the matched rebuttal label, never the audio or full transcript.
-  await chrome.storage.local.set({ 'impact.lastObjection': { label: match.label, at: Date.now(), status: 'looking' } });
+  await chrome.storage.local.set({ 'impact.lastObjection': { label: match.label, at: Date.now(), status: 'looking', score: match.score, via: match.via } });
   await revealSalebaseRebuttal(match);
 }
 
