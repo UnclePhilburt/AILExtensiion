@@ -163,11 +163,12 @@ async function handleObjectionTranscript(transcript) {
 }
 
 async function revealSalebaseRebuttal(match) {
-  const [tab] = await chrome.tabs.query({ url: 'https://salebase.ai/phone_scripts/*' });
-  if (!tab?.id) return;
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
+  const tabs = (await chrome.tabs.query({ url: 'https://salebase.ai/phone_scripts/*' })).filter((tab) => tab.id);
+  if (!tabs.length) return;
+  const results = await Promise.all(tabs.map(async (tab) => {
+    try {
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
       func: (phrases) => {
         const compact = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         const wanted = phrases.map(compact).filter((value) => value.length > 5);
@@ -187,9 +188,20 @@ async function revealSalebaseRebuttal(match) {
         if (details) details.open = true;
         return true;
       },
-      args: [match.phrases]
-    });
-  } catch (_error) { /* Salebase may be reloading or signed out. */ }
+        args: [match.phrases]
+      });
+      return { tab, found: result === true };
+    } catch (_error) { return { tab, found: false }; }
+  }));
+  const opened = results.find((item) => item.found);
+  // The rebuttal and its lead script live together. Make that exact Salebase
+  // window visible so the rep sees the opened response immediately.
+  if (opened?.tab.id && opened.tab.windowId != null) {
+    try {
+      await chrome.windows.update(opened.tab.windowId, { focused: true });
+      await chrome.tabs.update(opened.tab.id, { active: true });
+    } catch (_error) { /* A closed popup does not interrupt calling. */ }
+  }
 }
 
 async function getPhoneCommand(senderTab) {

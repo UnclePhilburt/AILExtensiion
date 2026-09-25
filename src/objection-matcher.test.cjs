@@ -39,4 +39,5 @@ test('Salebase rebuttal lookup uses the saved phrase variants and div fallback',
   assert.match(worker, /revealSalebaseRebuttal\(match\)/);
   assert.match(worker, /args: \[match\.phrases\]/);
   assert.match(worker, /document\.querySelectorAll\('body \*'\)/);
+  assert.match(worker, /chrome\.windows\.update\(opened\.tab\.windowId, \{ focused: true \}\)/);
 });
