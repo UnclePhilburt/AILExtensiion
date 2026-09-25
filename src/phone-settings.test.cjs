@@ -67,7 +67,7 @@ test('the boot script sets the same <html> attributes as settings-store.js, befo
 test('the CSS implements every display setting', () => {
   const css = read('styles.css');
   assert.match(css, /html\[data-hide-heads-up\] \.headsUp, html\[data-hide-dnk\] \.quietHoursFlag \{ display:none; \}/);
-  assert.match(css, /html\[data-text-size="large"\] :is\(\.workspace,\.calendarPage\) \{ --text-zoom:1\.15; \}html\[data-text-size="xlarge"\] :is\(\.workspace,\.calendarPage\) \{ --text-zoom:1\.3; \}/);
+  assert.match(css, /html\[data-text-size="large"\] :is\(\.workspace,\.calendarPage,\.home\) \{ --text-zoom:1\.15; \}html\[data-text-size="xlarge"\] :is\(\.workspace,\.calendarPage,\.home\) \{ --text-zoom:1\.3; \}/);
   assert.match(css, /\.calendarPage :is\(\.calCard,\.calNotice\) \{ zoom:var\(--text-zoom, 1\); \}/);
   assert.match(read('workspace.html'), /<main class="app workspace" hidden>/);
 });
