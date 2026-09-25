@@ -39,6 +39,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
+  if (message?.type === 'impact/installEnglishSpeechPack') {
+    installEnglishSpeechPack()
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
   if (message?.type === 'impact/objectionListenerState') {
     objectionListening = Boolean(message.listening);
     void chrome.storage.local.set({ 'impact.objectionListening': objectionListening });
@@ -130,6 +136,22 @@ async function setObjectionListening(enabled) {
   objectionListening = true;
   await chrome.storage.local.set({ 'impact.objectionListening': true, 'impact.objectionListenerError': '' });
   return { listening: true };
+}
+
+async function ensureListenerDocument() {
+  const contexts = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
+  if (!contexts.length) await chrome.offscreen.createDocument({
+    url: 'src/offscreen/listener.html',
+    reasons: ['USER_MEDIA'],
+    justification: 'Use the browser’s on-device English speech pack for opt-in objection matching.'
+  });
+}
+
+async function installEnglishSpeechPack() {
+  await ensureListenerDocument();
+  const result = await chrome.runtime.sendMessage({ type: 'impact/installEnglishSpeechPack' });
+  if (!result?.ok) throw new Error(result?.error || 'Could not install the English speech pack.');
+  return result;
 }
 
 async function handleObjectionTranscript(transcript) {

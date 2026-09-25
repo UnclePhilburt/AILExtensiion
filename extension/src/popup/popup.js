@@ -17,6 +17,13 @@ async function refreshListener() {
   const local = await chrome.storage.local.get(['impact.objectionListening', 'impact.objectionListenerError']);
   renderListener(local['impact.objectionListening'], local['impact.objectionListenerError']);
 }
+async function languageSettingsUrl() {
+  if (globalThis.navigator?.brave && await globalThis.navigator.brave.isBrave()) return 'brave://settings/languages';
+  const agent = navigator.userAgent;
+  if (/Edg\//.test(agent)) return 'edge://settings/languages';
+  if (/Chrome\//.test(agent)) return 'chrome://settings/languages';
+  return null;
+}
 function renderSession(next) {
   session = next;
   $('#loading').hidden = true;
@@ -61,6 +68,21 @@ $('#objectionListening').addEventListener('change', async (event) => {
   } catch (error) {
     renderListener(false, error.message || 'Could not start local listening.');
   } finally { event.target.disabled = false; }
+});
+$('#installEnglishPack').addEventListener('click', async () => {
+  const button = $('#installEnglishPack');
+  button.disabled = true; say('Downloading the local English voice pack…');
+  try {
+    const result = await chrome.runtime.sendMessage({ type: 'impact/installEnglishSpeechPack' });
+    if (!result?.ok) throw new Error(result?.error || 'Could not install the English voice pack.');
+    say(result.message || 'English voice pack installed. Turn listening on.');
+  } catch (error) { say(error.message, true); }
+  finally { button.disabled = false; }
+});
+$('#openLanguageSettings').addEventListener('click', async () => {
+  const url = await languageSettingsUrl();
+  if (!url) { say('Open your browser language settings and add English voice support.', true); return; }
+  await chrome.tabs.create({ url });
 });
 async function refreshStatus() {
   if (!session || checking) return;

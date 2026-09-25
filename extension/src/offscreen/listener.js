@@ -48,11 +48,28 @@ async function start() {
   report('impact/objectionListenerState', { listening: true });
 }
 
+async function installEnglishPack() {
+  const Recognition = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
+  if (!Recognition || typeof Recognition.available !== 'function' || typeof Recognition.install !== 'function') {
+    throw new Error('This browser cannot install an on-device English speech pack.');
+  }
+  const availability = await Recognition.available({ langs: ['en-US'], processLocally: true });
+  if (availability === 'available') return { installed: true, message: 'The local English speech pack is ready.' };
+  if (availability !== 'downloadable') throw new Error('The local English speech pack is not available in this browser.');
+  const installed = await Recognition.install({ langs: ['en-US'], processLocally: true });
+  if (!installed) throw new Error('The English speech pack could not be installed.');
+  return { installed: true, message: 'English voice pack installed. Turn listening on.' };
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'impact/offscreenSetObjectionListening') {
     (message.enabled ? start() : Promise.resolve(stop()))
       .then(() => sendResponse({ ok: true }))
       .catch((error) => { stop(); report('impact/objectionListenerError', { error: error.message }); sendResponse({ ok: false, error: error.message }); });
+    return true;
+  }
+  if (message?.type === 'impact/installEnglishSpeechPack') {
+    installEnglishPack().then((result) => sendResponse({ ok: true, ...result })).catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
   return false;
