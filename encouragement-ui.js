@@ -105,6 +105,9 @@ export function encourageResult(type) {
   const toast = toastElement();
   toast.textContent = line.text;
   toast.dataset.category = line.category;
+  // Sit just below header buttons (data-toast-avoid) while they're on screen.
+  const avoid = document.querySelector('[data-toast-avoid]')?.getBoundingClientRect().bottom;
+  toast.style.top = avoid > 0 ? `${Math.round(avoid + 10)}px` : '';
   toast.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(hideToast, TOAST_MS);
