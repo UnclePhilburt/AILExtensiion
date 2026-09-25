@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "IMPACT Companion",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "update_url": "https://unclephilburt.github.io/AILExtensiion/updates/updates.xml",
   "description": "Connect your IMPACT lead workflow to your phone: contact details, navigation, call registration and call results.",
   "action": {
@@ -25,6 +25,8 @@
   ],
   "permissions": [
     "activeTab",
+    "audioCapture",
+    "offscreen",
     "scripting",
     "storage",
     "tabs"

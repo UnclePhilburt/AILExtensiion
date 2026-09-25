@@ -4,11 +4,13 @@ import { accessToken } from "../shared/auth-runtime.js";
 import { cloudEnabled } from '../shared/cloud-sync.js';
 import { publishCloud, takeCloudCommand, reportCloudResult } from './cloud-desktop.js';
 import { SALEBASE_SCRIPTS_URL, salebaseOptionForRequestType } from './salebase-scripts.js';
+import { matchObjection } from './objection-matcher.js';
 
 let lastAutoPublishFingerprint = "";
 let lastAutoPublishAt = 0;
 let lastPublishedLead = null;
 let pendingSalebaseOption = '';
+let objectionListening = false;
 chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
   if (change.status === 'complete' && tab.url?.startsWith(SALEBASE_SCRIPTS_URL) && pendingSalebaseOption) {
     void selectSalebaseScript(tabId, pendingSalebaseOption);
@@ -26,6 +28,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'impact/authStatus') {
     accessToken().then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
     return true;
+  }
+  if (message?.type === 'impact/getObjectionListening') {
+    sendResponse({ ok: true, listening: objectionListening });
+    return false;
+  }
+  if (message?.type === 'impact/setObjectionListening') {
+    setObjectionListening(Boolean(message.enabled))
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === 'impact/objectionListenerState') {
+    objectionListening = Boolean(message.listening);
+    void chrome.storage.local.set({ 'impact.objectionListening': objectionListening });
+    return false;
+  }
+  if (message?.type === 'impact/objectionListenerError') {
+    objectionListening = false;
+    void chrome.storage.local.set({ 'impact.objectionListening': false, 'impact.objectionListenerError': message.error || 'Local listening stopped.' });
+    return false;
+  }
+  if (message?.type === 'impact/objectionTranscript') {
+    void handleObjectionTranscript(message.transcript);
+    return false;
   }
   if (message?.type === "impact/log") {
     appendLog(message.entry, sender).then(() => sendResponse({ ok: true }));
@@ -83,6 +109,59 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return false;
 });
+
+async function setObjectionListening(enabled) {
+  if (!enabled) {
+    try { await chrome.runtime.sendMessage({ type: 'impact/offscreenSetObjectionListening', enabled: false }); } catch (_error) {}
+    objectionListening = false;
+    await chrome.storage.local.set({ 'impact.objectionListening': false, 'impact.objectionListenerError': '' });
+    return { listening: false };
+  }
+  const contexts = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
+  if (!contexts.length) {
+    await chrome.offscreen.createDocument({
+      url: 'src/offscreen/listener.html',
+      reasons: ['USER_MEDIA'],
+      justification: 'Listen locally for enabled objection-rebuttal matching.'
+    });
+  }
+  const result = await chrome.runtime.sendMessage({ type: 'impact/offscreenSetObjectionListening', enabled: true });
+  if (!result?.ok) throw new Error(result?.error || 'Could not start local listening.');
+  objectionListening = true;
+  await chrome.storage.local.set({ 'impact.objectionListening': true, 'impact.objectionListenerError': '' });
+  return { listening: true };
+}
+
+async function handleObjectionTranscript(transcript) {
+  const match = matchObjection(transcript);
+  if (!match) return;
+  // Store only the matched rebuttal label, never the audio or full transcript.
+  await chrome.storage.local.set({ 'impact.lastObjection': { label: match.label, at: Date.now() } });
+  await revealSalebaseRebuttal(match.label);
+}
+
+async function revealSalebaseRebuttal(label) {
+  const [tab] = await chrome.tabs.query({ url: 'https://salebase.ai/phone_scripts/*' });
+  if (!tab?.id) return;
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: (wanted) => {
+        const words = wanted.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(Boolean);
+        const candidates = [...document.querySelectorAll('button, a, summary, [role="button"]')];
+        const target = candidates.find((element) => {
+          const text = (element.textContent || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ');
+          return words.length > 2 && words.every((word) => text.includes(word));
+        });
+        if (!target) return false;
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.click();
+        return true;
+      },
+      args: [label]
+    });
+  } catch (_error) { /* Salebase may be reloading or signed out. */ }
+}
 
 async function getPhoneCommand(senderTab) {
   // The content script only polls while its page is visible. Do not ask Chrome

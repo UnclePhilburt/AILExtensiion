@@ -7,13 +7,23 @@ let session = null;
 let checking = false;
 let busy = false;
 function say(message, error = false) { $('#message').textContent = message; $('#message').classList.toggle('error', error); }
+function renderListener(listening, error = '') {
+  $('#objectionListening').checked = Boolean(listening);
+  $('#listenerHint').textContent = error || (listening
+    ? 'Listening locally for saved objection phrases. No audio is saved.'
+    : 'Off — it never listens unless you turn this on.');
+}
+async function refreshListener() {
+  const local = await chrome.storage.local.get(['impact.objectionListening', 'impact.objectionListenerError']);
+  renderListener(local['impact.objectionListening'], local['impact.objectionListenerError']);
+}
 function renderSession(next) {
   session = next;
   $('#loading').hidden = true;
   $('#login').hidden = Boolean(next);
   $('#dashboard').hidden = !next;
   $('#accountEmail').textContent = next?.user?.email || '';
-  if (next) void refreshStatus();
+  if (next) { void refreshStatus(); void refreshListener(); }
 }
 async function accountPage() { await chrome.tabs.create({url:chrome.runtime.getURL('src/account/account.html')}); window.close(); }
 $('#manageLogin').addEventListener('click', accountPage);
@@ -38,6 +48,19 @@ $('#loginForm').addEventListener('submit', async event => {
 client.auth.onAuthStateChange((_event,next) => renderSession(next));
 chrome.storage.onChanged.addListener(changes => {
   if (changes['impact.supabase.session']) void client.auth.getSession().then(({data})=>renderSession(data.session));
+  if (changes['impact.objectionListening'] || changes['impact.objectionListenerError']) void refreshListener();
+});
+$('#objectionListening').addEventListener('change', async (event) => {
+  const enabled = event.target.checked;
+  event.target.disabled = true;
+  renderListener(enabled, enabled ? 'Starting local listening…' : 'Turning listening off…');
+  try {
+    const result = await chrome.runtime.sendMessage({ type: 'impact/setObjectionListening', enabled });
+    if (!result?.ok) throw new Error(result?.error || 'Could not change listening.');
+    renderListener(result.listening);
+  } catch (error) {
+    renderListener(false, error.message || 'Could not start local listening.');
+  } finally { event.target.disabled = false; }
 });
 async function refreshStatus() {
   if (!session || checking) return;
