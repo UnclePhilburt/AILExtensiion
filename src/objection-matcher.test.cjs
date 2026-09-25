@@ -30,4 +30,6 @@ test('the extension offers a direct local English-pack install and detected brow
   assert.match(popup, /chrome:\/\/settings\/languages/);
   assert.match(popup, /navigator\.mediaDevices\.getUserMedia\(\{ audio: true \}\)/);
   assert.match(popup, /chrome:\/\/settings\/content\/microphone/);
+  const permissionPage = fs.readFileSync(path.join(__dirname, '../extension/src/offscreen/microphone-permission.js'), 'utf8');
+  assert.match(permissionPage, /navigator\.mediaDevices\.getUserMedia\(\{ audio: true \}\)/);
 });

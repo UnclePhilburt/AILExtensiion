@@ -83,11 +83,8 @@ $('#objectionListening').addEventListener('change', async (event) => {
   } finally { event.target.disabled = false; }
 });
 $('#requestMicrophone').addEventListener('click', async () => {
-  const button = $('#requestMicrophone');
-  button.disabled = true; say('Requesting microphone access…');
-  try { await requestMicrophone(); say('Microphone allowed. Turn listening on.'); }
-  catch (error) { say('Microphone access was blocked. Use Open microphone settings, allow IMPACT Companion, then try again.', true); }
-  finally { button.disabled = false; }
+  await chrome.tabs.create({ url: chrome.runtime.getURL('src/offscreen/microphone-permission.html') });
+  window.close();
 });
 $('#openMicrophoneSettings').addEventListener('click', async () => {
   const url = await microphoneSettingsUrl();
