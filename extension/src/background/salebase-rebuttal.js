@@ -122,12 +122,36 @@ async function guardAgainstNewTabs(chromeApi, tabId) {
   };
 }
 
+const ACTION_TEXT = {
+  'clicked-title': 'clicked its title',
+  'clicked-title-then-revealed': 'clicked its title and showed the hidden text',
+  'clicked-toggle': 'clicked its toggle',
+  'opened-details': 'opened it',
+  'already-open': 'it was already open',
+  'skipped-navigating-link': 'showed it without following its link',
+  'skipped-navigating-link-then-revealed': 'showed it without following its link'
+};
+
+// Turns the page script's answer into a status that names the stage that failed.
+export function describeOutcome(detail, label) {
+  if (!detail) {
+    return { status: 'page-not-reachable', stage: 'talk-to-page', message: 'Found the Salebase script window but could not talk to the page. Reload the Salebase tab and try again.' };
+  }
+  if (detail.ok === false) {
+    return { status: 'page-error', stage: 'open-panel', message: `The Salebase page script failed: ${detail.error || 'unknown error'}.` };
+  }
+  if (!detail.found) {
+    return { status: 'rebuttal-not-found', stage: 'find-panel', message: `Salebase script window found, but the “${label}” rebuttal was not found on it.` };
+  }
+  return { status: 'opened', stage: 'done', action: detail.action || '', message: `“${label}”: ${ACTION_TEXT[detail.action] || detail.action || 'opened'} in the Salebase script window.` };
+}
+
 export async function revealRebuttalInScriptTab(chromeApi, match, options = {}) {
   const request = { label: match?.label || '', phrases: match?.phrases || [], otherLabels: options.otherLabels || [] };
   const salebaseTabs = await findSalebaseTabs(chromeApi);
   const seen = salebaseTabs.map((tab) => ({ id: tab.id, url: pathOnly(tab.url), active: Boolean(tab.active) }));
   if (!salebaseTabs.length) {
-    return { status: 'no-script-window', message: 'No Salebase script window is open.', tabsSeen: seen };
+    return { status: 'no-script-window', stage: 'find-script-tab', message: 'No Salebase script window is open.', tabsSeen: seen };
   }
 
   // Ask every Salebase tab (read-only) whether it shows the script and has the
@@ -139,7 +163,7 @@ export async function revealRebuttalInScriptTab(chromeApi, match, options = {}) 
   }));
   const tab = chooseScriptTab(salebaseTabs, probes);
   if (!tab) {
-    return { status: 'no-script-window', message: 'No Salebase script window is open.', tabsSeen: seen, probes };
+    return { status: 'no-script-window', stage: 'find-script-tab', message: 'No Salebase script window is open.', tabsSeen: seen, probes };
   }
 
   try {
@@ -151,10 +175,7 @@ export async function revealRebuttalInScriptTab(chromeApi, match, options = {}) 
   const detail = await messageRebuttalScript(chromeApi, tab.id, { type: 'impact/revealRebuttal', ...request });
   const closedTabs = await guard.release(options.guardMs ?? POPUP_GUARD_MS);
   return {
-    status: detail?.found ? 'opened' : 'rebuttal-not-found',
-    message: detail?.found
-      ? `Opened “${request.label}” in the Salebase script window.`
-      : `Salebase script window found, but the “${request.label}” rebuttal was not found on it.`,
+    ...describeOutcome(detail, request.label),
     tabId: tab.id,
     url: pathOnly(tab.url),
     tabsSeen: seen,

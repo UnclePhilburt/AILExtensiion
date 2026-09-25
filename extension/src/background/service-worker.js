@@ -161,11 +161,25 @@ async function installEnglishSpeechPack() {
 async function handleObjectionTranscript(transcript) {
   // Optional extra phrases per objection id, e.g.
   // { "forgot": ["that was my late husband"] }, merged with the built-in ones.
-  const stored = await chrome.storage.local.get('impact.objectionPhrases').catch(() => ({}));
-  const { match } = objectionDetector.detect(transcript, Date.now(), { customPhrases: stored['impact.objectionPhrases'] });
+  // Nothing here stores the transcript: only labels, scores and outcomes.
+  let detection;
+  try {
+    const stored = await chrome.storage.local.get('impact.objectionPhrases').catch(() => ({}));
+    detection = objectionDetector.detect(transcript, Date.now(), { customPhrases: stored['impact.objectionPhrases'] });
+  } catch (error) {
+    await chrome.storage.local.set({ 'impact.lastHeard': { at: Date.now(), outcome: 'matcher-error' } });
+    await appendLocalLog('error', 'objection.matcherError', { reason: error.message });
+    return;
+  }
+  const { match } = detection;
+  // Shows in the popup that speech is arriving and whether it matched.
+  await chrome.storage.local.set({ 'impact.lastHeard': { at: Date.now(), outcome: detection.reason, label: (match || detection.suppressed)?.label || '' } });
+  if (detection.reason === 'cooldown') {
+    await appendLocalLog('info', 'objection.cooldown', { label: detection.suppressed.label });
+    return;
+  }
   if (!match) return;
-  // Store only the matched rebuttal label, never the audio or full transcript.
-  await chrome.storage.local.set({ 'impact.lastObjection': { label: match.label, at: Date.now(), status: 'looking', score: match.score, via: match.via } });
+  await chrome.storage.local.set({ 'impact.lastObjection': { label: match.label, at: Date.now(), status: 'looking', stage: 'matched', score: match.score, via: match.via } });
   await revealSalebaseRebuttal(match);
 }
 
@@ -176,14 +190,17 @@ async function revealSalebaseRebuttal(match) {
   try {
     result = await revealRebuttalInScriptTab(chrome, match, { otherLabels: REBUTTAL_LABELS.filter((label) => label !== match.label) });
   } catch (error) {
-    result = { status: 'error', message: `Could not open the rebuttal: ${error.message}` };
+    result = { status: 'error', stage: 'open-rebuttal', message: `Could not open the rebuttal: ${error.message}` };
   }
   await chrome.storage.local.set({
-    'impact.lastObjection': { label: match.label, at: Date.now(), status: result.status, message: result.message }
+    'impact.lastObjection': { label: match.label, at: Date.now(), status: result.status, stage: result.stage || '', action: result.action || '', message: result.message, score: match.score, via: match.via }
   });
   await appendLocalLog(result.status === 'opened' ? 'info' : 'warn', 'salebase.rebuttal', {
     label: match.label,
     status: result.status,
+    stage: result.stage || '',
+    matchScore: match.score,
+    matchedBy: match.via,
     message: result.message,
     tabId: result.tabId ?? null,
     url: result.url || null,

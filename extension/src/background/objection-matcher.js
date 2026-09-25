@@ -319,7 +319,8 @@ export function scoreObjections(transcript, options = {}) {
     const anchored = rule.anchors.some((anchor) => anchor.test(normalized));
     // A saved phrase said on its own (e.g. "a zoom meeting?") counts even
     // without an anchor; inside a longer sentence it needs one.
-    const savedAlone = Boolean(saved) && normalized.split(' ').length <= saved.split(' ').length + 2;
+    // (Only for the whole utterance: a window cut from rep talk is not "alone".)
+    const savedAlone = !options.vetoContext && Boolean(saved) && normalized.split(' ').length <= saved.split(' ').length + 2;
     let score = 0;
     for (const variant of [...variantTokens, ...extra.tokens]) {
       score = Math.max(score, variantScore(variant, tokens));
@@ -331,18 +332,22 @@ export function scoreObjections(transcript, options = {}) {
   }).sort((a, b) => Number(b.matched) - Number(a.matched) || b.score - a.score || b.priority - a.priority);
 }
 
-// Long final results can merge rep talk and the customer's reply, so a long
-// utterance is also checked in short overlapping windows.
-const WINDOW_WORDS = 10;
-const LONG_UTTERANCE_WORDS = 14;
+// On speakerphone one final result often merges the rep's question and the
+// customer's answer ("do you remember filling that out no i dont remember
+// doing this"). A rep-talk veto must only block the words near it, so any
+// utterance longer than a short phrase is also checked in overlapping windows,
+// each with a few words of preceding context for the vetoes.
+const WINDOW_WORDS = 8;
+const WINDOW_CONTEXT_WORDS = 4;
+const LONG_UTTERANCE_WORDS = 6;
 
 export function matchObjection(transcript, options = {}) {
   let [best] = scoreObjections(transcript, options);
   const words = normalizeTranscript(transcript).split(' ').filter(Boolean);
   if (!best?.matched && words.length > LONG_UTTERANCE_WORDS) {
-    for (let start = 0; start + WINDOW_WORDS - 3 < words.length; start += 3) {
+    for (let start = 0; start < words.length - 1; start += 1) {
       // Vetoes also see a few words before the window ("if you | are not interested").
-      const vetoContext = words.slice(Math.max(0, start - 4), start + WINDOW_WORDS).join(' ');
+      const vetoContext = words.slice(Math.max(0, start - WINDOW_CONTEXT_WORDS), start + WINDOW_WORDS).join(' ');
       const [candidate] = scoreObjections(words.slice(start, start + WINDOW_WORDS).join(' '), { ...options, vetoContext });
       if (candidate?.matched && (!best?.matched || candidate.score > best.score || (candidate.score === best.score && candidate.priority > best.priority))) best = candidate;
     }
