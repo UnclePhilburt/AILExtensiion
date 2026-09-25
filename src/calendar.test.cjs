@@ -146,7 +146,7 @@ test('calendar page, links and Workspace hooks are wired', () => {
   const html = read('calendar.html');
   for (const id of ['calendarSetup', 'monthGrid', 'prevMonth', 'nextMonth', 'dayList', 'upcomingList', 'calendarBack']) assert.match(html, new RegExp(`id="${id}"`), id);
   assert.match(html, /Calendar storage isn't set up yet/);
-  assert.match(read('index.html'), /<a class="calendarCard" href="calendar\.html\?from=home">/);
+  assert.match(read('index.html'), /<a class="calendarCard shortcut" href="calendar\.html\?from=home">/);
   assert.match(read('calendar.js'), /NOT_SET_UP_CODES\.includes\(error\.code\)/);
   const app = read('app.js');
   assert.match(app, /if \(useCloud\) void saveLeadSchedule\(lead\)\.catch\(\(\) => \{\}\);/);
