@@ -3,7 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-const source = fs.readFileSync(path.join(__dirname, '../phone-web/public/lead-rules.js'), 'utf8').replace(/^export /gm, '');
+const read = (file) => fs.readFileSync(path.join(__dirname, '../phone-web/public', file), 'utf8');
+const source = `${read('time-zone.js')}\n${read('lead-rules.js')}`.replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
 const rules = vm.createContext({}); vm.runInContext(`${source}; this.doNotKnockWarning = doNotKnockWarning;`, rules);
 
 // Fixed instants so results never depend on the machine's time zone.
