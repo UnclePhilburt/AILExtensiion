@@ -89,8 +89,11 @@ test('the old slide-up panel is gone; pages load the boot script first and link 
   assert.match(read('statistics.html'), /<a class="settingsLink" href="settings\.html\?from=statistics">/);
   const workspace = read('workspace.html');
   const header = workspace.slice(workspace.indexOf('<header'), workspace.indexOf('</header>'));
-  assert.match(header, /<nav class="headerLinks"[^>]*><a class="accountLink iconLink" href="account\.html\?next=workspace\.html" aria-label="Your account"[^>]*>.*?<\/a><a class="calendarLink iconLink" href="calendar\.html\?from=workspace" aria-label="Calendar"[^>]*>.*?<\/a><a class="settingsLink iconLink" href="settings\.html\?from=workspace" aria-label="Settings"/, 'Account, Calendar and Settings are a labelled row of icon buttons in the header');
-  assert.equal(workspace.match(/settings\.html/g).length, 1, 'no settings entry point in the lead area');
+  assert.match(header, /<a class="brand homeBrand" href="\.\/"/, 'the IMPACT logo goes back to Home');
+  assert.doesNotMatch(workspace, /accountLink|calendarLink|settingsLink|headerLinks|iconLink|account\.html|calendar\.html/, 'no account, calendar or settings links on the Workspace');
+  assert.equal((header.match(/<a /g) || []).length, 1, 'the logo is the only link in the header');
+  assert.doesNotMatch(read('app.js'), /\.accountLink|\.settingsLink|\.calendarLink/);
+  assert.equal((workspace.match(/settings\.html/g) || []).length, 0, 'no settings entry point on the Workspace');
   assert.doesNotMatch(read('styles.css'), /settingsSheet|titleRow/);
   assert.doesNotMatch(read('workspace-entry.js') + read('phone-entry.js'), /phone-settings/);
   assert.match(read('workspace-entry.js'), /import '\.\/wake-lock\.js';/);
@@ -110,5 +113,7 @@ test('calm Workspace: band + body layout, same controls in the same order, and e
   assert.match(css, /prefers-reduced-motion: reduce\) \{ \.wsBand, \.workspace \.leadCard\.empty::before \{ animation: none; \}/);
   assert.match(css, /\.workspace \.quietHoursFlag::before \{ content: "!"/, 'DO NOT KNOCK keeps a clear icon');
   assert.match(read('encouragement-ui.js'), /data-toast-avoid/);
-  assert.match(html, /data-toast-avoid/);
+  assert.match(html, /<div class="workspaceTop" data-toast-avoid>/, 'the toast stays below the logo row');
+  assert.doesNotMatch(css, /\.wsHeader \.brandSub \{ display: none/, 'COMPANION shows at every width');
+  for (const [file, back] of [['calendar.js', /workspace: \['workspace\.html', '← Workspace'\], 'workspace-local': \['workspace\.html\?mode=local'/], ['settings.js', /'workspace-local': \['workspace\.html\?mode=local', '← Workspace'\]/]]) assert.match(read(file), back, file);
 });

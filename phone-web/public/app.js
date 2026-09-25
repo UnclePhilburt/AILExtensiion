@@ -67,9 +67,6 @@ if (localToken) {
 }
 if (useCloud) document.querySelector('#bridgeSetup').hidden = true;
 document.querySelector('#connectionModeLabel').textContent = useCloud ? 'Cloud connection' : 'Local connection';
-if (!useCloud) document.querySelector('.accountLink').href = 'account.html?mode=local';
-if (!useCloud) document.querySelector('.settingsLink').href = 'settings.html?from=workspace-local';
-if (!useCloud) document.querySelector('.calendarLink').href = 'calendar.html?from=workspace-local';
 
 persistBridgeSettings();
 
