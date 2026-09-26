@@ -1,9 +1,9 @@
 {
   "ExtensionSettings": {
     "fomhodnemjbjehbiclpfoihdbbdcpgac": {
+      "override_update_url": true,
       "update_url": "https://unclephilburt.github.io/AILExtensiion/updates/updates.xml",
-      "installation_mode": "force_installed",
-      "override_update_url": true
+      "installation_mode": "force_installed"
     }
   }
 }

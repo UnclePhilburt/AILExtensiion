@@ -212,6 +212,7 @@ html[data-text-size] .workspace .callLink { gap: 10px; padding: 14px; }html[data
 .workspace .navControls button, .workspace .controls button, .workspace .pendingCallNotice button { border-radius: 16px; }
 .workspace .navControls button { border: 0; background: #fff; color: #2a5446; box-shadow: 0 1px 2px #0b1f1c0f, 0 6px 16px #0b1f1c12; }
 .workspace #nextLead:not(:disabled) { background: #e2f0e8; color: #1d5a43; }
+.workspace #bestNextLead:not(:disabled) { background: #f7ead1; color: #65491e; }
 .workspace .navControls button:disabled { background: #ffffffcc; color: #8a9a93; box-shadow: none; }
 html[data-bg] .workspace .navControls button:disabled { border: 1px solid #ffffff24; background: #ffffff17; color: #ffffffa3; }
 .workspace .controls { gap: 10px; padding: 20px; border: 0; border-radius: 24px; box-shadow: 0 1px 2px #0b1f1c0d, 0 10px 28px #0b1f1c12; }
