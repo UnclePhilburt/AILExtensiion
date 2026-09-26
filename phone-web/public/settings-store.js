@@ -16,6 +16,7 @@ export const ORGANIZATIONS = [
 ];
 
 export const DEFAULT_SETTINGS = Object.freeze({
+  swipeLeads: true,
   keepAwake: true, // Screen Wake Lock on the Workspace page (where supported)
   vibrate: true, // short buzz when a result / Previous / Next tap is sent
   confirmResults: true, // ask before sending Refused Appointment
@@ -30,7 +31,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   , beigeLeadCard: false // parchment lead card instead of white
 });
 
-const BOOLEAN_KEYS = ['keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard'];
+const BOOLEAN_KEYS = ['swipeLeads', 'keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard'];
 
 // Known keys with valid values; anything missing or invalid keeps its value from
 // `base` (the defaults unless given).
@@ -64,6 +65,7 @@ export function resetPhoneSettings(storage) {
 export function displayAttributes(settings) {
   const s = normalizeSettings(settings);
   return {
+    'data-no-swipe': s.swipeLeads ? null : '',
     'data-text-size': s.textSize === 'normal' ? null : s.textSize,
     'data-hide-heads-up': s.showHeadsUp ? null : '',
     'data-hide-dnk': s.showDoNotKnock ? null : '',
