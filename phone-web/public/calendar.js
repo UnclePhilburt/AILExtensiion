@@ -50,6 +50,7 @@ function eventItem(event, now) {
     body.append(call);
   }
   if (event.address) body.append(el('span', 'calAddress', event.address));
+  if (event.outcome?.status === 'rescheduled' && event.outcome.rescheduled_for) body.append(el('span', 'calMeta', `Rescheduled to ${new Date(event.outcome.rescheduled_for).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`));
   if (event.kind !== 'callback') {
     const outcome = el('button', 'appointmentOutcomeButton', event.outcome ? 'Edit appointment result' : 'Add appointment result');
     outcome.type = 'button'; outcome.dataset.outcomeEvent = String(event.id);
@@ -95,6 +96,11 @@ async function saveOutcome() {
     const row = { user_id: sessionData.session.user.id, scheduled_event_id: selectedOutcomeEvent.id, ...value, updated_at: new Date().toISOString() };
     const { error } = await client.from('appointment_outcomes').upsert(row, { onConflict: 'user_id,scheduled_event_id' });
     if (error) throw error;
+    if (value.status === 'rescheduled' && selectedOutcomeEvent.leadKey) {
+      const rescheduled = { user_id: sessionData.session.user.id, lead_key: selectedOutcomeEvent.leadKey, impact_lead_id: selectedOutcomeEvent.impactLeadId || null, lead_name: selectedOutcomeEvent.leadName, phone: selectedOutcomeEvent.phone, address: selectedOutcomeEvent.address, request_type: selectedOutcomeEvent.requestType, kind: selectedOutcomeEvent.kind, starts_at: value.rescheduled_for, all_day: false, source: 'phone', source_line: 'Rescheduled from Calendar' };
+      const { error: rescheduleError } = await client.from('scheduled_events').upsert(rescheduled, { onConflict: 'user_id,lead_key,kind,starts_at' });
+      if (rescheduleError) throw rescheduleError;
+    }
     $('#outcomeStatus').textContent = 'Saved. Your statistics and Your Day will include it.';
     await load();
   } catch (error) { $('#outcomeStatus').textContent = error?.message || 'Could not save this appointment result.'; } finally { button.disabled = false; }
@@ -173,7 +179,7 @@ async function load() {
     if (sessionError || !sessionData?.session) { location.replace('account.html?next=calendar.html'); return; }
     const [{ data, error }, outcomes] = await Promise.all([
       client.from('scheduled_events')
-      .select('id,kind,starts_at,all_day,lead_name,phone,address,request_type,source_line')
+      .select('id,lead_key,impact_lead_id,kind,starts_at,all_day,lead_name,phone,address,request_type,source_line')
       .order('starts_at', { ascending: true }).limit(2000),
       client.from('appointment_outcomes').select('scheduled_event_id,status,apl,referrals,notes,rescheduled_for,created_at').limit(2000)
     ]);

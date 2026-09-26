@@ -118,6 +118,7 @@ export function normalizeEvent(row) {
   if (!Number.isFinite(at) || !EVENT_KINDS[row?.kind]) return null;
   return {
     id: row.id, kind: row.kind, at, allDay: Boolean(row.all_day), day: dayKey(at),
+    leadKey: row.lead_key || '', impactLeadId: row.impact_lead_id || '',
     leadName: row.lead_name || 'Lead', phone: row.phone || '', address: row.address || '',
     requestType: row.request_type || '', sourceLine: row.source_line || ''
   };
