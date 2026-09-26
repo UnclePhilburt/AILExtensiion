@@ -21,6 +21,14 @@ const saveBridgeButton = document.querySelector("#saveBridge");
 const previousLeadButton = document.querySelector("#previousLead");
 const nextLeadButton = document.querySelector("#nextLead");
 const noAnswerButton = document.querySelector("#noAnswer");
+const detailActions = [
+  ["#presDone", "pres-done"],
+  ["#reschedule", "reschedule"],
+  ["#noShow", "no-show"],
+  ["#sendText", "send-text"],
+  ["#droppedBy", "dropped-by"],
+  ["#addComments", "add-comments"]
+].map(([selector, type]) => ({ button: document.querySelector(selector), type }));
 const virtualAppointmentButton = document.querySelector("#virtualAppointment");
 const refusedAppointmentButton = document.querySelector("#refusedAppointment");
 const callResults = document.querySelector("#callResults");
@@ -105,6 +113,7 @@ installLeadSwipe(leadCard, {
   }
 });
 noAnswerButton.addEventListener("click", () => sendCallResult("no-answer"));
+for (const action of detailActions) action.button?.addEventListener("click", () => sendCallResult(action.type));
 virtualAppointmentButton.addEventListener("click", () => sendCallResult("virtual-appointment"));
 refusedAppointmentButton.addEventListener("click", () => confirmResult("Refused Appointment") ? sendCallResult("refused-appointment") : false);
 dismissPendingCallButton.addEventListener("click", dismissPendingCall);
@@ -785,6 +794,7 @@ function updateNavButtons() {
   noAnswerButton.disabled = !callStarted || !displayedLead?.leadId;
   virtualAppointmentButton.disabled = !callStarted || !displayedLead?.leadId || Boolean(displayedLead?.appointmentOptions);
   refusedAppointmentButton.disabled = !callStarted || !displayedLead?.leadId;
+  for (const action of detailActions) if (action.button) action.button.disabled = !callStarted || !displayedLead?.leadId;
   const navLocked = !displayedLead?.available || navigationPending();
   previousLeadButton.disabled = navLocked;
   nextLeadButton.disabled = navLocked;
