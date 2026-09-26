@@ -16,7 +16,7 @@ test('daily brief tells the story of today from the first call and outcomes', ()
   ], now);
   assert.equal(summary.greeting, 'Good afternoon');
   assert.equal(summary.calls, 2); assert.equal(summary.results, 2); assert.equal(summary.appointments, 1);
-  assert.match(summary.story, /started at 2:00 PM/i); assert.match(summary.story, /1 hour/);
+  assert.match(summary.story, /2:00 PM/); assert.match(summary.story, /1 hour/); assert.equal(summary.chapters.length, 3);
 });
 
 test('comparison uses earlier days only through the same time of day', () => {
@@ -31,5 +31,5 @@ test('comparison uses earlier days only through the same time of day', () => {
 test('evening reflection closes the day calmly', () => {
   const summary = api.dailyBrief([event('call', '2026-09-25T20:00:00')], new Date('2026-09-25T21:05:00'));
   assert.equal(summary.greeting, 'Good evening'); assert.equal(summary.evening, true);
-  assert.match(summary.reflection, /Tonight's record/);
+  assert.match(summary.reflection, /1 call/);
 });

@@ -6,7 +6,9 @@ function metric(value, label) { const item = document.createElement('div'); cons
 function render(brief) {
   $('#dailyGreeting').textContent = `${brief.greeting}.`;
   $('#dailyDate').textContent = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
-  const story = $('#dailyStory'); story.textContent = brief.story; story.hidden = false;
+  const story = $('#dailyStory'); story.replaceChildren();
+  for (const chapter of brief.chapters || [brief.story]) { const paragraph = document.createElement('p'); paragraph.textContent = chapter; story.append(paragraph); }
+  story.hidden = false;
   $('#dailyMetrics').replaceChildren(metric(brief.calls, 'Calls started'), metric(brief.results, 'Results recorded'), metric(brief.appointments, 'Appointments set'));
   $('#dailyComparison').textContent = brief.comparison;
   $('#dailyReflection').textContent = brief.reflection;
