@@ -139,7 +139,8 @@ test('service worker wiring: no focused-window gate, ordered writes, follow afte
   const cloud = read('extension/src/background/cloud-desktop.js');
   assert.match(cloud, /client\.rpc\('companion_desktop',\{p_device:await device\(\),p_lead:lead\}\)\.abortSignal\(AbortSignal\.timeout\(10000\)\)/);
   assert.match(cloud, /export async function cloudLeadId\(\)/);
-  assert.deepEqual([...api.LEAD_CHANGING_COMMANDS], ['no-answer', 'refused-appointment', 'virtual-appointment-slot', 'next', 'previous']);
+  assert.deepEqual([...api.LEAD_CHANGING_COMMANDS], ['no-answer', 'refused-appointment', 'virtual-appointment-slot', 'next', 'previous', 'best-next']);
+  assert.match(worker, /if \(command\?\.type === 'best-next'\) \{\n\s*\/\/[^\n]*\n\s*\/\/[^\n]*\n\s*command\.requestTypeScores = await requestTypeScores\(\)/, 'Best next carries only aggregate request-type scores');
 });
 
 // The IMPACT page script, just the parts that decide whether a lead is published.
