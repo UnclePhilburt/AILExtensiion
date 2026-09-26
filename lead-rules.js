@@ -3,14 +3,14 @@
 // Union / Association leads, and any lead with a group (IMPACT shows it where
 // the request type is read, e.g. "IBT 610 (SGCOY) (AD&D)"), must not be
 // knocked in the evening. On the phone
-// the flag starts at 7 PM Central (IMPACT's time zone, IMPACT_TIME_ZONE) and
+// the flag starts at 8 PM Central (IMPACT's time zone, IMPACT_TIME_ZONE) and
 // lasts until 6 AM. lead.impactTimeZone (older extensions) is ignored.
 // lead.quietHoursNoticeAt (set when IMPACT itself shows its do-not-knock
 // notice) can also turn the flag on for that evening.
 
 import { IMPACT_TIME_ZONE, validTimeZone, localTimeZone, zonedParts, zonedInstant } from './time-zone.js';
 
-export const QUIET_START_HOUR = 19; // 7 PM Central
+export const QUIET_START_HOUR = 20; // 8 PM Central
 export const QUIET_END_HOUR = 6;    // until 6 AM the next morning
 const NOTICE_EARLIEST_HOUR = 17;    // IMPACT's notice counts from 5 PM Central
 const NOTICE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
@@ -91,7 +91,7 @@ export function doNotKnockWarning(lead, now = new Date(), { phoneTimeZone = loca
   const startLocal = shortTime(start, phoneZone);
   const sameClock = startLocal === shortTime(start, IMPACT_TIME_ZONE);
   const when = byClock
-    ? `Quiet hours started at 7 PM${sameClock ? '' : ` Central (${startLocal} your time)`}`
+    ? `Quiet hours started at 8 PM${sameClock ? '' : ` Central (${startLocal} your time)`}`
     : `IMPACT showed its do-not-knock notice at ${shortTime(new Date(lead.quietHoursNoticeAt), phoneZone)}`;
   return {
     title: 'DO NOT KNOCK',
