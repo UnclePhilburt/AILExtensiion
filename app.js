@@ -17,7 +17,6 @@ const bridgeUrlInput = document.querySelector("#bridgeUrl");
 const bridgeTokenInput = document.querySelector("#bridgeToken");
 const saveBridgeButton = document.querySelector("#saveBridge");
 const previousLeadButton = document.querySelector("#previousLead");
-const bestNextLeadButton = document.querySelector("#bestNextLead");
 const nextLeadButton = document.querySelector("#nextLead");
 const noAnswerButton = document.querySelector("#noAnswer");
 const virtualAppointmentButton = document.querySelector("#virtualAppointment");
@@ -93,7 +92,6 @@ saveBridgeButton.addEventListener("click", () => {
 bridgeUrlInput.addEventListener("input", persistBridgeSettings);
 bridgeTokenInput.addEventListener("input", persistBridgeSettings);
 previousLeadButton.addEventListener("click", showPreviousLead);
-bestNextLeadButton.addEventListener("click", showBestNextLead);
 nextLeadButton.addEventListener("click", showNextLead);
 installLeadSwipe(leadCard, {
   enabled: () => signedIn && displayedLead?.available && loadPhoneSettings(localStorage).swipeLeads && !navigationPending() && pendingCall?.leadKey === getLeadKey(displayedLead) && !pendingCall?.resultSentAt && !awaitingResultSince && !leadCard.querySelector(".profileBio[open]") && !displayedLead?.appointmentOptions,
@@ -476,16 +474,14 @@ function tapAccepted() {
   try { globalThis.navigator?.vibrate?.(40); } catch (_error) { /* vibration is optional */ }
 }
 
+// Settings page: "Best next lead" (off by default) turns Next into Best next
+// and hides Previous (settings-boot.js sets html[data-best-next] for the layout).
 async function showNextLead() {
-  await sendNavigation("next");
+  await sendNavigation(loadPhoneSettings(localStorage).bestNextLead ? "best-next" : "next");
 }
 
 async function showPreviousLead() {
   await sendNavigation("previous");
-}
-
-async function showBestNextLead() {
-  await sendNavigation("best-next");
 }
 
 function navigationPending() {
@@ -776,7 +772,6 @@ function updateNavButtons() {
   refusedAppointmentButton.disabled = !callStarted || !displayedLead?.leadId;
   const navLocked = !displayedLead?.available || navigationPending();
   previousLeadButton.disabled = navLocked;
-  bestNextLeadButton.disabled = navLocked;
   nextLeadButton.disabled = navLocked;
 }
 

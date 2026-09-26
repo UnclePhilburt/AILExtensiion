@@ -29,9 +29,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   organization: 'shaefinator' // small organization label at the top of Home and Workspace
   , darkMode: false // lower-light color treatment across the phone workspace
   , beigeLeadCard: false // parchment lead card instead of white
+  , bestNextLead: false // one Next button that asks IMPACT for the best next lead (no Previous)
 });
 
-const BOOLEAN_KEYS = ['swipeLeads', 'keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard'];
+const BOOLEAN_KEYS = ['swipeLeads', 'keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard', 'bestNextLead'];
 
 // Known keys with valid values; anything missing or invalid keeps its value from
 // `base` (the defaults unless given).
@@ -70,6 +71,7 @@ export function displayAttributes(settings) {
     'data-hide-heads-up': s.showHeadsUp ? null : '',
     'data-hide-dnk': s.showDoNotKnock ? null : '',
     'data-theme': s.darkMode ? 'dark' : null,
-    'data-lead-paper': s.beigeLeadCard ? 'beige' : null
+    'data-lead-paper': s.beigeLeadCard ? 'beige' : null,
+    'data-best-next': s.bestNextLead ? '' : null
   };
 }
