@@ -6,7 +6,6 @@ html body .workspace .leadCard.profileCard {
   transition:transform .2s ease,box-shadow .2s ease;
 }
 .profileHero { padding:28px 24px 22px; text-align:center; background:radial-gradient(ellipse at 50% 0%,#bca17a26,transparent 80%); }
-.profileMonogram { display:grid; place-items:center; width:82px; height:82px; margin:0 auto 18px; border:1px solid var(--journal-line); border-radius:50%; background:var(--journal-soft); color:var(--journal-ink); font:30px Georgia,serif; letter-spacing:2px; }
 html body .workspace .profileHero h2 { font-size:30px; margin:12px 0 0; overflow-wrap:anywhere; }
 .profileHero .requestBadge { display:inline-block; margin:0; }
 .workspace .profileCard > :is(.headsUp,.quietHoursFlag) { margin:0 18px 14px; }
@@ -46,5 +45,21 @@ html[data-no-swipe] .profileSwipeCues { display:none; }
 .profileCard[data-swipe="previous"] .profileSwipeCues span:last-child { color:#507852; }
 .workspace:has(#callResults:not([hidden])) .swipeHint { visibility:visible; }
 .workspace:not(:has(.profileAfterCall)) .swipeHint { display:none; }
+/* Lead navigation: an even Previous / Next pair, or one full-width Next when
+   Settings > "Best next lead" is on (html[data-best-next], set by settings-boot.js). */
+html body .workspace .navControls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+html[data-best-next] body .workspace .navControls { grid-template-columns:minmax(0,1fr); }
+html[data-best-next] body .workspace #previousLead { display:none; }
+html body .workspace .navControls button { display:flex; align-items:center; justify-content:center; gap:10px; min-width:0; min-height:56px; padding:12px 16px; border:1px solid var(--journal-line); border-radius:16px; font-size:15px; font-weight:600; letter-spacing:.2px; white-space:nowrap; box-shadow:0 1px 2px #3025150d,0 6px 16px #30251512; }
+html body .workspace .navControls button > span:not(.navArrow) { overflow:hidden; text-overflow:ellipsis; }
+.workspace .navArrow { font-size:17px; line-height:1; opacity:.7; }
+html body .workspace .navControls #previousLead:not(:disabled) { background:var(--journal-paper); color:var(--journal-ink); }
+html body .workspace .navControls #nextLead:not(:disabled) { background:linear-gradient(135deg,#58745d,#26483d); border-color:#2f5243; color:#f6f1e6; box-shadow:0 2px 4px #26483d1f,0 8px 20px #26483d29; }
+html[data-lead-paper="beige"]:not([data-theme="dark"]) body .workspace .navControls #previousLead:not(:disabled) { background:#f7eedc; }
+html[data-theme="dark"] body .workspace .navControls button { box-shadow:none; }
+html[data-theme="dark"] body .workspace .navControls #nextLead:not(:disabled) { background:linear-gradient(135deg,#4d6a52,#31503f); border-color:#5b7a60; color:#f1ecdf; }
+html[data-theme="dark"][data-lead-paper="beige"] body .workspace .navControls #previousLead:not(:disabled) { background:#332c22; }
+html body .workspace .navControls button:disabled { background:var(--journal-soft); color:var(--journal-muted); border-color:var(--journal-line); box-shadow:none; opacity:.6; }
+@media (max-width:340px) { html body .workspace .navControls { gap:8px; } html body .workspace .navControls button { padding:10px 12px; font-size:14px; gap:7px; } }
 @media (max-width:360px) { .profileHero { padding:22px 18px 18px; } html body .workspace .profileHero h2 { font-size:26px; } }
 @media (prefers-reduced-motion:reduce) { html body .workspace .leadCard.profileCard { transition:none; } }
