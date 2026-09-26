@@ -62,6 +62,9 @@ let lastShownLeadKey = "";
 let navIntent = null;
 let timingOutcomes = null;
 let timingOutcomesFetchedAt = 0;
+// A quiet-hours lead is only skipped once. If IMPACT does not move, keep the
+// card available instead of repeatedly sending Next in a loop.
+let quietHoursSkippedLeadKey = "";
 
 const savedBridgeUrl = localStorage.getItem("impact.bridgeUrl") || "";
 const savedBridgeToken = localStorage.getItem("impact.bridgeToken") || "";
@@ -573,6 +576,24 @@ function expectComputerResult(type) {
   }, 16000);
 }
 
+function scheduleQuietHoursSkip(lead, quietHoursWarning) {
+  const settings = loadPhoneSettings(localStorage);
+  const leadKey = getLeadKey(lead);
+  if (!settings.autoSkipQuietHours || !quietHoursWarning) {
+    // Let a rep turn the switch on for the currently visible lead without
+    // having to navigate away and back first.
+    if (!settings.autoSkipQuietHours) quietHoursSkippedLeadKey = "";
+    return;
+  }
+  if (!leadKey || quietHoursSkippedLeadKey === leadKey || navigationPending()) return;
+  quietHoursSkippedLeadKey = leadKey;
+  setTimeout(() => {
+    if (!loadPhoneSettings(localStorage).autoSkipQuietHours) return;
+    if (getLeadKey(displayedLead) !== leadKey || !doNotKnockWarning(displayedLead)) return;
+    void sendNavigation("next");
+  }, 0);
+}
+
 function renderLead(lead, updatedAt, source, transition = "") {
   renderCallHistory(lead);
   renderAppointmentPicker(lead);
@@ -613,6 +634,7 @@ function renderLead(lead, updatedAt, source, transition = "") {
     warning.append(title, detail);
     leadCard.append(warning);
   }
+  scheduleQuietHoursSkip(lead, quietHoursWarning);
   const name = document.createElement("h2");
   name.textContent = lead.leadName || "Current lead";
   leadCard.append(name);

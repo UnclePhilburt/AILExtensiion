@@ -263,3 +263,15 @@ test('Encouragement: the header line follows the lead, and only a sent result ge
   await page.el('#noAnswer').listeners.click(); await settle();
   assert.deepEqual(calls.filter(c=>c[0]==='result'),[['result','no-answer']]);
 });
+
+test('quiet-hours auto-skip sends Next once for an active Response Card lead', async()=>{
+  const server=makeServer();
+  const page=await loadPage(server);
+  page.clock.now=Date.parse('2026-09-25T01:05:00Z'); // 8:05 PM Central
+  page.storage.setItem('impact.phoneSettings',JSON.stringify({autoSkipQuietHours:true}));
+  freshState(server,page,{...leadA,requestType:'Response Card - IBT 610 (SGCOY) (AD&D)'});
+  await page.app.refreshCloud(); await settle(); await page.runTimers(0);
+  assert.deepEqual(server.sent.map(c=>c.type),['next']);
+  await page.app.refreshCloud(); await settle(); await page.runTimers(0);
+  assert.deepEqual(server.sent.map(c=>c.type),['next'],'does not repeat Next while IMPACT is still on the same lead');
+});

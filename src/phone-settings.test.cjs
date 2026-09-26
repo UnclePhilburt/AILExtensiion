@@ -12,7 +12,7 @@ function memoryStorage(initial = {}) {
   const data = { ...initial };
   return { data, getItem: (k) => (k in data ? data[k] : null), setItem: (k, v) => { data[k] = String(v); }, removeItem: (k) => { delete data[k]; } };
 }
-const DEFAULTS = { keepAwake: true, vibrate: true, confirmResults: true, textSize: 'normal', showHeadsUp: true, showDoNotKnock: true, showEncouragement: true, encourageAfterResults: true, organization: 'shaefinator' };
+const DEFAULTS = { keepAwake: true, vibrate: true, confirmResults: true, textSize: 'normal', showHeadsUp: true, showDoNotKnock: true, autoSkipQuietHours: false, showEncouragement: true, encourageAfterResults: true, organization: 'shaefinator' };
 
 test('defaults: everything on, Normal text, one JSON key', () => {
   assert.equal(store.SETTINGS_KEY, 'impact.phoneSettings');
@@ -76,10 +76,10 @@ test('the CSS implements every display setting', () => {
 
 test('the settings page has a control for every setting, and the back link only goes to known pages', () => {
   const html = read('settings.html');
-  for (const id of ['bgGrid', 'keepAwake', 'vibrate', 'confirmResults', 'textSize', 'organization', 'showHeadsUp', 'showDoNotKnock', 'showEncouragement', 'encourageAfterResults', 'resetSettings', 'savedHint', 'settingsBack']) assert.match(html, new RegExp(`id="${id}"`), id);
+  for (const id of ['bgGrid', 'keepAwake', 'vibrate', 'confirmResults', 'textSize', 'organization', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'resetSettings', 'savedHint', 'settingsBack']) assert.match(html, new RegExp(`id="${id}"`), id);
   assert.doesNotMatch(html, /Bad Number/, 'Bad Number is not wired to IMPACT, so it is not offered');
   const js = read('settings.js');
-  assert.match(js, /const SWITCHES = \['keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'showEncouragement', 'encourageAfterResults'\];/);
+  assert.match(js, /const SWITCHES = \['keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults'\];/);
   assert.match(js, /BACK\[new URLSearchParams\(location\.search\)\.get\('from'\)\] \|\| BACK\.workspace/);
   assert.match(js, /'workspace-local': \['workspace\.html\?mode=local'/);
 });
@@ -133,4 +133,11 @@ test('Encouragement settings: both on by default, saved one at a time, bad value
   assert.deepEqual([store.loadPhoneSettings(storage).showEncouragement, store.loadPhoneSettings(storage).encourageAfterResults], [true, true]);
   const html = read('settings.html');
   assert.match(html, /Show encouraging messages/); assert.match(html, /Messages after results/);
+});
+
+test('quiet-hours automatic skip is off by default and saves when enabled', () => {
+  const storage = memoryStorage();
+  assert.equal(store.loadPhoneSettings(storage).autoSkipQuietHours, false);
+  assert.equal(store.savePhoneSettings(storage, { autoSkipQuietHours: true }).autoSkipQuietHours, true);
+  assert.equal(store.savePhoneSettings(storage, { autoSkipQuietHours: 'yes' }).autoSkipQuietHours, true);
 });

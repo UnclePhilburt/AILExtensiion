@@ -22,12 +22,13 @@ export const DEFAULT_SETTINGS = Object.freeze({
   textSize: 'normal', // Workspace text size
   showHeadsUp: true, // heads-up notes on the lead card
   showDoNotKnock: true, // the DO NOT KNOCK flag on the lead card
+  autoSkipQuietHours: false, // move past an evening do-not-knock lead automatically
   showEncouragement: true, // calm rotating lines on each page (encouragement-ui.js)
   encourageAfterResults: true, // a short gentle message after a result is sent
   organization: 'shaefinator' // small organization label at the top of Home and Workspace
 });
 
-const BOOLEAN_KEYS = ['keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'showEncouragement', 'encourageAfterResults'];
+const BOOLEAN_KEYS = ['keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults'];
 
 // Known keys with valid values; anything missing or invalid keeps its value from
 // `base` (the defaults unless given).
