@@ -20,6 +20,7 @@ test('listener is opt-in, asks for local processing, and does not send or save a
   assert.match(source, /processLocally: true/);
   assert.doesNotMatch(source, /fetch\s*\(/);
   assert.doesNotMatch(source, /MediaRecorder/);
+  assert.match(source, /changes\['impact\.objectionListening'\]\?\.newValue === false/);
 });
 
 test('the extension offers a direct local English-pack install and detected browser language settings', () => {

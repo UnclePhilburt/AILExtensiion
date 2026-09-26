@@ -155,9 +155,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 async function setObjectionListening(enabled) {
   if (!enabled) {
-    try { await chrome.runtime.sendMessage({ type: 'impact/offscreenSetObjectionListening', enabled: false }); } catch (_error) {}
     objectionListening = false;
     await chrome.storage.local.set({ 'impact.objectionListening': false, 'impact.objectionListenerError': '' });
+    try { await chrome.runtime.sendMessage({ type: 'impact/offscreenSetObjectionListening', enabled: false }); } catch (_error) {}
     return { listening: false };
   }
   const contexts = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });

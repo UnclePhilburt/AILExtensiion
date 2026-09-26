@@ -74,3 +74,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
   return false;
 });
+
+// Storage is a second stop channel. It makes the listener stop even if the
+// runtime message is delayed while this hidden page is being restarted.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes['impact.objectionListening']?.newValue === false) stop();
+});
