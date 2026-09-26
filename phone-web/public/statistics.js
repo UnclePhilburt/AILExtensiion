@@ -1,39 +1,16 @@
 import { client } from './auth-runtime.js';
 import { formatApl } from './appointment-outcomes.js';
+import { RANGE_OPTIONS, rangeStart, metricRows, dailyTrend, chartPoints } from './statistics-view.js';
 
-const status = document.querySelector('#statsStatus');
-const summary = document.querySelector('#statsSummary');
-const rows = document.querySelector('#statsRows');
-const refresh = document.querySelector('#statsRefresh');
+const $ = (selector) => document.querySelector(selector);
+const status = $('#statsStatus'); const summary = $('#statsSummary'); const rows = $('#statsRows'); const refresh = $('#statsRefresh');
+const range = $('#statsRange'); const trendMetric = $('#trendMetric');
 const METRICS = [['call', 'Calls started', '☎'], ['no-answer', 'No answer', '○'], ['virtual-appointment', 'Virtual appointments', '▣'], ['refused-appointment', 'Appointments refused', '×'], ['next', 'Leads moved forward', '→']];
 const count = (events, type) => events.filter((event) => event.event_type === type).length;
+const title = () => RANGE_OPTIONS.find(([id]) => id === range.value)?.[1] || 'This week';
 function tile(value, label) { const box = document.createElement('div'); const number = document.createElement('strong'); const caption = document.createElement('span'); number.textContent = String(value); caption.textContent = label; box.append(number, caption); return box; }
-function render(events) {
-  const calls = count(events, 'call'); const results = count(events, 'no-answer') + count(events, 'virtual-appointment') + count(events, 'refused-appointment');
-  summary.replaceChildren(tile(calls, 'Calls started'), tile(results, 'Call results'), tile(count(events, 'next'), 'Leads moved'));
-  rows.replaceChildren();
-  for (const [type, label, icon] of METRICS) { const row = document.createElement('div'); row.className = 'statsRow'; const labelWrap = document.createElement('span'); labelWrap.className = 'statsLabel'; const iconEl = document.createElement('i'); const text = document.createElement('span'); const value = document.createElement('strong'); iconEl.textContent = icon; text.textContent = label; value.textContent = String(count(events, type)); labelWrap.append(iconEl, text); row.append(labelWrap, value); rows.append(row); }
-  summary.hidden = false;
-}
-function renderAppointmentStats(outcomes) {
-  const panel = document.querySelector('#appointmentStats'); const rows = document.querySelector('#appointmentStatsRows');
-  if (!outcomes.length) { panel.hidden = true; return; }
-  const total = (status) => outcomes.filter((row) => row.status === status).length;
-  const apl = outcomes.reduce((sum, row) => sum + Number(row.apl || 0), 0); const referrals = outcomes.reduce((sum, row) => sum + Number(row.referrals || 0), 0);
-  rows.replaceChildren();
-  for (const [icon, label, value] of [['✓', 'Appointments held', total('held')], ['○', 'No shows', total('no-show')], ['↻', 'Rescheduled', total('rescheduled')], ['$', 'APL recorded', formatApl(apl)], ['+', 'Referrals collected', referrals]]) { const row = document.createElement('div'); row.className = 'statsRow'; const left = document.createElement('span'); left.className = 'statsLabel'; const mark = document.createElement('i'); const text = document.createElement('span'); const valueEl = document.createElement('strong'); mark.textContent = icon; text.textContent = label; valueEl.textContent = String(value); left.append(mark, text); row.append(left, valueEl); rows.append(row); }
-  panel.hidden = false;
-}
-async function load() {
-  refresh.disabled = true; status.textContent = 'Loading your activity…';
-  try {
-    const { data: sessionData, error: sessionError } = await client.auth.getSession();
-    if (sessionError || !sessionData.session) { location.replace('account.html?next=statistics.html'); return; }
-    const since = new Date(); since.setDate(since.getDate() - 6); since.setHours(0, 0, 0, 0);
-    const [{ data, error }, outcomeResponse] = await Promise.all([client.from('companion_events').select('event_type,created_at').gte('created_at', since.toISOString()).order('created_at', { ascending: false }), client.from('appointment_outcomes').select('status,apl,referrals,created_at').gte('created_at', since.toISOString())]);
-    if (error) throw error;
-    render(data || []); status.textContent = data?.length ? `Updated ${new Date().toLocaleTimeString()}` : 'No Companion activity in the last 7 days yet.';
-    if (!outcomeResponse.error) renderAppointmentStats(outcomeResponse.data || []);
-  } catch (error) { status.textContent = error.message || 'Could not load statistics.'; } finally { refresh.disabled = false; }
-}
-refresh.addEventListener('click', load); load();
+function renderEvents(events) { const metrics = metricRows(events, []); summary.replaceChildren(tile(metrics.calls, 'Calls started'), tile(metrics.results, 'Call results'), tile(count(events, 'next'), 'Leads moved')); rows.replaceChildren(); for (const [type, label, icon] of METRICS) { const row = document.createElement('div'); row.className = 'statsRow'; const labelWrap = document.createElement('span'); labelWrap.className = 'statsLabel'; const iconEl = document.createElement('i'); const text = document.createElement('span'); const value = document.createElement('strong'); iconEl.textContent = icon; text.textContent = label; value.textContent = String(count(events, type)); labelWrap.append(iconEl, text); row.append(labelWrap, value); rows.append(row); } summary.hidden = false; }
+function renderAppointmentStats(outcomes) { const panel = $('#appointmentStats'); const rowsEl = $('#appointmentStatsRows'); const metrics = metricRows([], outcomes); if (!outcomes.length) { panel.hidden = true; return; } rowsEl.replaceChildren(); for (const [icon, label, value] of [['✓', 'Appointments held', metrics.appointments], ['○', 'No shows', metrics.noShow], ['↻', 'Rescheduled', metrics.rescheduled], ['$', 'APL recorded', formatApl(metrics.apl)], ['+', 'Referrals collected', metrics.referrals]]) { const row = document.createElement('div'); row.className = 'statsRow'; const left = document.createElement('span'); left.className = 'statsLabel'; const mark = document.createElement('i'); const text = document.createElement('span'); const total = document.createElement('strong'); mark.textContent = icon; text.textContent = label; total.textContent = String(value); left.append(mark, text); row.append(left, total); rowsEl.append(row); } panel.hidden = false; }
+function renderTrend(events, outcomes) { const metric = trendMetric.value; const points = dailyTrend(events, outcomes, metric); const mapped = chartPoints(points); const label = trendMetric.options[trendMetric.selectedIndex].text; $('#trendHeading').textContent = `${label} by day`; $('#trendCaption').textContent = points.length ? `${title()} · ${points.length} day${points.length === 1 ? '' : 's'} with recorded ${label.toLowerCase()}.` : `No ${label.toLowerCase()} recorded in this period yet.`; const chart = $('#trendChart'); chart.replaceChildren(); if (!mapped.length) return; const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('viewBox', '0 0 320 150'); svg.setAttribute('preserveAspectRatio', 'none'); svg.setAttribute('aria-hidden', 'true'); const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline'); line.setAttribute('points', mapped.map((point) => `${point.x},${point.y}`).join(' ')); line.setAttribute('fill', 'none'); line.setAttribute('stroke', '#247456'); line.setAttribute('stroke-width', '3'); line.setAttribute('stroke-linecap', 'round'); line.setAttribute('stroke-linejoin', 'round'); svg.append(line); for (const point of mapped) { const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle'); dot.setAttribute('cx', point.x); dot.setAttribute('cy', point.y); dot.setAttribute('r', '3.5'); dot.setAttribute('fill', '#247456'); const labelNode = document.createElementNS('http://www.w3.org/2000/svg', 'title'); labelNode.textContent = `${point.day}: ${metric === 'apl' ? formatApl(point.value) : point.value}`; dot.append(labelNode); svg.append(dot); } chart.append(svg); }
+async function load() { refresh.disabled = true; status.textContent = `Loading ${title().toLowerCase()}…`; try { const { data: sessionData, error: sessionError } = await client.auth.getSession(); if (sessionError || !sessionData.session) { location.replace('account.html?next=statistics.html'); return; } const since = rangeStart(range.value).toISOString(); const [{ data: events, error }, outcomeResponse] = await Promise.all([client.from('companion_events').select('event_type,created_at').gte('created_at', since).order('created_at', { ascending: true }).limit(10000), client.from('appointment_outcomes').select('status,apl,referrals,created_at').gte('created_at', since).order('created_at', { ascending: true }).limit(10000)]); if (error) throw error; renderEvents(events || []); const outcomes = outcomeResponse.error ? [] : outcomeResponse.data || []; renderAppointmentStats(outcomes); renderTrend(events || [], outcomes); status.textContent = `Updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · ${title()}`; } catch (error) { status.textContent = error.message || 'Could not load statistics.'; } finally { refresh.disabled = false; } }
+refresh.addEventListener('click', load); range.addEventListener('change', load); trendMetric.addEventListener('change', load); load();
