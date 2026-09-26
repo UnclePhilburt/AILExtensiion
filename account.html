@@ -30,6 +30,9 @@
     </section>
     <form id="passwordForm" hidden>
       <h2 id="passwordTitle">Change password</h2>
+      <label for="accountFirstName">First name</label>
+      <input id="accountFirstName" type="text" autocomplete="given-name" maxlength="24" placeholder="Your first name">
+      <p class="hint">Saved into Settings. This is the name on your pages and in your script.</p>
       <label for="newPassword">New password</label>
       <input id="newPassword" type="password" autocomplete="new-password" minlength="12" required>
       <label for="confirmPassword">Confirm password</label>
@@ -40,6 +43,6 @@
     <p id="message" role="status" aria-live="polite"></p>
     <p class="hint">Use the same account on your phone and extension. Cloud access is enabled by your administrator.</p>
   </main>
-  <script type="module" src="account.js"></script>
+  <script type="module" src="account.js?v=6"></script>
 </body>
 </html>
