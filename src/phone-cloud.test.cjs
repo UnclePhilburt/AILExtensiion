@@ -13,7 +13,7 @@ const leadSwipeSource=require('node:fs').readFileSync(require('node:path').join(
 const pendingCallSource=fs.readFileSync(path.join(__dirname,'../phone-web/public/pending-call.js'),'utf8').replace(/^export /gm,'');
 test('phone cloud flow shows live leads, collapses history for a call and clears on logout', async()=>{
   const elements=new Map();
-  const make=()=>({children:[],listeners:{},value:'',hidden:false,open:true,
+  const make=()=>({dataset:{},style:{},classList:{toggle(){},add(){}},querySelector(){return null;},insertBefore(item){this.children.push(item);},children:[],listeners:{},value:'',hidden:false,open:true,
     append(...items){this.children.push(...items);},replaceChildren(...items){this.children=items;},
     setAttribute(){},addEventListener(name,fn){this.listeners[name]=fn;}});
   const el=selector=>{if(!elements.has(selector))elements.set(selector,make());return elements.get(selector);};
@@ -21,6 +21,7 @@ test('phone cloud flow shows live leads, collapses history for a call and clears
   const lead={available:true,leadId:'test-a',leadName:'Fictional A',callHistory:['No Answer yesterday'],phones:[{label:'Mobile',number:'555-0100',dialHref:'#sample-call'}]};
   let state={lead,desktop_seen:new Date().toISOString(),lead_updated_at:new Date().toISOString(),device_id:'test-computer'};
   const context=vm.createContext({
+    buildLeadProfile(){},
     client:{auth:{onAuthStateChange:fn=>{authChanged=fn;}}}, saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, encourageLead:()=>{}, encourageResult:()=>{}, cloudEnabled:async()=>true,
     cloudState:async()=>state,cloudTouchPhone:async()=>{}, cloudSend:async(s,c)=>{sent={s,c};},
     watchCloud:async()=>()=>{},visibleLead:s=>s?.lead,isOnline:()=>true,
@@ -44,7 +45,7 @@ test('phone cloud flow shows live leads, collapses history for a call and clears
   state={...state,lead:{...lead,leadId:'test-b',leadName:'Fictional B'}};
   await app.refreshCloud();
   assert.equal(el('#callResults').hidden,true);
-  assert.equal(el('#callHistory').open,true);
+  assert.equal(el('#callHistory').open,false, 'new profiles keep activity inside the collapsed bio');
   authChanged('SIGNED_OUT',null);
   assert.equal(el('#callHistory').hidden,true);
   assert.equal(el('#callResults').hidden,true);
@@ -53,7 +54,7 @@ test('phone cloud flow shows live leads, collapses history for a call and clears
 
 test('phone locks Previous/Next until the moved-to lead arrives, so stale taps are not sent', async()=>{
   const elements=new Map();
-  const make=()=>({children:[],listeners:{},value:'',hidden:false,open:true,disabled:false,
+  const make=()=>({dataset:{},style:{},classList:{toggle(){},add(){}},querySelector(){return null;},insertBefore(item){this.children.push(item);},children:[],listeners:{},value:'',hidden:false,open:true,disabled:false,
     append(...items){this.children.push(...items);},replaceChildren(...items){this.children=items;},
     setAttribute(){},addEventListener(name,fn){this.listeners[name]=fn;}});
   const el=selector=>{if(!elements.has(selector))elements.set(selector,make());return elements.get(selector);};
@@ -61,6 +62,7 @@ test('phone locks Previous/Next until the moved-to lead arrives, so stale taps a
   const lead={available:true,leadId:'test-a',leadName:'Fictional A',phones:[]};
   let state={lead,desktop_seen:new Date().toISOString(),lead_updated_at:new Date().toISOString(),device_id:'test-computer'};
   const context=vm.createContext({
+    buildLeadProfile(){},
     client:{auth:{onAuthStateChange:fn=>{authChanged=fn;}}}, saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, encourageLead:()=>{}, encourageResult:()=>{}, cloudEnabled:async()=>true,
     cloudState:async()=>state,cloudTouchPhone:async()=>{}, cloudSend:async(s,c)=>{sent.push(c);},
     watchCloud:async()=>()=>{},visibleLead:s=>s?.lead,isOnline:()=>true,
@@ -91,7 +93,7 @@ test('phone locks Previous/Next until the moved-to lead arrives, so stale taps a
 
 test('phone refetches on realtime (re)subscribe, rebuilds a failed channel, and keeps checking after a result until the next lead shows', async()=>{
   const elements=new Map();
-  const make=()=>({children:[],listeners:{},value:'',hidden:false,open:true,disabled:false,
+  const make=()=>({dataset:{},style:{},classList:{toggle(){},add(){}},querySelector(){return null;},insertBefore(item){this.children.push(item);},children:[],listeners:{},value:'',hidden:false,open:true,disabled:false,
     append(...items){this.children.push(...items);},replaceChildren(...items){this.children=items;},
     setAttribute(){},addEventListener(name,fn){this.listeners[name]=fn;}});
   const el=selector=>{if(!elements.has(selector))elements.set(selector,make());return elements.get(selector);};
@@ -99,6 +101,7 @@ test('phone refetches on realtime (re)subscribe, rebuilds a failed channel, and 
   const lead={available:true,leadId:'test-a',leadName:'Fictional A',phones:[{label:'Mobile',number:'555-0100',dialHref:'#sample-call'}]};
   let state={lead,desktop_seen:new Date().toISOString(),lead_updated_at:new Date().toISOString(),device_id:'test-computer'};
   const context=vm.createContext({
+    buildLeadProfile(){},
     client:{auth:{onAuthStateChange:fn=>{authChanged=fn;}}}, saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, encourageLead:()=>{}, encourageResult:()=>{}, cloudEnabled:async()=>true,
     cloudState:async()=>{reads++;return state;},cloudTouchPhone:async()=>{}, cloudSend:async()=>{},
     watchCloud:async(_onChange,onStatus)=>{watches++;statusHandlers.push(onStatus);return()=>{};},visibleLead:s=>s?.lead,isOnline:()=>true,

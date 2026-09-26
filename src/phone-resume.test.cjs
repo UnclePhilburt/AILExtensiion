@@ -22,7 +22,7 @@ async function loadPage(server,globals={}){
   const clock={now:Date.parse('2026-09-24T20:00:00Z')};
   class FakeDate extends Date{constructor(...args){super(...(args.length?args:[clock.now]));} static now(){return clock.now;}}
   const elements=new Map(), timers=[], docEvents={}, winEvents={};
-  const make=()=>({children:[],listeners:{},value:'',hidden:false,open:true,disabled:false,textContent:'',className:'',
+  const make=()=>({dataset:{},style:{},classList:{toggle(){},add(){}},querySelector(){return null;},insertBefore(item){this.children.push(item);},children:[],listeners:{},value:'',hidden:false,open:true,disabled:false,textContent:'',className:'',
     append(...items){this.children.push(...items);},replaceChildren(...items){this.children=items;},
     setAttribute(){},addEventListener(name,fn){this.listeners[name]=fn;}});
   const el=selector=>{if(!elements.has(selector))elements.set(selector,make());return elements.get(selector);};
@@ -31,6 +31,7 @@ async function loadPage(server,globals={}){
   const document={hidden:false,querySelector:selector=>selector.startsWith('meta')?null:el(selector),createElement:make,
     addEventListener(name,fn){docEvents[name]=fn;}};
   const context=vm.createContext({
+    installLeadSwipe(){}, buildLeadProfile(){},
     client:{auth:{onAuthStateChange:fn=>{authChanged=fn;},
       getSession:async()=>{auth.getSessionCalls++;return {data:{session:auth.session},error:null};},
       refreshSession:async()=>{auth.refreshCalls++;return auth.refreshOk?{data:{session:auth.session},error:null}:{data:{session:null},error:new Error('refresh failed')};}}},

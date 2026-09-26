@@ -1,0 +1,50 @@
+/* A lead is one profile, with a readable bio instead of a long wall of fields. */
+html body .workspace .leadCard.profileCard {
+  position:relative; padding:0; border:1px solid var(--journal-line);
+  border-radius:26px; overflow:clip;
+  box-shadow:0 18px 45px #3025151a,0 4px 0 -1px var(--journal-paper),0 5px 0 var(--journal-line);
+  transition:transform .2s ease,box-shadow .2s ease;
+}
+.profileHero { padding:28px 24px 22px; text-align:center; background:radial-gradient(ellipse at 50% 0%,#bca17a26,transparent 80%); }
+.profileMonogram { display:grid; place-items:center; width:82px; height:82px; margin:0 auto 18px; border:1px solid var(--journal-line); border-radius:50%; background:var(--journal-soft); color:var(--journal-ink); font:30px Georgia,serif; letter-spacing:2px; }
+html body .workspace .profileHero h2 { font-size:30px; margin:12px 0 0; overflow-wrap:anywhere; }
+.profileHero .requestBadge { display:inline-block; margin:0; }
+.workspace .profileCard > :is(.headsUp,.quietHoursFlag) { margin:0 18px 14px; }
+.workspace .profileCard .phoneList { margin:0; padding:0 18px 18px; }
+.workspace .profileCard .callLink { margin:0; min-height:64px; }
+.profileBio { border-top:1px solid var(--journal-line); }
+html body .workspace .profileCard > .controls { margin:0; border:0; border-top:1px solid var(--journal-line); border-radius:0; box-shadow:none; padding:18px; }
+.profileCard .controls .resultHeading h2 { font-size:21px; }
+.profileCard .controls button:disabled { display:none; }
+.profileCard #refusedAppointment { grid-column:1 / -1; }
+.profileResultMenu { display:none; border-top:1px solid var(--journal-line); }
+.profileAfterCall .profileResultMenu { display:block; }
+.profileResultMenu > summary { padding:14px 20px; cursor:pointer; color:var(--journal-muted); font-size:13px; text-align:center; }
+html body .workspace .profileResultMenu .controls { border:0; border-radius:0; box-shadow:none; margin:0; }
+html:not([data-no-swipe]) .workspace .profileAfterCall:not(:has(.profileBio[open])) { touch-action:none; }
+.profileCard :is(a,button,summary,details) { touch-action:pan-y pinch-zoom; }
+html body .workspace .profileCard[data-dragging] { transition:none; user-select:none; }
+.profileSwipeStamp { pointer-events:none; position:absolute; top:24px; left:16px; right:16px; text-align:center; z-index:2; padding:12px; border:2px solid currentColor; border-radius:12px; background:var(--journal-paper); color:var(--journal-ink); font-weight:700; box-shadow:0 4px 18px #0002; }
+.profileSwipeStamp:empty { display:none; }
+.profileCard[data-swipe="next"] .profileSwipeStamp { color:#ab5139; }
+.profileCard[data-swipe="previous"] .profileSwipeStamp { color:#47714c; }
+.profileCard[data-swipe="refused"] .profileSwipeStamp { color:#925649; }
+.profileBio > summary { list-style:none; cursor:pointer; text-align:center; padding:18px; color:var(--journal-ink); font-weight:600; }
+.profileBio > summary::-webkit-details-marker { display:none; }
+.profileBio > summary:focus-visible { outline:3px solid #758c72; outline-offset:-4px; border-radius:12px; }
+.bioSubtitle { display:block; font-size:12px; color:var(--journal-muted); font-weight:400; margin-top:5px; }
+.bioOpened,.profileBio[open] .bioClosed { display:none; }
+.profileBio[open] .bioOpened { display:inline; }
+.profileBioBody { padding:0 20px 20px; overflow-wrap:anywhere; }
+html body .workspace .profileBio .historyCard { margin-top:18px; padding:16px 0 0; border:0; border-top:1px solid var(--journal-line); border-radius:0; box-shadow:none; background:transparent; }
+.profileBio .historyCard summary { font-size:16px; }
+.profileSwipeCues { display:none; flex-wrap:wrap; justify-content:space-between; gap:12px; padding:0 20px 16px; color:var(--journal-muted); font-size:12px; font-weight:600; }
+.profileRefusedCue { flex-basis:100%; text-align:center; }
+.profileAfterCall:not(:has(.profileBio[open])) .profileSwipeCues { display:flex; }
+html[data-no-swipe] .profileSwipeCues { display:none; }
+.profileCard[data-swipe="next"] .profileSwipeCues span:first-child { color:#ae563f; }
+.profileCard[data-swipe="previous"] .profileSwipeCues span:last-child { color:#507852; }
+.workspace:has(#callResults:not([hidden])) .swipeHint { visibility:visible; }
+.workspace:not(:has(.profileAfterCall)) .swipeHint { display:none; }
+@media (max-width:360px) { .profileHero { padding:22px 18px 18px; } html body .workspace .profileHero h2 { font-size:26px; } }
+@media (prefers-reduced-motion:reduce) { html body .workspace .leadCard.profileCard { transition:none; } }

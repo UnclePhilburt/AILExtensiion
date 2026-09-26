@@ -115,7 +115,7 @@ async function loadWorkspace(){
   const clock={now:Date.parse('2026-09-24T20:00:00Z')};
   class FakeDate extends Date{constructor(...args){super(...(args.length?args:[clock.now]));} static now(){return clock.now;}}
   const elements=new Map(), played=[], sent=[];
-  const make=()=>({children:[],listeners:{},value:'',hidden:false,open:true,disabled:false,textContent:'',className:'',
+  const make=()=>({dataset:{},style:{},classList:{toggle(){},add(){}},querySelector(){return null;},insertBefore(item){this.children.push(item);},children:[],listeners:{},value:'',hidden:false,open:true,disabled:false,textContent:'',className:'',
     append(...items){this.children.push(...items);},replaceChildren(...items){this.children=items;},
     setAttribute(){},addEventListener(name,fn){this.listeners[name]=fn;}});
   const el=selector=>{if(!elements.has(selector))elements.set(selector,make());return elements.get(selector);};
@@ -125,6 +125,7 @@ async function loadWorkspace(){
   let authChanged;
   const session={user:{id:'user-1'}};
   const context=vm.createContext({
+    buildLeadProfile(){},
     client:{auth:{onAuthStateChange:fn=>{authChanged=fn;},getSession:async()=>({data:{session},error:null}),refreshSession:async()=>({data:{session},error:null})}},
     saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, encourageLead:()=>{}, encourageResult:()=>{}, cloudEnabled:async()=>true,
     cloudState:async()=>structuredClone(server.state), cloudTouchPhone:async()=>{},

@@ -1,3 +1,4 @@
+import { buildLeadProfile } from './lead-profile.js';
 import { installLeadSwipe } from './lead-swipe.js';
 import { client, accessToken } from './auth-runtime.js';
 import { cloudEnabled, cloudState, cloudTouchPhone, cloudSend, watchCloud, visibleLead, isOnline } from './cloud-sync.js';
@@ -95,9 +96,13 @@ previousLeadButton.addEventListener("click", showPreviousLead);
 bestNextLeadButton.addEventListener("click", showBestNextLead);
 nextLeadButton.addEventListener("click", showNextLead);
 installLeadSwipe(leadCard, {
-  enabled: () => signedIn && displayedLead?.available && loadPhoneSettings(localStorage).swipeLeads && !navigationPending() && !pendingCall && !displayedLead?.appointmentOptions,
+  enabled: () => signedIn && displayedLead?.available && loadPhoneSettings(localStorage).swipeLeads && !navigationPending() && pendingCall?.leadKey === getLeadKey(displayedLead) && !pendingCall?.resultSentAt && !awaitingResultSince && !leadCard.querySelector(".profileBio[open]") && !displayedLead?.appointmentOptions,
   currentKey: () => displayedLeadKey,
-  navigate: (direction) => sendNavigation(direction)
+  navigate: (direction) => {
+    if (direction === 'callback') { showFeedback('Callback scheduling is not connected yet. Set it in IMPACT on your computer.'); return; }
+    if (direction === 'refused' && !globalThis.confirm('Record Refused Appointment for ' + (displayedLead?.leadName || 'this lead') + '?')) return;
+    return sendCallResult(direction === 'next' ? 'no-answer' : direction === 'refused' ? 'refused-appointment' : 'virtual-appointment');
+  }
 });
 noAnswerButton.addEventListener("click", () => sendCallResult("no-answer"));
 virtualAppointmentButton.addEventListener("click", () => sendCallResult("virtual-appointment"));
@@ -608,6 +613,10 @@ function scheduleQuietHoursSkip(lead, quietHoursWarning) {
 }
 
 function renderLead(lead, updatedAt, source, transition = "") {
+  const historyCard = document.querySelector("#callHistory");
+  const bioOpen = leadCard.dataset.profileKey === getLeadKey(lead) && Boolean(leadCard.querySelector(".profileBio[open]"));
+  const resultsOpen = leadCard.dataset.profileKey === getLeadKey(lead) && Boolean(leadCard.querySelector(".profileResultMenu[open]"));
+  document.querySelector(".wsBody").append(historyCard, callResults);
   renderCallHistory(lead);
   renderAppointmentPicker(lead);
   if (!lead?.available) {
@@ -687,6 +696,8 @@ function renderLead(lead, updatedAt, source, transition = "") {
       setPendingCall(createPendingCall({ leadKey: calledLeadKey, leadId: lead.leadId, leadName: lead.leadName, phoneLabel: phone.label, now: Date.now() }));
       renderPendingCallReminder(null);
       document.querySelector("#callHistory").open = false;
+      const bio = leadCard.querySelector(".profileBio");
+      if (bio) bio.open = false;
       updateNavButtons();
       renderAppointmentPicker(displayedLead);
       // Keep native tel: navigation in the user's tap, while the small command
@@ -700,6 +711,15 @@ function renderLead(lead, updatedAt, source, transition = "") {
     phoneList.append(link);
   }
   leadCard.append(phoneList);
+  buildLeadProfile(leadCard, historyCard, lead, bioOpen);
+  const resultMenu = document.createElement('details');
+  resultMenu.className = 'profileResultMenu';
+  resultMenu.open = resultsOpen;
+  const resultSummary = document.createElement('summary');
+  resultSummary.textContent = 'Choose a result instead';
+  resultMenu.append(resultSummary, callResults);
+  leadCard.insertBefore(resultMenu, leadCard.querySelector(".profileBio"));
+  leadCard.dataset.profileKey = getLeadKey(lead);
   updateNavButtons();
   // The new lead is fully rendered and tappable; the animation only decorates it.
   if (transition) safely(() => playLeadTransition(leadCard, transition, outgoing));
@@ -750,6 +770,7 @@ function renderHeadsUp(lead) {
 function updateNavButtons() {
   const callStarted = Boolean(displayedLead?.available && calledLeadKey === getLeadKey(displayedLead));
   callResults.hidden = !callStarted;
+  leadCard.classList.toggle("profileAfterCall", callStarted);
   noAnswerButton.disabled = !callStarted || !displayedLead?.leadId;
   virtualAppointmentButton.disabled = !callStarted || !displayedLead?.leadId || Boolean(displayedLead?.appointmentOptions);
   refusedAppointmentButton.disabled = !callStarted || !displayedLead?.leadId;
@@ -804,7 +825,7 @@ function renderCallHistory(lead) {
   const entries = document.querySelector("#historyEntries");
   const key = lead?.available ? getLeadKey(lead) : "";
   // Start collapsed when returning to a lead that is mid-call (e.g. after a reload).
-  if (key !== historyLeadKey) card.open = !(key && key === calledLeadKey);
+  if (key !== historyLeadKey) card.open = false;
   historyLeadKey = key;
   card.hidden = !lead?.available;
   entries.replaceChildren();

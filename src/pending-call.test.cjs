@@ -24,12 +24,13 @@ function helpers(){const context=vm.createContext({JSON,Number,String});vm.runIn
 // sharing `storage` between calls simulates the phone reloading the tab.
 async function loadPage({storage,shared,userId='user-1'}){
   const elements=new Map();
-  const make=()=>({children:[],listeners:{},value:'',hidden:false,open:true,disabled:false,textContent:'',
+  const make=()=>({dataset:{},style:{},classList:{toggle(){},add(){}},querySelector(){return null;},insertBefore(item){this.children.push(item);},children:[],listeners:{},value:'',hidden:false,open:true,disabled:false,textContent:'',
     append(...items){this.children.push(...items);},replaceChildren(...items){this.children=items;},
     setAttribute(){},addEventListener(name,fn){this.listeners[name]=fn;}});
   const el=selector=>{if(!elements.has(selector))elements.set(selector,make());return elements.get(selector);};
   let authChanged;
   const context=vm.createContext({
+    installLeadSwipe(){}, buildLeadProfile(){},
     client:{auth:{onAuthStateChange:fn=>{authChanged=fn;}}}, saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, encourageLead:()=>{}, encourageResult:()=>{}, cloudEnabled:async()=>true,
     cloudState:async()=>shared.state,cloudTouchPhone:async()=>{}, cloudSend:async(_s,c)=>{shared.sent.push(c);},
     watchCloud:async()=>()=>{},visibleLead:s=>s?.lead,isOnline:()=>true,

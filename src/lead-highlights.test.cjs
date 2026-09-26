@@ -190,7 +190,7 @@ test('history captured by the extension flows straight into the heads-up', ()=>{
 
 test('the phone lead card shows heads-up chips above the details and hides them when empty', async()=>{
   const elements=new Map();
-  const make=()=>({children:[],listeners:{},value:'',hidden:false,open:true,disabled:false,textContent:'',className:'',attributes:{},
+  const make=()=>({dataset:{},style:{},classList:{toggle(){},add(){}},querySelector(){return null;},insertBefore(item){this.children.push(item);},children:[],listeners:{},value:'',hidden:false,open:true,disabled:false,textContent:'',className:'',attributes:{},
     append(...items){this.children.push(...items);},replaceChildren(...items){this.children=items;},
     setAttribute(name,value){this.attributes[name]=value;},addEventListener(name,fn){this.listeners[name]=fn;}});
   const el=selector=>{if(!elements.has(selector))elements.set(selector,make());return elements.get(selector);};
@@ -201,6 +201,7 @@ test('the phone lead card shows heads-up chips above the details and hides them 
   let state={lead,desktop_seen:new Date().toISOString(),lead_updated_at:new Date().toISOString(),device_id:'test-computer'};
   class FakeDate extends Date{constructor(...a){super(...(a.length?a:[now]));} static now(){return now;}}
   const context=vm.createContext({
+    buildLeadProfile(){},
     client:{auth:{onAuthStateChange:fn=>{authChanged=fn;}}}, saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, encourageLead:()=>{}, encourageResult:()=>{}, cloudEnabled:async()=>true,
     cloudState:async()=>state,cloudTouchPhone:async()=>{}, cloudSend:async()=>{},
     watchCloud:async()=>()=>{},visibleLead:s=>s?.lead,isOnline:()=>true,
