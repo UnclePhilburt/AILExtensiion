@@ -28,7 +28,18 @@ export function dailyTrend(events, outcomes, metric) {
   if (metric === 'referrals') for (const row of outcomes) put(row.created_at, Number(row.referrals || 0));
   return [...days.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([day, value]) => ({ day, value }));
 }
-export function chartPoints(points, width = 320, height = 150, padX = 16, padY = 16) {
-  if (!points.length) return []; const max = Math.max(...points.map((point) => point.value), 1); const span = Math.max(points.length - 1, 1);
+export function chartPoints(points, width = 320, height = 150, padX = 16, padY = 16, maxValue = null) {
+  if (!points.length) return []; const max = Math.max(maxValue || 0, ...points.map((point) => point.value), 1); const span = Math.max(points.length - 1, 1);
   return points.map((point, index) => ({ ...point, x: padX + index * (width - padX * 2) / span, y: height - padY - (point.value / max) * (height - padY * 2) }));
 }
+function shiftPeriod(date, range, amount) { const value = new Date(date); if (range === 'today') value.setDate(value.getDate() + amount); else if (range === 'week') value.setDate(value.getDate() + amount * 7); else if (range === 'month') value.setMonth(value.getMonth() + amount); else value.setFullYear(value.getFullYear() + amount); return value; }
+export function comparisonWindows(range, mode, now = new Date()) {
+  const current = { start: rangeStart(range, now), end: new Date(now), label: RANGE_OPTIONS.find(([id]) => id === range)?.[1] || 'Current period' };
+  if (range === 'all' || mode === 'none') return { current, comparisons: [] };
+  const duration = current.end.getTime() - current.start.getTime(); const make = (start, label) => ({ start, end: new Date(start.getTime() + duration), label });
+  if (mode === 'previous') return { current, comparisons: [make(shiftPeriod(current.start, range, -1), 'Previous matching period')] };
+  if (mode === 'four-back') return { current, comparisons: [make(shiftPeriod(current.start, range, -4), `${range === 'week' ? 'Four weeks' : 'Four periods'} ago`)] };
+  return { current, comparisons: [1, 2, 3, 4].map((offset) => make(shiftPeriod(current.start, range, -offset), `Previous ${offset}`)) };
+}
+export function seriesForWindow(events, outcomes, metric, window) { const inWindow = (row) => { const at = new Date(row.created_at); return at >= window.start && at <= window.end; }; const values = new Map(dailyTrend(events.filter(inWindow), outcomes.filter(inWindow), metric).map((item) => [item.day, item.value])); const points = []; const cursor = new Date(window.start); cursor.setHours(0, 0, 0, 0); const final = new Date(window.end); final.setHours(0, 0, 0, 0); while (cursor <= final) { const day = dateKey(cursor); points.push({ day, value: values.get(day) || 0 }); cursor.setDate(cursor.getDate() + 1); } return points; }
+export function comparisonTrend(events, outcomes, metric, range, mode, now = new Date()) { const windows = comparisonWindows(range, mode, now); const current = seriesForWindow(events, outcomes, metric, windows.current); if (!windows.comparisons.length) return { current, comparison: [], label: '' }; const all = windows.comparisons.map((window) => seriesForWindow(events, outcomes, metric, window)); const comparison = mode === 'average' ? current.map((_, index) => ({ day: current[index].day, value: all.reduce((sum, series) => sum + (series[index]?.value || 0), 0) / all.length })) : all[0]; return { current, comparison, label: mode === 'average' ? 'Average of previous four periods' : windows.comparisons[0].label }; }
