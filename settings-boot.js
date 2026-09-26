@@ -11,6 +11,7 @@
     set('data-bg', bg && bg !== 'default' && /^[a-z0-9-]{1,32}$/.test(bg) ? bg : null);
     set('data-text-size', s.textSize === 'large' || s.textSize === 'xlarge' ? s.textSize : null);
     set('data-hide-heads-up', s.showHeadsUp === false ? '' : null);
+    set('data-no-swipe', s.swipeLeads === false ? '' : null);
     set('data-hide-dnk', s.showDoNotKnock === false ? '' : null);
     set('data-theme', s.darkMode === true ? 'dark' : null);
     set('data-lead-paper', s.beigeLeadCard === true ? 'beige' : null);

@@ -1,3 +1,4 @@
+import { installLeadSwipe } from './lead-swipe.js';
 import { client, accessToken } from './auth-runtime.js';
 import { cloudEnabled, cloudState, cloudTouchPhone, cloudSend, watchCloud, visibleLead, isOnline } from './cloud-sync.js';
 import { NETWORK_MESSAGE, SIGN_IN_MESSAGE, RESULT_COMMANDS, checkBeforeSend, isStateFresh, isAuthFailure, isNetworkFailure, friendlySendError, withTimeout } from './phone-actions.js';
@@ -93,6 +94,11 @@ bridgeTokenInput.addEventListener("input", persistBridgeSettings);
 previousLeadButton.addEventListener("click", showPreviousLead);
 bestNextLeadButton.addEventListener("click", showBestNextLead);
 nextLeadButton.addEventListener("click", showNextLead);
+installLeadSwipe(leadCard, {
+  enabled: () => signedIn && displayedLead?.available && loadPhoneSettings(localStorage).swipeLeads && !navigationPending() && !pendingCall && !displayedLead?.appointmentOptions,
+  currentKey: () => displayedLeadKey,
+  navigate: (direction) => sendNavigation(direction)
+});
 noAnswerButton.addEventListener("click", () => sendCallResult("no-answer"));
 virtualAppointmentButton.addEventListener("click", () => sendCallResult("virtual-appointment"));
 refusedAppointmentButton.addEventListener("click", () => confirmResult("Refused Appointment") ? sendCallResult("refused-appointment") : false);
