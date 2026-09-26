@@ -272,9 +272,26 @@
     return tagOf(document.getElementById('myDropdown')) === 'SELECT';
   }
 
-  function probe(label, phrases) {
+  function probe(label, phrases, titles) {
     const found = findRebuttal(label, phrases);
-    return { ok: true, isScriptPage: isScriptPage(), hasRebuttal: Boolean(found.best), matchKind: found.best?.kind || '' };
+    // Any of the objection's Salebase titles on the page counts (each script words it its own way).
+    const hasTitle = (titles || []).some((title) => findRebuttal(title, []).best);
+    return { ok: true, isScriptPage: isScriptPage(), hasRebuttal: Boolean(found.best) || hasTitle, matchKind: found.best?.kind || (hasTitle ? 'title' : '') };
+  }
+
+  // Read-only: every rebuttal title on the page, which script it belongs to and
+  // whether it is showing (only the selected script's rebuttals are).
+  function listRebuttals() {
+    const dropdown = document.getElementById('myDropdown');
+    const rebuttals = [...document.querySelectorAll('.rebuttal-item')].map((item) => {
+      const heading = item.querySelector('.ConditionalChar') || item;
+      const copy = heading.cloneNode(true);
+      copy.querySelectorAll('.rebuttal-answer').forEach((node) => node.remove());
+      const group = item.closest('.script-type');
+      const script = group ? ([...group.classList].find((name) => name !== 'script-type') || '') : '';
+      return { title: String(copy.textContent || '').replace(/\s+/g, ' ').trim(), script, shown: isShown(item) };
+    }).filter((rebuttal) => rebuttal.title);
+    return { ok: true, isScriptPage: isScriptPage(), activeScript: tagOf(dropdown) === 'SELECT' ? dropdown.value : '', rebuttals };
   }
 
   function focusPanel(anchor) {
@@ -377,7 +394,8 @@
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     try {
-      if (message?.type === 'impact/probeRebuttal') { sendResponse(probe(message.label, message.phrases)); return false; }
+      if (message?.type === 'impact/probeRebuttal') { sendResponse(probe(message.label, message.phrases, message.titles)); return false; }
+      if (message?.type === 'impact/listRebuttals') { sendResponse(listRebuttals()); return false; }
       if (message?.type === 'impact/revealRebuttal') {
         reveal(message.label, message.phrases, message.otherLabels)
           .then(sendResponse)

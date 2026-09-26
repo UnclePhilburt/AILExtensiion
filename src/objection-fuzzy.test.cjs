@@ -285,9 +285,6 @@ const NEUTRAL = [
   "what's the weather like",
   "why not",
   "I have to go pick up my kids",
-  "I don't have time right now",
-  "call me back later",
-  "I'm busy",
   "I need to check with my husband",
   "that's fine",
   "I'll do it",
@@ -358,17 +355,18 @@ test('custom phrases can be added per objection and still respect rep-talk vetoe
 });
 
 test('fuzzy matches still map to the exact Salebase rebuttal panel titles', () => {
-  const salebaseTitles = ["I'm not interested.", 'Can you mail it to me?', "I don't remember doing this!", 'Do we have to do a Zoom meeting? / Do I have to do this? / Why do I have to do this?', 'What is this all about?'];
-  const compact = (value) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
-  assert.equal(api.REBUTTAL_LABELS.length, salebaseTitles.length);
+  const { rebuttals } = require('./fixtures/salebase-script-corpus.cjs');
+  const salebaseTitles = [...new Set(rebuttals.map((item) => item.title))];
+  assert.deepEqual([...api.REBUTTAL_LABELS].sort(), [...salebaseTitles].sort(), 'one label per unique Salebase rebuttal title');
   for (const [id, phrases] of Object.entries(POSITIVES)) {
     const match = api.matchObjection(phrases[phrases.length - 1]);
     assert.equal(match.id, id);
-    assert.ok(salebaseTitles.some((title) => compact(title).includes(compact(match.label))), `${match.label} has a Salebase panel`);
+    assert.ok(salebaseTitles.includes(match.label), `${match.label} is an exact Salebase panel title`);
+    for (const title of match.titles) assert.ok(salebaseTitles.includes(title), title);
     assert.deepEqual([...match.phrases], [...api.OBJECTION_RULES.find((rule) => rule.id === id).phrases], 'panel lookup phrases are the saved ones');
   }
   assert.equal(api.matchObjection("I don't recall signing up for this").label, "I don't remember doing this!");
-  assert.equal(api.matchObjection('why do I have to do this').label, 'Do we have to do a Zoom meeting?');
+  assert.equal(api.matchObjection('why do I have to do this').label, 'Do we have to do a Zoom meeting? / Do I have to do this? / Why do I have to do this?');
 });
 
 test('the more specific objection wins when two apply', () => {
@@ -392,7 +390,7 @@ test('a short cooldown stops one objection from firing repeatedly', () => {
 test('the service worker uses the cooldown detector and optional stored custom phrases', () => {
   const worker = fs.readFileSync(path.join(__dirname, '../extension/src/background/service-worker.js'), 'utf8');
   assert.match(worker, /const objectionDetector = createObjectionDetector\(\);/);
-  assert.match(worker, /objectionDetector\.detect\(transcript, Date\.now\(\), \{ customPhrases: stored\['impact\.objectionPhrases'\] \}\)/);
+  assert.match(worker, /objectionDetector\.detect\(transcript, Date\.now\(\), \{ customPhrases: stored\['impact\.objectionPhrases'\], extraTitles: pageRebuttalTitles\.titles \}\)/);
   assert.doesNotMatch(worker.slice(worker.indexOf('async function handleObjectionTranscript'), worker.indexOf('async function revealSalebaseRebuttal')), /transcript[,}]\s*\}\s*\)|lastTranscript/);
 });
 

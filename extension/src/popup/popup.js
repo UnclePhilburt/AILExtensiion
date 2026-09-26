@@ -21,6 +21,8 @@ const OBJECTION_STATUS = {
   'page-not-reachable': 'Stopped at: talking to the Salebase page. Reload the Salebase tab and try again.',
   'page-error': 'Stopped at: opening the panel. The Salebase page script failed.',
   'rebuttal-not-found': 'Stopped at: finding the panel. That rebuttal was not found on the Salebase page.',
+  'other-script': 'Not in the selected script — the calm view shows it from another script.',
+  'not-in-script': 'The selected script has no rebuttal for this.',
   error: 'Stopped at: opening the rebuttal. Something went wrong.'
 };
 const time = (at) => (at ? new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' }) : '');
@@ -38,7 +40,7 @@ function renderObjection(last, heard) {
   }
   if (!lines.length) { status.hidden = true; return; }
   status.textContent = lines.join(' ');
-  status.classList.toggle('error', Boolean(last?.label) && !['opened', 'looking'].includes(last.status));
+  status.classList.toggle('error', Boolean(last?.label) && !['opened', 'looking', 'other-script'].includes(last.status));
   status.hidden = false;
 }
 async function refreshListener() {
