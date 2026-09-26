@@ -4,16 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <title>IMPACT Account</title>
-  <link rel="stylesheet" href="account.css">
-<script src="settings-boot.js"></script><link rel="stylesheet" href="journal.css?v=1"></head>
-<body>
+  <title>Your account · IMPACT Companion</title>
+  <script src="settings-boot.js"></script>
+  <link rel="stylesheet" href="journal.css?v=1">
+  <link rel="stylesheet" href="account.css?v=2">
+</head>
+<body class="accountPage">
   <main>
-    <a id="back" href="./">← Back</a>
-    <p class="eyebrow">IMPACT COMPANION</p>
-    <h1>Your account</h1>
-    <p>Use the same account on your phone and computer.</p>
-    <form id="signInForm">
+    <a id="back" class="backLink" href="./">← Back</a>
+    <p class="eyebrow">YOUR ACCOUNT</p>
+    <h1>Manage account</h1>
+    <p class="lede">The same sign-in on this phone and on your computer.</p>
+
+    <form id="signInForm" class="paper">
       <label for="email">Email</label>
       <input id="email" type="email" autocomplete="username" required>
       <label for="password">Password</label>
@@ -22,13 +25,27 @@
       <button id="resetPassword" class="secondary" type="button">Forgot password?</button>
       <p class="hint">Need an account? Ask your administrator for an invitation.</p>
     </form>
-    <section id="account" hidden>
-      <p>Signed in as <strong id="signedInEmail"></strong></p>
-      <a id="continue" href="./">Continue to phone workspace →</a>
-      <a id="teamAdmin" href="admin.html" hidden>Team admin →</a>
-      <button id="signOut" class="secondary" type="button">Sign out on this device</button>
+
+    <section id="account" class="signedIn" hidden>
+      <div class="paper identity">
+        <p class="eyebrow">SIGNED IN</p>
+        <p class="accountEmail" id="signedInEmail"></p>
+        <p class="hint">This device remembers you until you sign out.</p>
+      </div>
+      <nav class="accountActions" aria-label="Account actions">
+        <a id="continue" class="accountAction primary" href="./">
+          <span>Phone workspace<small>Open your current lead</small></span>
+          <span class="go" aria-hidden="true">→</span>
+        </a>
+        <a id="teamAdmin" class="accountAction" href="admin.html" hidden>
+          <span>Team admin<small>See who can use Companion</small></span>
+          <span class="go" aria-hidden="true">→</span>
+        </a>
+      </nav>
+      <button id="signOut" class="secondary signOut" type="button">Sign out on this device</button>
     </section>
-    <form id="passwordForm" hidden>
+
+    <form id="passwordForm" class="paper" hidden>
       <h2 id="passwordTitle">Change password</h2>
       <label for="accountFirstName">First name</label>
       <input id="accountFirstName" type="text" autocomplete="given-name" maxlength="24" placeholder="Your first name">
@@ -40,8 +57,8 @@
       <p class="hint">Use at least 12 characters.</p>
       <button type="submit">Save password</button>
     </form>
+
     <p id="message" role="status" aria-live="polite"></p>
-    <p class="hint">Use the same account on your phone and extension. Cloud access is enabled by your administrator.</p>
   </main>
   <script type="module" src="account.js?v=6"></script>
 </body>

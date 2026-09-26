@@ -1,20 +1,48 @@
-:root { font-family: system-ui, sans-serif; color: #203536; background: #eff3f1; color-scheme: light; }
+:root { font-family: system-ui, sans-serif; color-scheme: light; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-body { margin: 0; padding: 24px 16px; }
-main { max-width: 450px; margin: auto; padding: 28px; background: white; border: 1px solid #dce6df; border-radius: 20px; }
-a { color: #17684e; }
-h1 { margin: 6px 0 12px; font-size: 30px; }
-h2 { font-size: 20px; }
-p { line-height: 1.5; }
-.eyebrow { margin-top: 28px; font-size: 11px; letter-spacing: 2px; color: #537566; }
-form { display: grid; gap: 10px; margin-top: 24px; }
-label { font-size: 14px; font-weight: 600; }
-input, button { width: 100%; min-height: 46px; font: inherit; border-radius: 9px; border: 1px solid #c6d9ce; padding: 10px 12px; }
-button { background: #17684e; color: white; cursor: pointer; }
-button.secondary { color: #17684e; background: white; }
-button:disabled { opacity: .6; }
-.hint { font-size: 12px; color: #65786d; }
-#message { min-height: 24px; color: #17684e; overflow-wrap: anywhere; }
-#message.error { color: #a33131; }
+body.accountPage {
+  margin: 0; padding: 28px 18px 48px;
+  background: var(--page-base, #ede5d7); color: var(--journal-ink, #493e30);
+}
+main { max-width: 460px; margin: 0 auto; }
+.backLink { color: var(--journal-muted, #73654f); font-size: 14px; font-weight: 650; text-decoration: none; }
+h1 { margin: 8px 0 8px; font-family: Georgia, "Times New Roman", serif; font-size: clamp(32px, 8vw, 40px); font-weight: 400; letter-spacing: -.3px; line-height: 1.1; }
+h2 { margin: 0 0 4px; font-family: Georgia, "Times New Roman", serif; font-size: 26px; font-weight: 400; }
+.lede { margin: 0 0 22px; color: var(--journal-muted, #73654f); font: italic 17px/1.45 Georgia, serif; }
+.eyebrow { margin: 22px 0 0; font-size: 11px; letter-spacing: .14em; color: #6d5b3e; }
+.paper {
+  margin-top: 18px; padding: 20px 18px 18px;
+  background: var(--journal-paper, #fffaf0); color: inherit;
+  border: 1px solid var(--journal-line, #dfd2b8); border-radius: 5px 18px 18px 5px;
+  border-left: 3px solid #bba17a;
+  box-shadow: 0 2px 4px #3025150a, 0 12px 28px #30251514;
+}
+form.paper, .identity { display: grid; gap: 10px; }
+.identity .eyebrow { margin-top: 0; }
+.accountEmail { margin: 0; font: 400 26px/1.25 Georgia, serif; overflow-wrap: anywhere; }
+label { font-size: 14px; font-weight: 650; }
+input, button { width: 100%; min-height: 52px; font: inherit; border-radius: 14px; border: 1px solid var(--journal-line, #dfd2b8); padding: 12px 14px; background: #fffdf8; color: inherit; }
+button { background: #26483d; color: #f6f1e6; font-weight: 650; cursor: pointer; }
+button.secondary { color: var(--journal-ink, #493e30); background: transparent; }
+button:disabled { opacity: .55; }
+.hint { margin: 0; font-size: 13px; line-height: 1.45; color: var(--journal-muted, #73654f); }
+.accountActions { display: grid; gap: 12px; margin-top: 16px; }
+.accountAction {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  min-height: 76px; padding: 16px 18px; text-decoration: none; color: inherit;
+  background: var(--journal-paper, #fffaf0); border: 1px solid var(--journal-line, #dfd2b8);
+  border-radius: 18px; box-shadow: 0 8px 20px #30251512;
+}
+.accountAction span { display: block; font-size: 18px; font-weight: 680; line-height: 1.2; }
+.accountAction small { display: block; margin-top: 4px; color: var(--journal-muted, #73654f); font-size: 13px; font-weight: 500; }
+.accountAction .go { font-size: 22px; color: #26483d; }
+.accountAction.primary { background: linear-gradient(135deg, #58745d, #26483d); border-color: #26483d; color: #f6f1e6; }
+.accountAction.primary small, .accountAction.primary .go { color: #e4efe6; }
+.signOut { margin-top: 28px; }
+#message { min-height: 24px; margin: 16px 2px 0; color: #26483d; overflow-wrap: anywhere; }
+#message.error { color: #8d3030; }
 input:focus-visible, button:focus-visible, a:focus-visible { outline: 3px solid #d49534; outline-offset: 2px; }
+html[data-theme="dark"] body.accountPage { color-scheme: dark; }
+html[data-theme="dark"] input, html[data-theme="dark"] button.secondary { background: #1c2420; color: #edf4ef; }
+html[data-theme="dark"] .accountAction.primary { background: linear-gradient(135deg, #4d6a52, #31503f); }
