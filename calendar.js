@@ -5,6 +5,7 @@ import { client } from './auth-runtime.js';
 import { localTimeZone } from './time-zone.js';
 import { requestTypeLabel } from './lead-rules.js';
 import { NOT_SET_UP_CODES } from './calendar-sync.js';
+import { appointmentOutcomeInput } from './appointment-outcomes.js';
 import {
   EVENT_KINDS, normalizeEvent, groupByDay, monthGrid, shiftMonth, monthLabel, dayHeading, dayKey,
   eventStatus, upcomingEvents, formatEventTime, phoneTimeNote, telHref
@@ -23,6 +24,7 @@ let byDay = new Map();
 let today = dayKey(Date.now());
 let selected = today;
 let view = { year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)) - 1 };
+let selectedOutcomeEvent = null;
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -48,8 +50,54 @@ function eventItem(event, now) {
     body.append(call);
   }
   if (event.address) body.append(el('span', 'calAddress', event.address));
+  if (event.kind !== 'callback') {
+    const outcome = el('button', 'appointmentOutcomeButton', event.outcome ? 'Edit appointment result' : 'Add appointment result');
+    outcome.type = 'button'; outcome.dataset.outcomeEvent = String(event.id);
+    body.append(outcome);
+  }
   item.append(time, body);
   return item;
+}
+
+function openOutcome(event) {
+  selectedOutcomeEvent = event;
+  const panel = $('#appointmentOutcome');
+  const saved = event.outcome || {};
+  $('#outcomeHeading').textContent = event.outcome ? 'Edit appointment result' : 'Appointment result';
+  $('#outcomeLead').textContent = `${event.leadName} · ${formatEventTime(event)}`;
+  $('#outcomeType').value = saved.status || 'held';
+  $('#outcomeApl').value = saved.apl || '';
+  $('#outcomeReferrals').value = saved.referrals || '';
+  $('#outcomeNotes').value = saved.notes || '';
+  const rescheduled = saved.rescheduled_for ? new Date(saved.rescheduled_for) : null;
+  $('#outcomeRescheduleDate').value = rescheduled ? `${rescheduled.getFullYear()}-${String(rescheduled.getMonth() + 1).padStart(2, '0')}-${String(rescheduled.getDate()).padStart(2, '0')}` : '';
+  $('#outcomeRescheduleTime').value = rescheduled ? `${String(rescheduled.getHours()).padStart(2, '0')}:${String(rescheduled.getMinutes()).padStart(2, '0')}` : '';
+  toggleOutcomeFields();
+  $('#outcomeStatus').textContent = '';
+  panel.hidden = false;
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function toggleOutcomeFields() {
+  const type = $('#outcomeType').value;
+  $('#productionFields').hidden = type !== 'held';
+  $('#rescheduleFields').hidden = type !== 'rescheduled';
+}
+
+async function saveOutcome() {
+  if (!selectedOutcomeEvent) return;
+  const button = $('#saveOutcome'); button.disabled = true;
+  const value = appointmentOutcomeInput({ status: $('#outcomeType').value, apl: $('#outcomeApl').value, referrals: $('#outcomeReferrals').value, notes: $('#outcomeNotes').value, rescheduledFor: `${$('#outcomeRescheduleDate').value}T${$('#outcomeRescheduleTime').value}` });
+  if (value.status === 'rescheduled' && !value.rescheduled_for) { $('#outcomeStatus').textContent = 'Choose the new date and time first.'; button.disabled = false; return; }
+  try {
+    const { data: sessionData, error: sessionError } = await client.auth.getSession();
+    if (sessionError || !sessionData?.session) { location.replace('account.html?next=calendar.html'); return; }
+    const row = { user_id: sessionData.session.user.id, scheduled_event_id: selectedOutcomeEvent.id, ...value, updated_at: new Date().toISOString() };
+    const { error } = await client.from('appointment_outcomes').upsert(row, { onConflict: 'user_id,scheduled_event_id' });
+    if (error) throw error;
+    $('#outcomeStatus').textContent = 'Saved. Your statistics and Your Day will include it.';
+    await load();
+  } catch (error) { $('#outcomeStatus').textContent = error?.message || 'Could not save this appointment result.'; } finally { button.disabled = false; }
 }
 
 function renderList(container, list, emptyText, withDays = false) {
@@ -110,6 +158,11 @@ $('#prevMonth').addEventListener('click', () => { view = shiftMonth(view.year, v
 $('#nextMonth').addEventListener('click', () => { view = shiftMonth(view.year, view.month, 1); render(); });
 $('#todayButton').addEventListener('click', () => selectDay(dayKey(Date.now())));
 $('#calendarRefresh').addEventListener('click', () => load());
+$('#dayList').addEventListener('click', (event) => { const button = event.target.closest('[data-outcome-event]'); if (button) openOutcome(events.find((item) => String(item.id) === button.dataset.outcomeEvent)); });
+$('#upcomingList').addEventListener('click', (event) => { const button = event.target.closest('[data-outcome-event]'); if (button) openOutcome(events.find((item) => String(item.id) === button.dataset.outcomeEvent)); });
+$('#saveOutcome').addEventListener('click', saveOutcome);
+$('#cancelOutcome').addEventListener('click', () => { selectedOutcomeEvent = null; $('#appointmentOutcome').hidden = true; });
+$('#outcomeType').addEventListener('change', toggleOutcomeFields);
 
 async function load() {
   const refresh = $('#calendarRefresh');
@@ -118,9 +171,12 @@ async function load() {
   try {
     const { data: sessionData, error: sessionError } = await client.auth.getSession();
     if (sessionError || !sessionData?.session) { location.replace('account.html?next=calendar.html'); return; }
-    const { data, error } = await client.from('scheduled_events')
+    const [{ data, error }, outcomes] = await Promise.all([
+      client.from('scheduled_events')
       .select('id,kind,starts_at,all_day,lead_name,phone,address,request_type,source_line')
-      .order('starts_at', { ascending: true }).limit(2000);
+      .order('starts_at', { ascending: true }).limit(2000),
+      client.from('appointment_outcomes').select('scheduled_event_id,status,apl,referrals,notes,rescheduled_for,created_at').limit(2000)
+    ]);
     if (error) {
       if (NOT_SET_UP_CODES.includes(error.code)) {
         $('#calendarSetup').hidden = false;
@@ -132,7 +188,9 @@ async function load() {
       throw error;
     }
     $('#calendarSetup').hidden = true;
-    events = (data || []).map(normalizeEvent).filter(Boolean);
+    if (outcomes.error && !NOT_SET_UP_CODES.includes(outcomes.error.code)) throw outcomes.error;
+    const byEvent = new Map((outcomes.data || []).map((outcome) => [String(outcome.scheduled_event_id), outcome]));
+    events = (data || []).map(normalizeEvent).filter(Boolean).map((event) => ({ ...event, outcome: byEvent.get(String(event.id)) || null }));
     render();
     status.textContent = events.length ? `Updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Nothing scheduled yet. Appointments and callbacks appear here as you work leads.';
   } catch (error) {
