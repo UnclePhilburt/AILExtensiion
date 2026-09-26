@@ -32,9 +32,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   , bestNextLead: false // one Next button that asks IMPACT for the best next lead (no Previous)
   , scriptOverlay: false // show the calling script over the lead while a call is in progress
   , firstName: '' // the caller's own first name, used on the pages and in the script
+  , shareAlongside: true // let teammates see your totals on Alongside
 });
 
-const BOOLEAN_KEYS = ['swipeLeads', 'keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard', 'bestNextLead', 'scriptOverlay'];
+const BOOLEAN_KEYS = ['swipeLeads', 'keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard', 'bestNextLead', 'scriptOverlay', 'shareAlongside'];
 
 // A short personal name. Empty clears it. Anything with numbers or symbols is ignored.
 export function cleanFirstName(value) {

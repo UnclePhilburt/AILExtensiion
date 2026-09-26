@@ -1,0 +1,44 @@
+.alongsidePage .wsBody { gap: 16px; }
+.alongsideRanges { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 4px; }
+.alongsideRanges button {
+  flex: 0 0 auto; min-height: 40px; padding: 0 14px; border: 1px solid var(--journal-line); border-radius: 999px;
+  background: transparent; color: var(--journal-muted); font: 600 14px/1 system-ui, sans-serif;
+}
+.alongsideRanges button[aria-selected="true"] { background: #26483d; border-color: #26483d; color: #f6f1e6; }
+.alongsideHero { display: grid; grid-template-columns: minmax(0, 1fr) 132px; gap: 12px; align-items: center; padding: 22px 20px 20px 22px; }
+.heroCopy h2 { margin: 4px 0 8px; font-size: 28px; }
+.heroCopy p:last-child { margin: 0; color: var(--journal-muted); font: italic 16px/1.45 Georgia, serif; }
+.heroRing { position: relative; display: grid; place-items: center; text-align: center; }
+.heroRing svg { width: 120px; height: 120px; transform: rotate(-90deg); }
+.ringTrack { fill: none; stroke: var(--journal-soft); stroke-width: 10; }
+.ringValue { fill: none; stroke: #3d6b52; stroke-width: 10; stroke-linecap: round; stroke-dasharray: 0 289; transition: stroke-dasharray .6s ease; }
+.heroRing strong { position: absolute; top: 38px; font: 600 22px/1 Georgia, serif; }
+.heroRing span { position: absolute; top: 64px; width: 78px; color: var(--journal-muted); font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
+.alongsideSplit { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pairCard { padding: 16px 16px 18px; }
+.pairCard strong { display: block; margin: 6px 0 2px; font: 400 34px/1 Georgia, serif; }
+.pairCard span { color: var(--journal-muted); font-size: 13px; }
+.alongsideChartCard, .alongsidePage .calmCard { padding: 18px 16px 16px; }
+.alongsideChartHead { display: flex; justify-content: space-between; gap: 12px; align-items: end; }
+.alongsideChartHead h2 { margin: 2px 0 0; font-size: 24px; }
+.alongsideChartHead select { min-height: 40px; max-width: 46%; border-radius: 12px; }
+.rhythmChart { min-height: 150px; margin-top: 8px; }
+.rhythmChart svg { width: 100%; height: 150px; display: block; }
+.rhythmChart .trendEmpty, .boardEmpty { margin: 18px 4px; color: var(--journal-muted); font: italic 16px/1.45 Georgia, serif; }
+.rhythmAxis { position: relative; height: 18px; margin-top: 2px; color: var(--journal-muted); font-size: 11px; }
+.rhythmAxis span { position: absolute; transform: translateX(-50%); }
+.rhythmAxis .atStart { transform: none; }
+.rhythmAxis .atEnd { transform: translateX(-100%); }
+.alongsideBoard { display: grid; gap: 14px; margin-top: 16px; }
+.boardRow { display: grid; gap: 6px; }
+.boardMeta { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.boardMeta strong { font: 600 16px/1.2 system-ui, sans-serif; }
+.boardMeta span { color: var(--journal-muted); font-variant-numeric: tabular-nums; }
+.boardTrack { height: 10px; border-radius: 999px; background: var(--journal-soft); overflow: hidden; }
+.boardFill { height: 100%; width: 0; border-radius: inherit; background: #8aa58c; transition: width .5s ease; }
+.boardRow.isYou .boardFill { background: #3d6b52; }
+.boardRow.isYou .boardMeta strong::after { content: " · you"; font-weight: 500; color: var(--journal-muted); }
+.alongsideNote { margin: 16px 2px 0; color: var(--journal-muted); font-size: 13px; line-height: 1.45; }
+html[data-theme="dark"] .alongsideRanges button[aria-selected="true"] { background: #4d6a52; border-color: #5b7a60; }
+html[data-theme="dark"] .ringValue, html[data-theme="dark"] .boardRow.isYou .boardFill { stroke: #8fbf9a; background: #8fbf9a; }
+@media (max-width: 380px) { .alongsideHero { grid-template-columns: 1fr; } .heroRing { justify-self: start; } }

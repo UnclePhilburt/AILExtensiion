@@ -3,6 +3,7 @@
 import { BACKGROUNDS, readBackground, saveBackground } from './backgrounds.js';
 import { TEXT_SIZES, ORGANIZATIONS, loadPhoneSettings, savePhoneSettings, resetPhoneSettings } from './settings-store.js';
 import { applyUserName } from './user-name.js';
+import { publishAlongsideProfile } from './alongside-profile.js';
 import { refreshEncouragement } from './encouragement-ui.js';
 
 // Back link: only known pages (never an arbitrary URL from the query string).
@@ -94,16 +95,18 @@ firstName.addEventListener('change', () => {
   savePhoneSettings(localStorage, { firstName: firstName.value });
   firstName.value = loadPhoneSettings(localStorage).firstName;
   applyUserName();
+  void publishAlongsideProfile();
   saved(firstName.value ? 'Name saved' : 'Name cleared');
 });
 
 // Switches
-const SWITCHES = ['swipeLeads', 'keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard', 'bestNextLead', 'scriptOverlay'];
+const SWITCHES = ['swipeLeads', 'keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard', 'bestNextLead', 'scriptOverlay', 'shareAlongside'];
 for (const key of SWITCHES) {
   document.querySelector(`#${key}`).addEventListener('change', (event) => {
     savePhoneSettings(localStorage, { [key]: event.target.checked });
     saved();
     if (key === 'showEncouragement') { renderEncouragementRow(); refreshEncouragement(); }
+    if (key === 'shareAlongside') void publishAlongsideProfile();
   });
 }
 
