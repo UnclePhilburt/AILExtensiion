@@ -451,7 +451,7 @@ test('the service worker reports which stage failed and never stores the transcr
   assert.match(handler, /'impact\.lastHeard': \{ at: Date\.now\(\), outcome: detection\.reason/);
   assert.match(handler, /'objection\.cooldown'/);
   assert.doesNotMatch(handler, /transcript[,}]\s*\}|text: transcript|lastTranscript/);
-  assert.match(worker, /'impact\.lastObjection': \{ label: match\.label, at: Date\.now\(\), status: result\.status, stage: result\.stage/);
+  assert.match(worker, /'impact\.lastObjection': \{ label: shownLabel, objection: match\.label, titles: match\.titles \|\| \[match\.label\], at: Date\.now\(\), status: result\.status, stage: result\.stage/);
   assert.match(worker, /'salebase\.rebuttal', \{[\s\S]*stage: result\.stage[\s\S]*matchScore: match\.score/);
 
   const popup = fs.readFileSync(path.join(__dirname, '../extension/src/popup/popup.js'), 'utf8');

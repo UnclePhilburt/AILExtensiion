@@ -98,6 +98,35 @@
     };
   }
 
+  // Best rebuttal for a listener result: an exact Salebase title from its
+  // `titles` list first (in the listener's preferred order), then the label.
+  function findHeardRebuttal(rebuttals, value) {
+    for (const title of [...(value?.titles || []), value?.label]) {
+      const target = compact(title);
+      const exact = target && rebuttals.find((rebuttal) => compact(rebuttal.title) === target);
+      if (exact) return exact;
+    }
+    return matchRebuttal(rebuttals, value?.label);
+  }
+
+  const scriptOf = (group) => [...(group?.classList || [])].find((name) => name !== 'script-type') || '';
+
+  // When the selected script has no panel for what was heard, borrow the text
+  // from another script (the one the listener named, else the first that has it).
+  function findInOtherScripts(page, value) {
+    const groups = page?.rebuttalColumn ? [...page.rebuttalColumn.querySelectorAll('.script-type')] : [];
+    const ordered = [...groups.filter((group) => value?.fromScript && scriptOf(group) === value.fromScript), ...groups.filter((group) => scriptOf(group) !== page.value)];
+    for (const title of [...(value?.titles || []), value?.label]) {
+      const target = compact(title);
+      if (!target) continue;
+      for (const group of ordered) {
+        const found = parseRebuttals(group).find((rebuttal) => compact(rebuttal.title) === target);
+        if (found) return { ...found, script: scriptOf(group) };
+      }
+    }
+    return null;
+  }
+
   // Best rebuttal for a listener label ("Can you mail it to me?").
   function matchRebuttal(rebuttals, label) {
     const target = compact(label);
@@ -253,6 +282,7 @@ button { font: inherit; cursor: pointer; }
 .heard .label { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; font-size: 16.5px; font-weight: 700; line-height: 1.35; color: #6f2f10; }
 .heard .label button { flex: none; width: 26px; height: 26px; border: 0; border-radius: 50%; background: #ffffff8c; color: #8a3d17; font-size: 15px; line-height: 1; }
 .heard .status { margin-top: 5px; font-size: 12.5px; color: #9a5a33; }
+.heard .borrowed { max-height: 45vh; overflow: auto; margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: #ffffffa6; font-size: 15px; line-height: 1.6; color: #4a2a17; }
 .rb { border-radius: 16px; background: #f5f8f6; transition: background .2s, box-shadow .2s; }
 .rb > button { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 12px 14px; border: 0; border-radius: 16px; background: transparent; color: #1f3a35; font-size: 14.5px; font-weight: 650; line-height: 1.4; text-align: left; }
 .rb > button:hover { background: #edf4f0; }
@@ -505,14 +535,26 @@ button { font: inherit; cursor: pointer; }
     const fresh = objection && Date.now() - (objection.at || 0) < 10 * 60 * 1000 && !objection.dismissed;
     ui.heard.hidden = !fresh;
     if (!fresh) return;
+    const borrowed = objection.status === 'other-script' ? findInOtherScripts(lastGood, objection) : null;
+    const scriptLabel = (value) => lastGood?.options?.find((option) => option.value === value)?.label || value || 'another script';
     const statusText = objection.status === 'looking' ? 'Finding the rebuttal…'
       : objection.status === 'opened' ? 'Opened below (and on the Salebase page)'
-        : clean(objection.message) || 'Rebuttal not opened';
-    ui.heard.replaceChildren(
+        : objection.status === 'other-script' ? `Not in this script — from ${scriptLabel(borrowed?.script || objection.fromScript)}`
+          : objection.status === 'not-in-script' ? 'No rebuttal for this in the selected script'
+            : clean(objection.message) || 'Rebuttal not opened';
+    const children = [
       el('p', { class: 'eyebrow', text: 'Objection just heard' }),
-      el('div', { class: 'label' }, [el('span', { text: objection.label || 'Objection' }), el('button', { type: 'button', 'aria-label': 'Dismiss', text: '×', onclick: () => { objection.dismissed = true; renderHeard(); } })]),
+      el('div', { class: 'label' }, [el('span', { text: (borrowed?.title || objection.label) || 'Objection' }), el('button', { type: 'button', 'aria-label': 'Dismiss', text: '×', onclick: () => { objection.dismissed = true; renderHeard(); } })]),
       el('p', { class: 'status', text: statusText })
-    );
+    ];
+    if (borrowed?.answer) {
+      const body = document.createElement('div');
+      body.className = 'borrowed';
+      body.append(copyChildren(borrowed.answer, isBackToScript));
+      markMissing(body);
+      if (clean(body.textContent)) children.push(body);
+    }
+    ui.heard.replaceChildren(...children);
   }
 
   function focusCard(rebuttal) {
@@ -611,8 +653,9 @@ button { font: inherit; cursor: pointer; }
     objection = { ...value, dismissed: false };
     if (!ui || !isNew || !lastGood) return;
     renderHeard();
-    const match = matchRebuttal(currentRebuttals(), value.label);
+    const match = findHeardRebuttal(currentRebuttals(), value);
     if (match && (value.status === 'looking' || value.status === 'opened')) focusCard(match);
+    if (value.status === 'other-script') log('info', 'calm.objectionFromOtherScript', { title: value.label, fromScript: value.fromScript || '', activeScript: lastGood.value || '' });
   }
 
   try {
@@ -641,5 +684,5 @@ button { font: inherit; cursor: pointer; }
   document.addEventListener('change', onPageInput, true);
   document.addEventListener('input', onPageInput, true);
 
-  globalThis.__impactCalmView = { parsePage, parseRebuttals, matchRebuttal, compact, update, isActive: () => Boolean(host?.isConnected && ui && !ui.app.hidden && host.style.display !== 'none'), root: () => root };
+  globalThis.__impactCalmView = { parsePage, parseRebuttals, matchRebuttal, findHeardRebuttal, findInOtherScripts, compact, update, isActive: () => Boolean(host?.isConnected && ui && !ui.app.hidden && host.style.display !== 'none'), root: () => root };
 })();

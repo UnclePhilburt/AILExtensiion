@@ -146,8 +146,32 @@ export function describeOutcome(detail, label) {
   return { status: 'opened', stage: 'done', action: detail.action || '', message: `“${label}”: ${ACTION_TEXT[detail.action] || detail.action || 'opened'} in the Salebase script window.` };
 }
 
+const compactTitle = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+// Which Salebase title to open for a matched objection, given the page's list
+// of rebuttals ({ activeScript, rebuttals: [{ title, script, shown }] }).
+// - the first of the objection's titles the selected script shows -> open it;
+// - none showing, but another script has one -> { otherScript } (nothing is
+//   clicked; the calm view shows that script's text) unless crossScript is false;
+// - the page lists no rebuttals (older page) -> null: use the label lookup as before.
+export function pickRebuttalTitle(titles, listing, { crossScript = true } = {}) {
+  const rebuttals = Array.isArray(listing?.rebuttals) ? listing.rebuttals : [];
+  if (!rebuttals.length) return null;
+  const wanted = (titles || []).filter(Boolean);
+  for (const title of wanted) {
+    const hit = rebuttals.find((rebuttal) => rebuttal.shown && compactTitle(rebuttal.title) === compactTitle(title));
+    if (hit) return { title: hit.title, script: hit.script, shown: true };
+  }
+  for (const title of wanted) {
+    const hit = rebuttals.find((rebuttal) => compactTitle(rebuttal.title) === compactTitle(title));
+    if (hit) return crossScript ? { title: hit.title, script: hit.script, shown: false, otherScript: true } : { title: '', script: '', shown: false, notInScript: true };
+  }
+  return { title: '', script: '', shown: false, notOnPage: true };
+}
+
 export async function revealRebuttalInScriptTab(chromeApi, match, options = {}) {
   const request = { label: match?.label || '', phrases: match?.phrases || [], otherLabels: options.otherLabels || [] };
+  const titles = Array.isArray(match?.titles) && match.titles.length ? match.titles : [request.label];
   const salebaseTabs = await findSalebaseTabs(chromeApi);
   const seen = salebaseTabs.map((tab) => ({ id: tab.id, url: pathOnly(tab.url), active: Boolean(tab.active) }));
   if (!salebaseTabs.length) {
@@ -159,7 +183,7 @@ export async function revealRebuttalInScriptTab(chromeApi, match, options = {}) 
   const probes = {};
   await Promise.all(salebaseTabs.map(async (tab) => {
     if (tab.discarded) { probes[tab.id] = null; return; }
-    probes[tab.id] = await messageRebuttalScript(chromeApi, tab.id, { type: 'impact/probeRebuttal', ...request });
+    probes[tab.id] = await messageRebuttalScript(chromeApi, tab.id, { type: 'impact/probeRebuttal', ...request, titles });
   }));
   const tab = chooseScriptTab(salebaseTabs, probes);
   if (!tab) {
@@ -171,15 +195,27 @@ export async function revealRebuttalInScriptTab(chromeApi, match, options = {}) 
     await chromeApi.tabs.update(tab.id, { active: true });
   } catch (_error) { /* A window closing mid-call does not interrupt calling. */ }
 
+  // Open the title the selected script shows (the same title can exist under
+  // several scripts; only the selected one is visible).
+  const listing = await messageRebuttalScript(chromeApi, tab.id, { type: 'impact/listRebuttals' });
+  const pick = pickRebuttalTitle(titles, listing, { crossScript: match?.crossScript !== false });
+  const base = { tabId: tab.id, url: pathOnly(tab.url), tabsSeen: seen, probe: probes[tab.id] || null, activeScript: listing?.activeScript || '' };
+  if (pick?.otherScript) {
+    return { ...base, status: 'other-script', stage: 'find-panel', label: pick.title, fromScript: pick.script,
+      message: `“${pick.title}” is not in the selected script (${base.activeScript || 'unknown'}); showing it from the ${pick.script} script.` };
+  }
+  if (pick?.notInScript) {
+    return { ...base, status: 'not-in-script', stage: 'find-panel', label: request.label, message: `The selected script (${base.activeScript || 'unknown'}) has no rebuttal for “${request.label}”.` };
+  }
+  if (pick?.title) request.label = pick.title;
+
   const guard = await guardAgainstNewTabs(chromeApi, tab.id);
   const detail = await messageRebuttalScript(chromeApi, tab.id, { type: 'impact/revealRebuttal', ...request });
   const closedTabs = await guard.release(options.guardMs ?? POPUP_GUARD_MS);
   return {
     ...describeOutcome(detail, request.label),
-    tabId: tab.id,
-    url: pathOnly(tab.url),
-    tabsSeen: seen,
-    probe: probes[tab.id] || null,
+    ...base,
+    label: request.label,
     detail,
     closedTabs
   };

@@ -7,10 +7,10 @@ const path = require('node:path');
 test('local objection rules match common speakerphone phrases without storing audio', () => {
   const source = fs.readFileSync(path.join(__dirname, '../extension/src/background/objection-matcher.js'), 'utf8').replace(/^export /gm, '');
   const context = vm.createContext({}); vm.runInContext(source, context);
-  assert.equal(context.matchObjection("I am not interested in this").label, "I'm not interested");
+  assert.equal(context.matchObjection("I am not interested in this").label, "I'm not interested.");
   assert.equal(context.matchObjection('Could you mail it to me?').label, 'Can you mail it to me?');
   assert.equal(context.matchObjection("I don't remember doing that").label, "I don't remember doing this!");
-  assert.equal(context.matchObjection('Do I have to do a Zoom meeting?').label, 'Do we have to do a Zoom meeting?');
+  assert.equal(context.matchObjection('Do I have to do a Zoom meeting?').label, 'Do we have to do a Zoom meeting? / Do I have to do this? / Why do I have to do this?');
   assert.equal(context.matchObjection('Thanks, have a nice day.'), null);
 });
 

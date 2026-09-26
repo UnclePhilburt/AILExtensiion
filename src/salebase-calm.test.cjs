@@ -273,3 +273,55 @@ done({ before, host: Boolean(host()), logs: __messages.filter((m) => m.type === 
   assert.equal(lost.host, false, 'never a blank screen: the view goes away');
   assert.deepEqual(lost.logs, [['salebase.calmFallback', 'no-script-blocks']]);
 });
+
+const OTHER_SCRIPT = `
+await sleep(700);
+const dropdown = document.getElementById('myDropdown');
+const pick = async (value) => { dropdown.value = value; dropdown.dispatchEvent(new Event('change', { bubbles: true })); await sleep(300); };
+const R = { listings: {} };
+for (const value of ['RESPONSE', 'WILLKIT', 'LAPSED-POS', 'FE', 'CHILDSAFE']) { await pick(value); R.listings[value] = await send({ type: 'impact/listRebuttals' }); }
+await pick('RESPONSE');
+await chrome.storage.local.set({ 'impact.lastObjection': { label: 'Can you call me back?', objection: 'call-back', titles: ['Can you call me back?'], at: Date.now(), status: 'other-script', fromScript: 'CHILDSAFE', activeScript: 'RESPONSE' } });
+await sleep(200);
+R.other = { heard: !q('.heard').hidden, label: q('.heard .label span').textContent, status: q('.heard .status').textContent, borrowed: (q('.heard .borrowed')?.textContent || '').replace(/\\s+/g, ' ').trim(),
+  hits: qa('.rb.hit').length, logs: __messages.filter((m) => m.type === 'impact/log').map((m) => m.entry.event) };
+const original = [...document.querySelectorAll('#rebuttalsColumn .script-type.CHILDSAFE .rebuttal-item')].find((node) => node.textContent.includes('Can you call me back?'));
+R.other.source = ((original.querySelector('.rebuttal-answer') || original.nextElementSibling).textContent || '').replace(/\\s+/g, ' ').trim();
+await chrome.storage.local.set({ 'impact.lastObjection': { label: "I'm single", objection: 'single', titles: ['If they are single...'], at: Date.now() + 1, status: 'not-in-script', activeScript: 'RESPONSE' } });
+await sleep(200);
+R.missing = { status: q('.heard .status').textContent, borrowed: Boolean(q('.heard .borrowed')) };
+await pick('LAPSED-POS');
+await chrome.storage.local.set({ 'impact.lastObjection': { label: 'Not interested...', titles: ['Not interested...', "I'm not interested."], at: Date.now() + 2, status: 'opened' } });
+await sleep(200);
+R.lapsed = qa('.rb.hit').map((n) => n.querySelector('button').textContent);
+done(R);`;
+
+test('headless: a heard objection opens the active script\'s rebuttal, or shows it from another script when missing', { skip: !browser && 'no Chromium browser found' }, () => {
+  const R = runPage(FIXTURE, OTHER_SCRIPT);
+  assert.ok(R, 'page did not report');
+  assert.equal(R.error, undefined, R.error);
+  const source = read('extension/src/background/salebase-rebuttal.js').replace(/^export /gm, '').replace(/^import .*$/gm, '');
+  const vm = require('node:vm');
+  const context = vm.createContext({ console }); vm.runInContext(source, context);
+  const pickTitle = (titles, script, options) => context.pickRebuttalTitle(titles, R.listings[script], options);
+  for (const script of Object.keys(R.listings)) assert.equal(R.listings[script].activeScript, script);
+  assert.equal(pickTitle(["I'm not interested.", "I don't want it."], 'WILLKIT').title, "I'm not interested.");
+  assert.equal(pickTitle(["I don't want it.", "I'm not interested."], 'WILLKIT').title, "I don't want it.");
+  assert.equal(pickTitle(["I don't want it.", "I'm not interested."], 'RESPONSE').title, "I'm not interested.");
+  assert.equal(pickTitle(["I'm not interested.", 'Not interested...'], 'LAPSED-POS').title, 'Not interested...');
+  assert.equal(pickTitle(['Why do we have to meet a benefits coordinator?', 'Do we have to do a Zoom meeting? / Do I have to do this? / Why do I have to do this?'], 'CHILDSAFE').title, 'Do we have to do a Zoom meeting? / Do I have to do this? / Why do I have to do this?');
+  const other = pickTitle(['Can you call me back?'], 'RESPONSE');
+  assert.equal(other.otherScript, true);
+  assert.equal(other.script, 'CHILDSAFE');
+  assert.equal(pickTitle(['If they are single...'], 'RESPONSE', { crossScript: false }).notInScript, true);
+
+  assert.equal(R.other.heard, true);
+  assert.equal(R.other.label, 'Can you call me back?');
+  assert.equal(R.other.status, 'Not in this script — from Child Safe');
+  assert.ok(R.other.borrowed.length > 20, 'the other script\'s rebuttal text shows in the heard card');
+  assert.equal(R.other.borrowed.slice(0, 30), R.other.source.slice(0, 30));
+  assert.equal(R.other.hits, 0, 'no card in the active script is highlighted');
+  assert.ok(R.other.logs.includes('calm.objectionFromOtherScript'));
+  assert.deepEqual(R.missing, { status: 'No rebuttal for this in the selected script', borrowed: false });
+  assert.deepEqual(R.lapsed, ['Not interested...']);
+});

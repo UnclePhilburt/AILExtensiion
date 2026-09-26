@@ -6,7 +6,7 @@ import { publishCloud, takeCloudCommand, reportCloudResult, cloudLeadId } from '
 import { publisherDecision, createLatestWinsQueue, followLeadChange, verifyPhoneLead, LEAD_CHANGING_COMMANDS } from './phone-sync.js';
 import { SALEBASE_SCRIPTS_URL, scriptChoiceForLead, matchScriptOption, readScriptDropdown, applyScriptOption } from './salebase-scripts.js';
 import { createObjectionDetector, REBUTTAL_LABELS } from './objection-matcher.js';
-import { findSalebaseTabs, findSalebaseScriptTabs, isSalebaseScriptUrl, revealRebuttalInScriptTab } from './salebase-rebuttal.js';
+import { findSalebaseTabs, findSalebaseScriptTabs, isSalebaseScriptUrl, revealRebuttalInScriptTab, messageRebuttalScript } from './salebase-rebuttal.js';
 import { scriptFieldsFromLead } from './script-fields.js';
 
 const SCRIPT_LEAD_KEY = 'impact.scriptLead';
@@ -173,6 +173,7 @@ async function setObjectionListening(enabled) {
   if (!result?.ok) throw new Error(result?.error || 'Could not start local listening.');
   objectionListening = true;
   await chrome.storage.local.set({ 'impact.objectionListening': true, 'impact.objectionListenerError': '' });
+  void refreshRebuttalTitles();
   return { listening: true };
 }
 
@@ -192,6 +193,27 @@ async function installEnglishSpeechPack() {
   return result;
 }
 
+// Rebuttal titles on the rep's Salebase page, so a rebuttal Cody adds there
+// later is still matched (loosely, from its title words) before the built-in
+// list learns it. Refreshed when listening starts, after each rebuttal, and
+// when older than two minutes.
+const REBUTTAL_TITLES_MAX_AGE_MS = 2 * 60 * 1000;
+let pageRebuttalTitles = { at: 0, titles: [] };
+let rebuttalTitlesLoading = null;
+function refreshRebuttalTitles() {
+  if (rebuttalTitlesLoading) return rebuttalTitlesLoading;
+  rebuttalTitlesLoading = (async () => {
+    try {
+      const tabs = await findSalebaseScriptTabs(chrome).catch(() => []);
+      const tab = tabs.find((item) => item.active && !item.discarded) || tabs.find((item) => !item.discarded);
+      if (!tab) return;
+      const listing = await messageRebuttalScript(chrome, tab.id, { type: 'impact/listRebuttals' });
+      if (Array.isArray(listing?.rebuttals)) pageRebuttalTitles = { at: Date.now(), titles: [...new Set(listing.rebuttals.map((item) => item.title).filter(Boolean))] };
+    } catch (_error) { /* keep the last list */ } finally { rebuttalTitlesLoading = null; }
+  })();
+  return rebuttalTitlesLoading;
+}
+
 async function handleObjectionTranscript(transcript) {
   // Optional extra phrases per objection id, e.g.
   // { "forgot": ["that was my late husband"] }, merged with the built-in ones.
@@ -199,7 +221,8 @@ async function handleObjectionTranscript(transcript) {
   let detection;
   try {
     const stored = await chrome.storage.local.get('impact.objectionPhrases').catch(() => ({}));
-    detection = objectionDetector.detect(transcript, Date.now(), { customPhrases: stored['impact.objectionPhrases'] });
+    if (Date.now() - pageRebuttalTitles.at > REBUTTAL_TITLES_MAX_AGE_MS) void refreshRebuttalTitles();
+    detection = objectionDetector.detect(transcript, Date.now(), { customPhrases: stored['impact.objectionPhrases'], extraTitles: pageRebuttalTitles.titles });
   } catch (error) {
     await chrome.storage.local.set({ 'impact.lastHeard': { at: Date.now(), outcome: 'matcher-error' } });
     await appendLocalLog('error', 'objection.matcherError', { reason: error.message });
@@ -213,7 +236,7 @@ async function handleObjectionTranscript(transcript) {
     return;
   }
   if (!match) return;
-  await chrome.storage.local.set({ 'impact.lastObjection': { label: match.label, at: Date.now(), status: 'looking', stage: 'matched', score: match.score, via: match.via } });
+  await chrome.storage.local.set({ 'impact.lastObjection': { label: match.label, titles: match.titles || [match.label], at: Date.now(), status: 'looking', stage: 'matched', score: match.score, via: match.via } });
   await revealSalebaseRebuttal(match);
 }
 
@@ -226,12 +249,20 @@ async function revealSalebaseRebuttal(match) {
   } catch (error) {
     result = { status: 'error', stage: 'open-rebuttal', message: `Could not open the rebuttal: ${error.message}` };
   }
+  // label = the Salebase title actually opened (or borrowed from another script).
+  const shownLabel = result.label || match.label;
   await chrome.storage.local.set({
-    'impact.lastObjection': { label: match.label, at: Date.now(), status: result.status, stage: result.stage || '', action: result.action || '', message: result.message, score: match.score, via: match.via }
+    'impact.lastObjection': { label: shownLabel, objection: match.label, titles: match.titles || [match.label], at: Date.now(), status: result.status, stage: result.stage || '', action: result.action || '', message: result.message, score: match.score, via: match.via, fromScript: result.fromScript || '', activeScript: result.activeScript || '' }
   });
+  void refreshRebuttalTitles();
   await appendLocalLog(result.status === 'opened' ? 'info' : 'warn', 'salebase.rebuttal', {
-    label: match.label,
+    label: shownLabel,
+    objection: match.id,
     status: result.status,
+    // other-script: the selected script has no such rebuttal; the calm view
+    // shows the text from fromScript instead. not-in-script: nothing shown.
+    activeScript: result.activeScript || '',
+    fromScript: result.fromScript || '',
     stage: result.stage || '',
     matchScore: match.score,
     matchedBy: match.via,
