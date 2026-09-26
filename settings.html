@@ -1,7 +1,8 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Settings · IMPACT Companion</title><script src="settings-boot.js"></script><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="settings.css"><link rel="stylesheet" href="journal.css?v=1"></head>
 <body><main class="app settingsPage">
-<header><a id="settingsBack" class="backLink" href="workspace.html">← Workspace</a><p class="eyebrow">YOUR PHONE</p><h1>Settings</h1><p class="settingsIntro">Changes save automatically on this phone.</p><p class="encLine" data-encourage="settings" aria-live="off"></p></header>
+<header><a id="settingsBack" class="backLink" href="workspace.html">← Workspace</a><p class="eyebrow" data-with-name="{name}'s phone">YOUR PHONE</p><h1>Settings</h1><p class="settingsIntro" data-with-name="Changes save on {name}'s phone.">Changes save automatically on this phone.</p><p class="encLine" data-encourage="settings" aria-live="off"></p></header>
+<section class="settingsCard" aria-labelledby="nameHeading"><div class="settingsCardHead"><p class="eyebrow">YOU</p><h2 id="nameHeading">Your name</h2></div><label class="settingRow settingColumn" for="firstName"><span class="settingText"><strong>First name</strong><small>Shown on the pages and spoken in the calling script, instead of “you”.</small></span><input id="firstName" class="settingSelect" type="text" maxlength="24" autocomplete="given-name" placeholder="Your first name"></label></section>
 <section class="settingsCard" aria-labelledby="bgHeading"><div class="settingsCardHead"><p class="eyebrow">LOOK</p><h2 id="bgHeading">Background</h2></div><div id="bgGrid" class="bgGrid" role="radiogroup" aria-labelledby="bgHeading"></div></section>
 <section class="settingsCard" aria-labelledby="appearanceHeading"><div class="settingsCardHead"><p class="eyebrow">LOOK</p><h2 id="appearanceHeading">Appearance</h2></div><label class="settingRow"><span class="settingText"><strong>Dark mode</strong><small>Use a lower-light version of the phone workspace.</small></span><input id="darkMode" type="checkbox" role="switch" class="switch"></label><label class="settingRow"><span class="settingText"><strong>Beige lead card</strong><small>Replace the white lead background with soft parchment beige.</small></span><input id="beigeLeadCard" type="checkbox" role="switch" class="switch"></label></section>
 <section class="settingsCard" aria-labelledby="callingHeading"><div class="settingsCardHead"><p class="eyebrow">WHILE CALLING</p><h2 id="callingHeading">Calling</h2></div>
@@ -25,4 +26,4 @@
 </section>
 <section class="settingsReset"><button id="resetSettings" type="button">Reset to defaults</button><p>Restores the default background and every setting on this page.</p></section>
 <p id="savedHint" class="savedHint" role="status" aria-live="polite" hidden>Saved</p>
-</main><script type="module" src="settings.js?v=4"></script></body></html>
+</main><script type="module" src="settings.js?v=5"></script></body></html>

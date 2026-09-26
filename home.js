@@ -1,6 +1,7 @@
 import { client } from './auth-runtime.js';
 import { IMPACT_TIME_ZONE, wallClockToInstant, zonedParts } from './time-zone.js';
 import { displayName, greeting, dateLine, todaySummary } from './home-view.js';
+import { loadPhoneSettings } from './settings-store.js';
 
 const $ = (selector) => document.querySelector(selector);
 const signedIn = $('#signedIn'); const signedOut = $('#signedOut'); const shortcuts = $('#homeShortcuts');
@@ -9,7 +10,7 @@ let name = '';
 let todayChecked = false;
 
 function paintGreeting() {
-  $('#homeGreeting').textContent = greeting(Date.now(), name);
+  $('#homeGreeting').textContent = greeting(Date.now(), loadPhoneSettings(localStorage).firstName || name);
   $('#homeDate').textContent = dateLine(Date.now());
 }
 paintGreeting();

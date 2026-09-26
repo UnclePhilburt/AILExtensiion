@@ -1,4 +1,5 @@
 import { CALL_SCRIPTS, fillScriptText, scriptForRequestType } from './call-scripts.js';
+import { loadPhoneSettings } from './settings-store.js';
 
 function paragraph(text) {
   const node = document.createElement('p');
@@ -62,7 +63,8 @@ export function createScriptOverlay(parent) {
         title.textContent = step.title;
         block.append(title);
       }
-      for (const line of String(step.body || '').split('\n')) if (line.trim()) block.append(paragraph(fillScriptText(line, lead)));
+      const agent = loadPhoneSettings(localStorage).firstName;
+      for (const line of String(step.body || '').split('\n')) if (line.trim()) block.append(paragraph(fillScriptText(line, lead, agent)));
       body.append(block);
     }
   };

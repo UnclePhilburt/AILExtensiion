@@ -1,3 +1,4 @@
+import { loadPhoneSettings } from './settings-store.js';
 import { client } from './auth-runtime.js';
 import { dailyBrief } from './daily-brief.js';
 import { appointmentTotals, formatApl } from './appointment-outcomes.js';
@@ -5,7 +6,8 @@ const $ = (selector) => document.querySelector(selector);
 const status = $('#dailyStatus');
 function metric(value, label) { const item = document.createElement('div'); const number = document.createElement('strong'); const text = document.createElement('span'); number.textContent = value; text.textContent = label; item.append(number, text); return item; }
 function render(brief) {
-  $('#dailyGreeting').textContent = `${brief.greeting}.`;
+  const name = loadPhoneSettings(localStorage).firstName;
+  $('#dailyGreeting').textContent = name ? `${brief.greeting}, ${name}.` : `${brief.greeting}.`;
   $('#dailyDate').textContent = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
   const story = $('#dailyStory'); story.replaceChildren();
   for (const chapter of brief.chapters || [brief.story]) { const paragraph = document.createElement('p'); paragraph.textContent = chapter; story.append(paragraph); }

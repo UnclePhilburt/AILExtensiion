@@ -38,11 +38,12 @@ export function firstNameFrom(leadName) {
   return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
-export function fillScriptText(text, lead) {
+export function fillScriptText(text, lead, agentName = '') {
+  const agent = String(agentName || '').trim();
   const values = {
     firstName: firstNameFrom(lead?.leadName) || '(Name)',
     address: String(lead?.address || '').trim() || '(Address)',
-    agent: '(You)',
+    agent: agent || '(You)',
     group: '(Group)',
     beneficiary: '(Beneficiary)',
     spouse: '(Spouse)'

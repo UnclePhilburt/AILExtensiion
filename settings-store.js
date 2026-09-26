@@ -31,9 +31,18 @@ export const DEFAULT_SETTINGS = Object.freeze({
   , beigeLeadCard: false // parchment lead card instead of white
   , bestNextLead: false // one Next button that asks IMPACT for the best next lead (no Previous)
   , scriptOverlay: false // show the calling script over the lead while a call is in progress
+  , firstName: '' // the caller's own first name, used on the pages and in the script
 });
 
 const BOOLEAN_KEYS = ['swipeLeads', 'keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard', 'bestNextLead', 'scriptOverlay'];
+
+// A short personal name. Empty clears it. Anything with numbers or symbols is ignored.
+export function cleanFirstName(value) {
+  const name = String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, 24);
+  if (!name) return '';
+  if (!/^[\p{L}][\p{L} .'\u2019-]{0,23}$/u.test(name)) return null;
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
 
 // Known keys with valid values; anything missing or invalid keeps its value from
 // `base` (the defaults unless given).
@@ -43,6 +52,10 @@ export function normalizeSettings(value, base = DEFAULT_SETTINGS) {
   for (const key of BOOLEAN_KEYS) if (typeof source[key] === 'boolean') settings[key] = source[key];
   if (TEXT_SIZES.some((size) => size.id === source.textSize)) settings.textSize = source.textSize;
   if (ORGANIZATIONS.some((organization) => organization.id === source.organization)) settings.organization = source.organization;
+  if (typeof source.firstName === 'string') {
+    const name = cleanFirstName(source.firstName);
+    if (name !== null) settings.firstName = name;
+  }
   return settings;
 }
 
