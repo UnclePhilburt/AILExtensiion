@@ -9,6 +9,7 @@
 <section><h2>Computer connection</h2><p class="hint">The extension connects to the bridge running on this computer.</p><label for="bridgeUrl">Bridge address</label><input id="bridgeUrl" placeholder="http://127.0.0.1:8787"><label for="bridgeToken">Bridge token</label><input id="bridgeToken" type="password" autocomplete="off" placeholder="Token from your phone companion"><p class="hint">Your phone and extension also need to be signed in to the same account.</p></section>
 </div>
 <section class="checkboxRow"><input id="autoPublish" type="checkbox"><label for="autoPublish">Automatically sync my phone</label></section>
+<section><h2>Lead order after a result</h2><label for="leadOrder">Choose the next lead by</label><select id="leadOrder"><option value="best">Best lead order — automatically choose the strongest next lead</option><option value="manual">Manual order — use Next and Previous yourself</option></select><p class="hint">Best lead order uses your personal calling results, the current time, and the current Inbox. It never starts a call automatically.</p></section>
 </div>
 <div id="account" class="panel" hidden><section><h2>Your account</h2><p id="accountEmail"></p><p class="hint">Use this account on your phone too. You stay signed in until you sign out.</p><a class="buttonLink" href="../account/account.html">Manage account & sign out →</a><a id="teamAdminLink" class="buttonLink" href="../account/admin.html" hidden>Team admin →</a></section></div>
 <div id="debug" class="panel" hidden>

@@ -3,7 +3,7 @@
 
 export const IMPACT_LEAD_URL = /^https:\/\/mobile\.impact\.ailife\.com\/Lead\/(InboxDetail|WhatHappend|SetAppointment)(?:[?#]|$)/;
 // Commands after which IMPACT moves to another lead.
-export const LEAD_CHANGING_COMMANDS = ['no-answer', 'refused-appointment', 'virtual-appointment-slot', 'next', 'previous'];
+export const LEAD_CHANGING_COMMANDS = ['no-answer', 'refused-appointment', 'virtual-appointment-slot', 'next', 'previous', 'best-next'];
 
 // May this IMPACT tab publish its lead? '' = yes, otherwise the reason.
 // It only has to be the tab showing in its own window. Being in the last

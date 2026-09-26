@@ -15,6 +15,7 @@ const bridgeUrlInput = document.querySelector("#bridgeUrl");
 const bridgeTokenInput = document.querySelector("#bridgeToken");
 const saveBridgeButton = document.querySelector("#saveBridge");
 const previousLeadButton = document.querySelector("#previousLead");
+const bestNextLeadButton = document.querySelector("#bestNextLead");
 const nextLeadButton = document.querySelector("#nextLead");
 const noAnswerButton = document.querySelector("#noAnswer");
 const virtualAppointmentButton = document.querySelector("#virtualAppointment");
@@ -90,6 +91,7 @@ saveBridgeButton.addEventListener("click", () => {
 bridgeUrlInput.addEventListener("input", persistBridgeSettings);
 bridgeTokenInput.addEventListener("input", persistBridgeSettings);
 previousLeadButton.addEventListener("click", showPreviousLead);
+bestNextLeadButton.addEventListener("click", showBestNextLead);
 nextLeadButton.addEventListener("click", showNextLead);
 noAnswerButton.addEventListener("click", () => sendCallResult("no-answer"));
 virtualAppointmentButton.addEventListener("click", () => sendCallResult("virtual-appointment"));
@@ -158,6 +160,7 @@ function commandProgressMessage(type, details = {}) {
   if (type === "virtual-appointment") return "Opening Virtual Appointment…";
   if (type === "virtual-appointment-day") return "Selecting appointment day…";
   if (type === "virtual-appointment-slot") return "Setting appointment time…";
+  if (type === "best-next") return "Finding the best lead to call…";
   return type === "next" ? "Moving to the next lead…" : "Moving to the previous lead…";
 }
 
@@ -470,6 +473,10 @@ async function showPreviousLead() {
   await sendNavigation("previous");
 }
 
+async function showBestNextLead() {
+  await sendNavigation("best-next");
+}
+
 function navigationPending() {
   if (navPending && Date.now() > navPending.until) navPending = null;
   return Boolean(navPending);
@@ -504,7 +511,7 @@ async function sendNavigation(type) {
     if (navPending !== pending) return;
     navIntent = null;
     clearNavigationPending();
-    if (!document.hidden) showFeedback(`IMPACT didn't move to the ${type === "next" ? "next" : "previous"} lead. Check IMPACT on your computer, then try again.`, "error");
+    if (!document.hidden) showFeedback(type === "best-next" ? "IMPACT could not choose a lead. Open your Inbox on the computer so Companion can refresh the list, then try again." : `IMPACT didn't move to the ${type === "next" ? "next" : "previous"} lead. Check IMPACT on your computer, then try again.`, "error");
   }, 10100);
 }
 
@@ -526,7 +533,7 @@ async function sendComputerCommand(type, details = {}) {
         if (!(await refreshSessionNow())) throw new Error(SIGN_IN_MESSAGE);
         await withTimeout(cloudSend(state, command, id), 12000, NETWORK_MESSAGE);
       }
-      showFeedback(type === 'call' ? 'Call sent to IMPACT.' : type === 'virtual-appointment' ? 'Opening Virtual Appointment in IMPACT…' : type === 'virtual-appointment-day' ? 'Selecting that day in IMPACT…' : type === 'virtual-appointment-slot' ? 'Setting that appointment in IMPACT…' : type === 'refused-appointment' ? 'Sending Refused Appointment to IMPACT…' : type === 'no-answer' ? 'Sending No Answer to IMPACT…' : type === 'previous' ? 'Moving IMPACT back on computer…' : type === 'next' ? 'Advancing IMPACT on computer…' : 'Action sent to your computer…', "loading", 4000);
+      showFeedback(type === 'call' ? 'Call sent to IMPACT.' : type === 'virtual-appointment' ? 'Opening Virtual Appointment in IMPACT…' : type === 'virtual-appointment-day' ? 'Selecting that day in IMPACT…' : type === 'virtual-appointment-slot' ? 'Setting that appointment in IMPACT…' : type === 'refused-appointment' ? 'Sending Refused Appointment to IMPACT…' : type === 'no-answer' ? 'Sending No Answer to IMPACT…' : type === 'previous' ? 'Moving IMPACT back on computer…' : type === 'next' ? 'Advancing IMPACT on computer…' : type === 'best-next' ? 'Finding your best next lead…' : 'Action sent to your computer…', "loading", 4000);
       expectComputerResult(type);
       followLeadAfterResult(type);
       return true;
@@ -742,6 +749,7 @@ function updateNavButtons() {
   refusedAppointmentButton.disabled = !callStarted || !displayedLead?.leadId;
   const navLocked = !displayedLead?.available || navigationPending();
   previousLeadButton.disabled = navLocked;
+  bestNextLeadButton.disabled = navLocked;
   nextLeadButton.disabled = navLocked;
 }
 

@@ -144,6 +144,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === 'impact/getBestNextScores') {
+    requestTypeScores().then((scores) => sendResponse({ ok: true, scores })).catch(() => sendResponse({ ok: true, scores: {} }));
+    return true;
+  }
+
   if (message?.type === "impact/commandResult") {
     reportCommandResult(message.message)
       .then(() => sendResponse({ ok: true }))
@@ -289,11 +294,36 @@ async function getPhoneCommand(senderTab) {
   }
   const taken = await takePhoneCommand();
   const command = taken?.command;
+  if (command?.type === 'best-next') {
+    // Only aggregate outcome counts leave Supabase here. The browser matches
+    // those scores to the current Inbox locally; customer details stay in IMPACT.
+    command.requestTypeScores = await requestTypeScores().catch(() => ({}));
+  }
   // After a result or Previous/Next, follow IMPACT to the lead it moves to.
   if (command?.type && LEAD_CHANGING_COMMANDS.includes(command.type)) {
     void followAfterCommand(senderTab.id, command.leadId || latestLeadId);
   }
   return taken;
+}
+
+async function requestTypeScores() {
+  const { data, error } = await client.from('companion_call_outcomes')
+    .select('outcome,request_type,local_hour,created_at')
+    .gte('created_at', new Date(Date.now() - 180 * 86400000).toISOString())
+    .limit(10000);
+  if (error || !Array.isArray(data)) return {};
+  const hour = new Date().getHours();
+  const scores = {};
+  for (const row of data) {
+    const type = String(row.request_type || '').trim().toLowerCase();
+    if (!type) continue;
+    const bucket = scores[type] || (scores[type] = { good: 0, attempts: 0 });
+    const weight = Number(row.local_hour) === hour ? 2 : 1;
+    bucket.attempts += weight;
+    if (row.outcome === 'virtual-appointment') bucket.good += weight * 3;
+    else if (row.outcome === 'no-answer') bucket.good -= weight;
+  }
+  return Object.fromEntries(Object.entries(scores).map(([type, value]) => [type, Math.round((value.good / Math.max(1, value.attempts)) * 100) / 100]));
 }
 
 async function takePhoneCommand() {

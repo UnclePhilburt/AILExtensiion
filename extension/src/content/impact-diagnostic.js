@@ -441,6 +441,15 @@
       return null;
     }
 
+    // IMPACT's server-side table normally shows ten leads. Expand it while
+    // the Inbox is open so the automatic selector can consider the whole
+    // current list (up to the site's 100-lead option), not just page one.
+    const grid = globalThis.dtLeadGrid;
+    if (grid?.page?.len && grid.page.len() !== 100) {
+      grid.page.len(100).draw(false);
+      return { capturedAt: new Date().toISOString(), count: 0, expanding: true };
+    }
+
     const queue = collectInboxLeadQueue();
     if (queue.length) {
       await chrome.storage.local.set({
@@ -596,7 +605,7 @@
       if (!command?.type) {
         return;
       }
-      if (command.leadId && ["next", "previous"].includes(command.type) && command.leadId !== getCurrentLeadId()) {
+      if (command.leadId && ["next", "previous", "best-next"].includes(command.type) && command.leadId !== getCurrentLeadId()) {
         await chrome.runtime.sendMessage({ type: "impact/commandResult", message: "Navigation skipped because the lead changed. Try again on the current lead." });
         return;
       }
@@ -658,6 +667,10 @@
       if (command.type === "previous") {
         await clickLeadNavigationButton("up");
       }
+
+      if (command.type === "best-next") {
+        await openBestNextLead(command);
+      }
     } catch (_error) {
       // Command polling must never interrupt IMPACT.
     } finally {
@@ -676,6 +689,45 @@
     }
     if (button) button.click();
     else await chrome.runtime.sendMessage({ type: "impact/commandResult", message: `IMPACT's ${direction === "up" ? "Previous" : "Next"} button is unavailable. Open the lead on your computer and try again.` });
+  }
+
+  async function openBestNextLead(command) {
+    const stored = await chrome.storage.local.get(STORAGE_KEYS.inboxQueue);
+    const queue = Array.isArray(stored[STORAGE_KEYS.inboxQueue]?.leads) ? stored[STORAGE_KEYS.inboxQueue].leads : [];
+    const currentLeadId = getCurrentLeadId();
+    const candidates = queue.filter((lead) => lead?.url && lead.leadId && lead.leadId !== currentLeadId);
+    if (!candidates.length) throw new Error('Open the IMPACT Inbox first so Companion can read this week\'s lead list.');
+    await chrome.runtime.sendMessage({ type: 'impact/commandResult', message: `Reviewing ${candidates.length} Inbox leads for the best next call...` });
+    const details = await mapWithLimit(candidates, 4, async (candidate) => {
+      const response = await fetch(candidate.url, { credentials: 'include', signal: AbortSignal.timeout(6000), cache: 'default' });
+      if (!response.ok) return { candidate, score: -1000 };
+      const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
+      const preview = collectLocalLeadPreview(doc, candidate.safePath);
+      const type = String(preview.requestType || '').trim().toLowerCase();
+      const score = Number(command.requestTypeScores?.[type] || 0) + (preview.callHistory?.length ? -0.15 * preview.callHistory.length : 0);
+      return { candidate, preview, score };
+    });
+    const available = details.filter((item) => item.preview?.available);
+    if (!available.length) throw new Error('Companion could not read the Inbox lead details. Refresh IMPACT and try again.');
+    available.sort((a, b) => b.score - a.score || a.candidate.order - b.candidate.order);
+    const best = available[0];
+    await chrome.runtime.sendMessage({ type: 'impact/commandResult', message: `Opening your best next lead${best.preview.requestType ? ` · ${best.preview.requestType}` : ''}.` });
+    location.assign(best.candidate.url);
+  }
+
+  async function automaticallyOpenBestNextLead() {
+    const settings = await chrome.storage.local.get('impact.leadOrder');
+    if (settings['impact.leadOrder'] === 'manual') throw new Error('Manual lead order selected.');
+    const result = await chrome.runtime.sendMessage({ type: 'impact/getBestNextScores' });
+    await openBestNextLead({ requestTypeScores: result?.scores || {} });
+  }
+
+  async function mapWithLimit(items, limit, task) {
+    const results = new Array(items.length); let next = 0;
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (next < items.length) { const index = next++; results[index] = await task(items[index]); }
+    }));
+    return results;
   }
 
   function clickLeadCallButton(command) {
@@ -1047,10 +1099,14 @@
       sessionStorage.removeItem(key);
       return;
     }
-    const next = findLeadNavigationButton("down");
-    if (!next) return;
     sessionStorage.removeItem(key);
-    next.click();
+    // After a phone-recorded result, select the strongest lead from the
+    // refreshed Inbox automatically. If there is no current Inbox cache yet,
+    // preserve the established next-lead behavior rather than stalling.
+    void automaticallyOpenBestNextLead().catch(() => {
+      const next = findLeadNavigationButton("down");
+      next?.click();
+    });
   }
 
   function clickWithoutDesktopDialer(target) {
