@@ -30,9 +30,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   , darkMode: false // lower-light color treatment across the phone workspace
   , beigeLeadCard: false // parchment lead card instead of white
   , bestNextLead: false // one Next button that asks IMPACT for the best next lead (no Previous)
+  , scriptOverlay: false // show the calling script over the lead while a call is in progress
 });
 
-const BOOLEAN_KEYS = ['swipeLeads', 'keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard', 'bestNextLead'];
+const BOOLEAN_KEYS = ['swipeLeads', 'keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard', 'bestNextLead', 'scriptOverlay'];
 
 // Known keys with valid values; anything missing or invalid keeps its value from
 // `base` (the defaults unless given).

@@ -1,5 +1,6 @@
 import { buildLeadProfile } from './lead-profile.js';
-import { installLeadSwipe } from './lead-swipe.js?v=3';
+import { installLeadSwipe } from './lead-swipe.js?v=4';
+import { createScriptOverlay } from './script-overlay.js?v=4';
 import { client, accessToken } from './auth-runtime.js';
 import { cloudEnabled, cloudState, cloudTouchPhone, cloudSend, watchCloud, visibleLead, isOnline } from './cloud-sync.js';
 import { NETWORK_MESSAGE, SIGN_IN_MESSAGE, RESULT_COMMANDS, checkBeforeSend, isStateFresh, isAuthFailure, isNetworkFailure, friendlySendError, withTimeout } from './phone-actions.js';
@@ -13,6 +14,7 @@ import { createPendingCall, readPendingCall, writePendingCall, pendingCallDecisi
 import { findBestCallingTime } from './timing-insights.js';
 const statusEl = document.querySelector("#status");
 const leadCard = document.querySelector("#leadCard");
+const scriptOverlay = createScriptOverlay(document.querySelector(".wsBody") || document.body);
 const bridgeUrlInput = document.querySelector("#bridgeUrl");
 const bridgeTokenInput = document.querySelector("#bridgeToken");
 const saveBridgeButton = document.querySelector("#saveBridge");
@@ -707,6 +709,7 @@ function renderLead(lead, updatedAt, source, transition = "") {
       if (bio) bio.open = false;
       updateNavButtons();
       renderAppointmentPicker(displayedLead);
+      if (loadPhoneSettings(localStorage).scriptOverlay) scriptOverlay.open(lead);
       // Keep native tel: navigation in the user's tap, while the small command
       // continues sending if the phone browser moves into the dialer.
       if (lead.leadId && ["Home", "Mobile"].includes(phone.label)) {
@@ -776,6 +779,7 @@ function renderHeadsUp(lead) {
 
 function updateNavButtons() {
   const callStarted = Boolean(displayedLead?.available && calledLeadKey === getLeadKey(displayedLead));
+  scriptOverlay.sync({ enabled: loadPhoneSettings(localStorage).scriptOverlay, calling: callStarted && !pendingCall?.resultSentAt, lead: displayedLead });
   callResults.hidden = !callStarted;
   leadCard.classList.toggle("profileAfterCall", callStarted);
   noAnswerButton.disabled = !callStarted || !displayedLead?.leadId;

@@ -1,0 +1,27 @@
+.scriptOpen {
+  position: fixed; right: 16px; bottom: 18px; z-index: 20;
+  min-height: 52px; padding: 0 18px; border: 0; border-radius: 999px;
+  background: #26483d; color: #f6f1e6; font: 600 16px/1 system-ui, sans-serif;
+  box-shadow: 0 8px 22px #173d3740;
+}
+.scriptOverlay {
+  position: fixed; inset: 0; z-index: 30; display: flex; align-items: stretch;
+  background: #10211c99; padding: 12px 12px 18px;
+}
+.scriptOverlay[hidden], .scriptOpen[hidden] { display: none; }
+.scriptSheet {
+  display: flex; flex-direction: column; width: min(560px, 100%); margin: auto auto 0;
+  max-height: 100%; border-radius: 22px; background: var(--journal-paper, #fffdf8); color: var(--journal-ink, #1d2b24);
+  box-shadow: 0 18px 50px #00000040;
+}
+.scriptBar { display: flex; align-items: center; gap: 8px; padding: 12px 12px 8px; }
+.scriptBar h2 { margin: 0; font-size: 18px; flex: 1; }
+.scriptPicker { max-width: 46%; min-height: 40px; border-radius: 12px; border: 1px solid var(--journal-line, #e4d8c4); background: transparent; color: inherit; font: inherit; }
+.scriptClose { min-height: 40px; padding: 0 12px; border: 0; border-radius: 12px; background: #26483d; color: #f6f1e6; font: 600 15px/1 inherit; }
+.scriptBody { overflow: auto; padding: 4px 18px 22px; }
+.scriptStep { margin: 0 0 16px; }
+.scriptStep h3 { margin: 0 0 6px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #6d5b3e; }
+.scriptStep p { margin: 0 0 8px; font-size: 18px; line-height: 1.45; }
+html[data-theme="dark"] .scriptSheet { background: #242c27; color: #edf4ef; }
+html[data-theme="dark"] .scriptStep h3 { color: #d7c4a2; }
+html[data-theme="dark"] .scriptPicker { border-color: #415246; }
