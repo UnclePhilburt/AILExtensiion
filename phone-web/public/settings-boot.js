@@ -12,6 +12,8 @@
     set('data-text-size', s.textSize === 'large' || s.textSize === 'xlarge' ? s.textSize : null);
     set('data-hide-heads-up', s.showHeadsUp === false ? '' : null);
     set('data-hide-dnk', s.showDoNotKnock === false ? '' : null);
+    set('data-theme', s.darkMode === true ? 'dark' : null);
+    set('data-lead-paper', s.beigeLeadCard === true ? 'beige' : null);
   }
   window.impactApplySavedSettings = apply;
   apply();

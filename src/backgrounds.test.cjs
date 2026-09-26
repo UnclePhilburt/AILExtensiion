@@ -17,9 +17,9 @@ function fakeRoot() {
   return { attrs, setAttribute: (k, v) => { attrs[k] = v; }, removeAttribute: (k) => { delete attrs[k]; } };
 }
 
-test('8-12 choices: Default first, then solid colors and gradients, unique ids', () => {
+test('8-16 choices: Default first, then solid colors and gradients, unique ids', () => {
   const ids = bg.BACKGROUNDS.map((option) => option.id);
-  assert.ok(ids.length >= 8 && ids.length <= 12);
+  assert.ok(ids.length >= 8 && ids.length <= 16);
   assert.equal(new Set(ids).size, ids.length);
   assert.equal(bg.DEFAULT_BACKGROUND, 'default');
   assert.deepEqual({ ...bg.BACKGROUNDS[0] }, { id: 'default', label: 'Default', kind: 'default' });

@@ -89,7 +89,7 @@ organization.addEventListener('change', () => {
 });
 
 // Switches
-const SWITCHES = ['keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults'];
+const SWITCHES = ['keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard'];
 for (const key of SWITCHES) {
   document.querySelector(`#${key}`).addEventListener('change', (event) => {
     savePhoneSettings(localStorage, { [key]: event.target.checked });
