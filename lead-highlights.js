@@ -177,6 +177,16 @@ function appointmentName(entry) {
 // tone: 'appointment' | 'callback' | 'danger' | 'neutral'
 // Times in titles/details are phone time; scheduled times also show IMPACT's
 // clock when it differs, e.g. "Tue, Sep 22, 2:00 PM (3:00 PM ET)".
+// True when the newest scheduled appointment or callback is still today or ahead.
+export function hasScheduledAppointment(callHistory, now = new Date(), zones = resolveZones()) {
+  const entries = splitHistory(callHistory).map((entry) => parseHistoryEntry(entry));
+  return entries.some((entry) => {
+    if (!entry.scheduled || !entry.dates[0]) return false;
+    if (entry.kind !== 'appointment' && entry.kind !== 'callback') return false;
+    return scheduleStatus(entry.dates[0], now, zones) !== 'past';
+  });
+}
+
 export function buildHeadsUp(callHistory, now, { max = 4, phoneTimeZone } = {}) {
   const zones = resolveZones({ phoneTimeZone });
   const entries = splitHistory(callHistory).map((entry) => parseHistoryEntry(entry));

@@ -4,7 +4,7 @@ import { createScriptOverlay } from './script-overlay.js?v=5';
 import { client, accessToken } from './auth-runtime.js';
 import { cloudEnabled, cloudState, cloudTouchPhone, cloudSend, watchCloud, visibleLead, isOnline } from './cloud-sync.js';
 import { NETWORK_MESSAGE, SIGN_IN_MESSAGE, RESULT_COMMANDS, checkBeforeSend, isStateFresh, isAuthFailure, isNetworkFailure, friendlySendError, withTimeout } from './phone-actions.js';
-import { buildHeadsUp, splitHistory, localTimeNote } from './lead-highlights.js';
+import { buildHeadsUp, splitHistory, localTimeNote, hasScheduledAppointment } from './lead-highlights.js?v=2';
 import { doNotKnockWarning, requestTypeLabel } from './lead-rules.js';
 import { loadPhoneSettings } from './settings-store.js';
 import { saveLeadSchedule, saveAppointmentChoice } from './calendar-sync.js';
@@ -22,17 +22,17 @@ const previousLeadButton = document.querySelector("#previousLead");
 const nextLeadButton = document.querySelector("#nextLead");
 const noAnswerButton = document.querySelector("#noAnswer");
 const detailActions = [
-  ["#presDone", "pres-done"],
-  ["#reschedule", "reschedule"],
-  ["#noShow", "no-show"],
-  ["#sendText", "send-text"],
-  ["#droppedBy", "dropped-by"],
-  ["#addComments", "add-comments"],
-  ["#inHome", "in-home"],
-  ["#callBack", "call-back"],
-  ["#leftMessage", "left-message"],
-  ["#dropbyAppointment", "dropby-appointment"]
-].map(([selector, type]) => ({ button: document.querySelector(selector), type }));
+  ["#presDone", "pres-done", true],
+  ["#reschedule", "reschedule", true],
+  ["#noShow", "no-show", true],
+  ["#sendText", "send-text", false],
+  ["#droppedBy", "dropped-by", false],
+  ["#addComments", "add-comments", false],
+  ["#inHome", "in-home", false],
+  ["#callBack", "call-back", false],
+  ["#leftMessage", "left-message", false],
+  ["#dropbyAppointment", "dropby-appointment", false]
+].map(([selector, type, withAppointment]) => ({ button: document.querySelector(selector), type, withAppointment }));
 const virtualAppointmentButton = document.querySelector("#virtualAppointment");
 const refusedAppointmentButton = document.querySelector("#refusedAppointment");
 const callResults = document.querySelector("#callResults");
@@ -795,10 +795,20 @@ function updateNavButtons() {
   scriptOverlay.sync({ enabled: loadPhoneSettings(localStorage).scriptOverlay, calling: callStarted && !pendingCall?.resultSentAt, lead: displayedLead });
   callResults.hidden = !callStarted;
   leadCard.classList.toggle("profileAfterCall", callStarted);
-  noAnswerButton.disabled = !callStarted || !displayedLead?.leadId;
-  virtualAppointmentButton.disabled = !callStarted || !displayedLead?.leadId || Boolean(displayedLead?.appointmentOptions);
-  refusedAppointmentButton.disabled = !callStarted || !displayedLead?.leadId;
-  for (const action of detailActions) if (action.button) action.button.disabled = !callStarted || !displayedLead?.leadId;
+  const scheduled = hasScheduledAppointment(displayedLead?.callHistory);
+  const ready = callStarted && Boolean(displayedLead?.leadId);
+  noAnswerButton.hidden = scheduled;
+  noAnswerButton.disabled = !ready || scheduled;
+  virtualAppointmentButton.hidden = scheduled;
+  virtualAppointmentButton.disabled = !ready || scheduled || Boolean(displayedLead?.appointmentOptions);
+  refusedAppointmentButton.hidden = false;
+  refusedAppointmentButton.disabled = !ready;
+  for (const action of detailActions) {
+    if (!action.button) continue;
+    const show = action.withAppointment === scheduled;
+    action.button.hidden = !show;
+    action.button.disabled = !ready || !show;
+  }
   const navLocked = !displayedLead?.available || navigationPending();
   previousLeadButton.disabled = navLocked;
   nextLeadButton.disabled = navLocked;
