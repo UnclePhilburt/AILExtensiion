@@ -186,6 +186,16 @@ html[data-bg] .wsBand { background-color: transparent; background-image: radial-
 .workspace .quietHoursFlag::before { content: "!"; grid-row: 1 / span 2; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #d9713b; color: #fff; font-size: 18px; font-weight: 800; }
 .workspace .quietHoursFlag strong { color: #9a4216; font-size: 12.5px; letter-spacing: 1px; }
 .workspace .quietHoursFlag span { color: #7b4526; font-size: 13px; }
+.workspace .appointmentAlert { display: grid; gap: 3px; margin: 0 0 16px; padding: 12px 14px; border: 1px solid #ead7a8; border-radius: 16px; background: #fff8ec; color: #6d4a16; }
+.workspace .appointmentAlert strong { font-size: 12.5px; letter-spacing: 1px; }
+.workspace .appointmentAlert span { font-size: 14px; line-height: 1.35; }
+.workspace .appointmentAlert.starting { border-color: #f0b2a8; background: #fff1ee; color: #8a3328; }
+.workspace .appointmentReminder { display: grid; gap: 10px; margin: 0 0 14px; padding: 14px 16px; border-radius: 18px; background: #fff8ee; border: 1px solid #f0d7b0; color: #6d4a16; box-shadow: 0 8px 22px #8a5a1414; }
+.workspace .appointmentReminder[hidden] { display: none; }
+.workspace .appointmentReminder p { margin: 0; font-size: 15px; line-height: 1.4; }
+.workspace .appointmentReminder button { border: 0; border-radius: 14px; background: #8a5a14; color: #fff; }
+.workspace .appointmentReminder[data-kind="starting"] { background: #fff1ee; border-color: #f0b2a8; color: #8a3328; }
+.workspace .appointmentReminder[data-kind="starting"] button { background: #a33b2c; color: #fff; }
 
 /* Heads-up chips: soft tints, one consistent shape */
 .workspace .headsUp { gap: 8px; margin: -6px 0 18px; }
@@ -260,6 +270,10 @@ html[data-theme="dark"] :is(.settingRow,.workspace .headsUpChip,.workspace .lead
 html[data-theme="dark"] .settingSelect, html[data-theme="dark"] .segmented { background: #18201b; border-color: #405046; color: #edf4ef; }
 html[data-theme="dark"] .segment:has(input:checked) { background: #2d3c33; color: #d8f2e1; }
 html[data-theme="dark"] .workspace .headsUpChip, html[data-theme="dark"] .workspace .leadNotes { background: #29342e; color: #d8e3dc; }
+html[data-theme="dark"] .workspace .appointmentAlert { background: #3a3120; border-color: #6a5730; color: #f3e2c0; }
+html[data-theme="dark"] .workspace .appointmentAlert.starting { background: #3d2622; border-color: #8a463c; color: #f6d2cb; }
+html[data-theme="dark"] .workspace .appointmentReminder { background: #3a3120; border-color: #6a5730; color: #f3e2c0; }
+html[data-theme="dark"] .workspace .appointmentReminder[data-kind="starting"] { background: #3d2622; border-color: #8a463c; color: #f6d2cb; }
 html[data-theme="dark"] .workspace .navControls button { background: #27322c; color: #e2ece5; box-shadow: none; }
 html[data-theme="dark"] .workspace #nextLead:not(:disabled) { background: #31543f; color: #e4f4e8; }
 html[data-theme="dark"] .workspace .controls button { background: #27322c; border-color: #405046; color: #e2ece5; }

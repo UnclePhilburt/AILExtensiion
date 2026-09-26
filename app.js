@@ -12,6 +12,7 @@ import { encourageLead, encourageResult } from './encouragement-ui.js';
 import { leadTransitionKind, snapshotLeadCard, playLeadTransition } from './lead-transition.js';
 import { createPendingCall, readPendingCall, writePendingCall, pendingCallDecision, markPendingCallResult, isCallResultCommand } from './pending-call.js';
 import { findBestCallingTime } from './timing-insights.js';
+import { dueReminders, reminderText, APPOINTMENT_ALERT } from './appointment-reminders.js?v=1';
 const statusEl = document.querySelector("#status");
 const leadCard = document.querySelector("#leadCard");
 const scriptOverlay = createScriptOverlay(document.querySelector(".wsBody") || document.body);
@@ -44,6 +45,9 @@ const pendingCallNotice = document.querySelector("#pendingCallNotice");
 const pendingCallText = document.querySelector("#pendingCallText");
 const dismissPendingCallButton = document.querySelector("#dismissPendingCall");
 const actionFeedback = document.querySelector("#actionFeedback");
+const appointmentReminder = document.querySelector("#appointmentReminder");
+const appointmentReminderText = document.querySelector("#appointmentReminderText");
+const showReminderLeadButton = document.querySelector("#showReminderLead");
 const params = new URLSearchParams(location.search);
 
 let bridgeLead = null;
@@ -81,6 +85,8 @@ let timingOutcomesFetchedAt = 0;
 // A quiet-hours lead is only skipped once. If IMPACT does not move, keep the
 // card available instead of repeatedly sending Next in a loop.
 let quietHoursSkippedLeadKey = "";
+// The appointment that should be texted right now (morning, within the hour, or starting).
+let dueReminder = null;
 
 const savedBridgeUrl = localStorage.getItem("impact.bridgeUrl") || "";
 const savedBridgeToken = localStorage.getItem("impact.bridgeToken") || "";
@@ -107,6 +113,7 @@ bridgeUrlInput.addEventListener("input", persistBridgeSettings);
 bridgeTokenInput.addEventListener("input", persistBridgeSettings);
 previousLeadButton.addEventListener("click", showPreviousLead);
 nextLeadButton.addEventListener("click", showNextLead);
+showReminderLeadButton?.addEventListener("click", () => { void showReminderLead(); });
 installLeadSwipe(leadCard, {
   enabled: () => signedIn && displayedLead?.available && loadPhoneSettings(localStorage).swipeLeads && !navigationPending() && pendingCall?.leadKey === getLeadKey(displayedLead) && !pendingCall?.resultSentAt && !awaitingResultSince && !leadCard.querySelector(".profileBio[open]") && !displayedLead?.appointmentOptions,
   currentKey: () => displayedLeadKey,
@@ -132,6 +139,7 @@ client.auth.onAuthStateChange((_event, session) => {
     pendingCall = userId ? readPendingCall(localStorage, userId, Date.now()) : null;
   }
   if (!signedIn) {
+    dueReminder = null;
     cloudGeneration++; stopCloudWatch?.(); stopCloudWatch = null; currentCloudState = null;
     leadEvents?.abort();
     leadEvents = null;
@@ -141,10 +149,12 @@ client.auth.onAuthStateChange((_event, session) => {
   } else {
     document.querySelector('main').hidden = false;
     void connectLiveUpdates();
+    void refreshAppointmentReminders();
   }
 });
 // Poll only as a fallback while the live connection is unavailable.
 setInterval(() => { if (signedIn && (useCloud || !eventsConnected)) refreshLead(); }, useCloud ? 5000 : 2500);
+setInterval(() => { if (signedIn) void refreshAppointmentReminders(); }, 60000);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) lastHiddenAt = Date.now();
   else resumePage();
@@ -165,6 +175,7 @@ function resumePage(force = false) {
   // Locks such as Previous/Next expire by time; re-evaluate them right away.
   updateNavButtons();
   void connectLiveUpdates();
+  void refreshAppointmentReminders();
 }
 
 function showFeedback(message, kind = "info", ms = 9000) {
@@ -185,6 +196,7 @@ function commandProgressMessage(type, details = {}) {
   if (type === "virtual-appointment-day") return "Selecting appointment day…";
   if (type === "virtual-appointment-slot") return "Setting appointment time…";
   if (type === "best-next") return "Finding the best lead to call…";
+  if (type === "open-lead") return "Bringing up that appointment…";
   return type === "next" ? "Moving to the next lead…" : "Moving to the previous lead…";
 }
 
@@ -503,6 +515,102 @@ async function showPreviousLead() {
   await sendNavigation("previous");
 }
 
+function reminderLeadId(item) {
+  return String(item?.impact_lead_id || item?.leadId || "");
+}
+
+function appointmentNoticeFor(lead) {
+  if (!lead?.available) return null;
+  const timed = dueReminder && reminderLeadId(dueReminder) === String(lead.leadId || "") ? dueReminder : null;
+  let upcoming = false;
+  if (!timed) {
+    try { upcoming = buildHeadsUp(lead.callHistory, Date.now()).some((chip) => chip.tone === "appointment" && !chip.muted); }
+    catch (_error) { upcoming = false; }
+  }
+  if (!timed && !upcoming) return null;
+  const section = document.createElement("section");
+  section.className = "appointmentAlert" + (timed?.kind === "starting" ? " starting" : "");
+  const title = document.createElement("strong");
+  const detail = document.createElement("span");
+  title.textContent = timed?.kind === "starting" ? "STARTING SOON" : timed?.kind === "hour" ? "WITHIN THE HOUR" : timed ? "TEXT A REMINDER" : "APPOINTMENT SET";
+  detail.textContent = timed && typeof reminderText === "function"
+    ? reminderText(timed.kind, "")
+    : (typeof APPOINTMENT_ALERT === "string" ? APPOINTMENT_ALERT : "Appointment already scheduled. Don't call unless you need to.");
+  section.append(title, detail);
+  return section;
+}
+
+function paintAppointmentNotice() {
+  renderReminderBanner();
+  if (!leadCard?.querySelector) return;
+  const old = leadCard.querySelector(".appointmentAlert");
+  const next = displayedLead?.available ? appointmentNoticeFor(displayedLead) : null;
+  if (old && next) old.replaceWith(next);
+  else if (old && !next) old.remove();
+  else if (next) {
+    const name = leadCard.querySelector("h2");
+    if (name) leadCard.insertBefore(next, name);
+    else leadCard.append(next);
+  }
+}
+
+function renderReminderBanner() {
+  if (!appointmentReminder || !appointmentReminderText || !showReminderLeadButton) return;
+  const id = reminderLeadId(dueReminder);
+  const other = Boolean(dueReminder && id && id !== String(displayedLead?.leadId || ""));
+  appointmentReminder.hidden = !other;
+  if (!other) return;
+  appointmentReminder.dataset.kind = dueReminder.kind || "";
+  appointmentReminderText.textContent = typeof reminderText === "function" ? reminderText(dueReminder.kind, dueReminder.lead_name || dueReminder.name || "") : "";
+  showReminderLeadButton.disabled = !displayedLead?.available || navigationPending();
+}
+
+async function refreshAppointmentReminders() {
+  if (!signedIn || typeof dueReminders !== "function" || typeof client?.from !== "function") return;
+  try {
+    const from = new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString();
+    const to = new Date(Date.now() + 16 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await client.from("scheduled_events").select("impact_lead_id,lead_name,starts_at,all_day,kind").gte("starts_at", from).lte("starts_at", to).limit(80);
+    if (error || !signedIn) return;
+    const next = dueReminders(data || [])[0] || null;
+    const changed = reminderLeadId(next) !== reminderLeadId(dueReminder) || next?.kind !== dueReminder?.kind;
+    dueReminder = next;
+    if (changed && displayedLead?.available) paintAppointmentNotice();
+    else renderReminderBanner();
+  } catch (_error) { /* A missing calendar should not block the lead. */ }
+}
+
+async function showReminderLead() {
+  const id = reminderLeadId(dueReminder);
+  if (!/^[0-9]{1,20}$/.test(id)) return;
+  if (!displayedLead?.available) {
+    showFeedback("Open IMPACT on your computer, then you can bring this appointment up.", "error");
+    return;
+  }
+  if (id === String(displayedLead.leadId || "")) return;
+  if (navigationPending()) { showFeedback("Still waiting for IMPACT to move. One moment…"); return; }
+  const pending = { until: Date.now() + 10000 };
+  navPending = pending;
+  navIntent = { type: "next", at: Date.now() };
+  updateNavButtons();
+  const sent = await sendComputerCommand("open-lead", { targetLeadId: id });
+  if (sent) tapAccepted();
+  if (navPending !== pending) return;
+  if (!sent) {
+    navPending = null;
+    navIntent = null;
+    updateNavButtons();
+    return;
+  }
+  for (const delay of [700, 1800, 4000]) setTimeout(() => { if (navPending === pending) void refreshLead(); }, delay);
+  setTimeout(() => {
+    if (navPending !== pending) return;
+    navIntent = null;
+    clearNavigationPending();
+    if (!document.hidden) showFeedback("IMPACT didn't open that appointment. Make sure IMPACT is open on your computer, then try again.", "error");
+  }, 10100);
+}
+
 function navigationPending() {
   if (navPending && Date.now() > navPending.until) navPending = null;
   return Boolean(navPending);
@@ -559,7 +667,7 @@ async function sendComputerCommand(type, details = {}) {
         if (!(await refreshSessionNow())) throw new Error(SIGN_IN_MESSAGE);
         await withTimeout(cloudSend(state, command, id), 12000, NETWORK_MESSAGE);
       }
-      showFeedback(type === 'call' ? 'Call sent to IMPACT.' : type === 'virtual-appointment' ? 'Opening Virtual Appointment in IMPACT…' : type === 'virtual-appointment-day' ? 'Selecting that day in IMPACT…' : type === 'virtual-appointment-slot' ? 'Setting that appointment in IMPACT…' : type === 'refused-appointment' ? 'Sending Refused Appointment to IMPACT…' : type === 'no-answer' ? 'Sending No Answer to IMPACT…' : type === 'previous' ? 'Moving IMPACT back on computer…' : type === 'next' ? 'Advancing IMPACT on computer…' : type === 'best-next' ? 'Finding your best next lead…' : 'Action sent to your computer…', "loading", 4000);
+      showFeedback(type === 'open-lead' ? 'Bringing that appointment up on your computer…' : type === 'call' ? 'Call sent to IMPACT.' : type === 'virtual-appointment' ? 'Opening Virtual Appointment in IMPACT…' : type === 'virtual-appointment-day' ? 'Selecting that day in IMPACT…' : type === 'virtual-appointment-slot' ? 'Setting that appointment in IMPACT…' : type === 'refused-appointment' ? 'Sending Refused Appointment to IMPACT…' : type === 'no-answer' ? 'Sending No Answer to IMPACT…' : type === 'previous' ? 'Moving IMPACT back on computer…' : type === 'next' ? 'Advancing IMPACT on computer…' : type === 'best-next' ? 'Finding your best next lead…' : 'Action sent to your computer…', "loading", 4000);
       expectComputerResult(type);
       followLeadAfterResult(type);
       return true;
@@ -585,7 +693,7 @@ async function sendComputerCommand(type, details = {}) {
       throw new Error(payload.error || `HTTP ${response.status}`);
     }
 
-    showFeedback(type === "virtual-appointment" ? "Opening Virtual Appointment in IMPACT..." : type === "virtual-appointment-day" ? "Selecting that day in IMPACT..." : type === "virtual-appointment-slot" ? "Setting that appointment in IMPACT..." : type === "refused-appointment" ? "Opening Refused Appointment in IMPACT..." : type === "no-answer" ? "Sending No Answer to IMPACT..." : type === "call" ? `Call ${details.phoneType} sent to IMPACT.` : type === "next"
+    showFeedback(type === "open-lead" ? "Bringing that appointment up on your computer..." : type === "virtual-appointment" ? "Opening Virtual Appointment in IMPACT..." : type === "virtual-appointment-day" ? "Selecting that day in IMPACT..." : type === "virtual-appointment-slot" ? "Setting that appointment in IMPACT..." : type === "refused-appointment" ? "Opening Refused Appointment in IMPACT..." : type === "no-answer" ? "Sending No Answer to IMPACT..." : type === "call" ? `Call ${details.phoneType} sent to IMPACT.` : type === "next"
       ? "Advancing IMPACT on computer..."
       : "Moving IMPACT back on computer...", "loading", 4000);
     if (eventsConnected) expectComputerResult(type);
@@ -679,6 +787,7 @@ function renderLead(lead, updatedAt, source, transition = "") {
     leadCard.append(warning);
   }
   scheduleQuietHoursSkip(lead, quietHoursWarning);
+  paintAppointmentNotice();
   const name = document.createElement("h2");
   name.textContent = lead.leadName || "Current lead";
   leadCard.append(name);
@@ -812,6 +921,7 @@ function updateNavButtons() {
   const navLocked = !displayedLead?.available || navigationPending();
   previousLeadButton.disabled = navLocked;
   nextLeadButton.disabled = navLocked;
+  renderReminderBanner();
 }
 
 function renderAppointmentPicker(lead) {
