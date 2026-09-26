@@ -454,7 +454,11 @@ async function sendCallResult(type, details = {}) {
       : "This result belongs to a different lead than the one on screen. Check the lead and try again.", "error");
     return false;
   }
-  const sent = await sendComputerCommand(type, { ...details, leadId: call.leadId });
+  const sent = await sendComputerCommand(type, {
+    ...details,
+    leadId: call.leadId,
+    advance: loadPhoneSettings(localStorage).bestNextLead ? "best" : "next"
+  });
   if (sent) { tapAccepted(); navIntent = null; }
   // A short, gentle message for No Answer / Refused / an appointment set (Settings can turn it off).
   if (sent) encourageResult(type);
@@ -610,7 +614,14 @@ function scheduleQuietHoursSkip(lead, quietHoursWarning) {
 
 function renderLead(lead, updatedAt, source, transition = "") {
   const historyCard = document.querySelector("#callHistory");
-  const bioOpen = leadCard.dataset.profileKey === getLeadKey(lead) && Boolean(leadCard.querySelector(".profileBio[open]"));
+  const nextKey = getLeadKey(lead);
+  if (leadCard.dataset.profileKey && nextKey !== leadCard.dataset.profileKey) {
+    leadCard.style.transform = "";
+    leadCard.style.opacity = "";
+    leadCard.style.transition = "";
+    delete leadCard.dataset.thrown;
+  }
+  const bioOpen = leadCard.dataset.profileKey === nextKey && Boolean(leadCard.querySelector(".profileBio[open]"));
   const resultsOpen = leadCard.dataset.profileKey === getLeadKey(lead) && Boolean(leadCard.querySelector(".profileResultMenu[open]"));
   document.querySelector(".wsBody").append(historyCard, callResults);
   renderCallHistory(lead);
