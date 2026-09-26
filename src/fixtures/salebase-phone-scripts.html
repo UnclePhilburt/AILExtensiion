@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<!-- Sanitized, trimmed copy of https://salebase.ai/phone_scripts/phone_scripts.php as rendered with IMPACT fills.
+     Lead fills restored to Salebase placeholders; scripts, roleplay widget, minutes overlay, links and glossary text removed. -->
+<html class="dark-mode"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phone Scripts - Salebase</title>
+    <style>
+        /* Translation progress overlay — only rendered when sections actually
+           need translating for the first time. */
+        #translate-overlay {
+            position: fixed; inset: 0; z-index: 99999;
+            background: rgba(15,23,42,0.94);
+            display: flex; align-items: center; justify-content: center;
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        #translate-overlay .tov-card {
+            display: flex; flex-direction: column; align-items: center; gap: 14px;
+            max-width: 460px; padding: 0 24px; text-align: center;
+        }
+        #translate-overlay .tov-title { font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
+        #translate-overlay .tov-title-en { font-size: 14px; font-weight: 500; color: #cbd5e1; margin-top: -8px; }
+        #translate-overlay .tov-note { font-size: 13px; line-height: 1.55; color: #94a3b8; }
+        #translate-overlay .tov-note-en { color: #64748b; }
+        #translate-overlay .tov-progress { width: 100%; max-width: 320px; margin-top: 4px; }
+        #translate-overlay .tov-progress-row {
+            display: flex; justify-content: space-between;
+            font-size: 12px; color: #94a3b8; margin-bottom: 6px;
+            font-variant-numeric: tabular-nums;
+        }
+        #translate-overlay .tov-track {
+            width: 100%; height: 6px; background: rgba(255,255,255,0.1);
+            border-radius: 3px; overflow: hidden;
+        }
+        #translate-overlay #translate-progress-bar {
+            width: 0%; height: 100%; background: #60a5fa;
+            border-radius: 3px; transition: width .3s ease;
+        }
+        .translate-spinner {
+            width: 34px; height: 34px;
+            border: 3px solid rgba(255,255,255,0.15);
+            border-top-color: #60a5fa;
+            border-radius: 50%;
+            animation: tspin 0.8s linear infinite;
+        }
+        #translate-lang-badge {
+            display: inline-flex; align-items: center; margin-left: auto;
+            padding: 3px 10px; border-radius: 6px; white-space: nowrap;
+            font-size: 11px; font-weight: 600;
+            background: rgba(59,130,246,0.15); color: #60a5fa;
+            border: 1px solid rgba(59,130,246,0.3);
+        }
+        @keyframes tspin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="dark-mode">
+    <div class="rp-scripts-wrap">
+        <div class="header">
+    <select id="languageSelect" class="dropdown-option notranslate" title="Language">
+        <option value="">EN</option>
+        <option value="es">ES</option>
+    </select>
+    <div class="modal-overlay" id="tsPopoverOverlay" onclick="hideTextSizePopover()"></div>
+    <div id="tsPopover" class="ts-popover" role="dialog" aria-label="Adjust text size" hidden="">
+        <div class="ts-row">
+            <label for="tsSlider" class="ts-label">A</label> 
+            <input id="tsSlider" type="range" min="8" max="28" step="1" value="16" style="background-size: 40% 100%;">
+            <div class="ts-value" id="tsValue">16px</div>
+        </div>
+        <div class="ts-actions">
+            <button type="button" id="tsReset" class="ts-reset showhide">Reset</button>
+            <button type="button" id="tsClose" class="ts-close" aria-label="Close text size popover">✕</button>
+        </div>
+    </div>
+<button id="settingsButton" type="button" class="setting-btn tip" data-tooltip="Client details" onclick="openClientDetails()" translate="no">
+    <i class="fas fa-clipboard-list"></i>
+</button>
+    <button id="resetButton" onclick="resetClientDetails()" class="setting-btn tip" data-tooltip="Reset open responses">
+        <i class="fas fa-undo"></i>
+    </button>
+<button id="leadGlossaryButton" onclick="openLeadGlossary()" class="setting-btn tip" data-tooltip="Lead Glossary">
+    <i class="fas fa-book"></i>
+</button>
+    <button id="tsToggle" class="setting-btn tip" data-tooltip="Text size" aria-haspopup="true" aria-expanded="false" aria-controls="tsPopover">
+        <i class="fas fa-text-height"></i>
+    </button>
+    <div class="call-counter">
+        <button id="ccMinus" class="cc-icon tip" data-tooltip="Remove Call" aria-label="Remove Call" onclick="decrementCallCount()">−</button>
+        <span id="callCountPill" class="setting-btn tip call-count-pill" data-tooltip="View Call History" role="button" tabindex="0" aria-label="Calls Today" onclick="openCallHistory()" onkeydown="if(event.key==='Enter'||event.key===' '){openCallHistory();}">0</span>
+        <button id="ccPlus" class="cc-icon tip" data-tooltip="Add Call" aria-label="Add Call" onclick="incrementCallCount()">+</button>
+        <span id="callCountDisplay" class="call-count-display" style="display:none">Calls Today: 0</span>
+    </div>
+    <a href="https://callwithtally.com/register" target="_blank" rel="noopener" class="tally-cta tip" data-tooltip="Dial faster with Tally — opens in a new tab">
+        <img src="./Phone Scripts - Salebase_files/tally_logo.png" alt="" class="tally-cta-logo">
+        <span class="tally-cta-text">
+            <span class="tally-cta-title">Call Faster with Tally</span>
+            <span class="tally-cta-sub">More Calls = More Sales</span>
+        </span>
+    </a>
+        <button type="button" class="rp-launch-btn rp-launch-btn--phone" id="rp-launch-btn" onclick="rpwLaunch()" data-tooltip="Practice Roleplay">
+        <i class="fas fa-comments"></i> Roleplay
+    </button>
+            </div>
+<div class="modal-overlay" id="modalOverlay" onclick="closeCallHistory()"></div>
+<div class="call-history-modal modal-panel" id="callHistoryModal" role="dialog" aria-modal="true" aria-labelledby="callHistoryTitle">
+    <h2 id="callHistoryTitle">Call History</h2>
+    <p>Unsure if you tracked the last call? Check the timestamp below.</p>
+    <p><strong>Calls Today:</strong> <span id="callHistoryCountDisplay">0</span></p>
+    <ul id="callHistoryList"></ul>
+    <button class="showhide" onclick="clearCallHistory()">Clear History</button>
+    <button class="showhide" onclick="resetCallsMadeToday()">Reset Calls Made Today</button>
+    <button type="button" class="ts-close fixed-top-right" aria-label="Close Call History" translate="no" onclick="closeCallHistory()">✕</button>
+</div>
+<div class="modal-overlay" id="clientDetailsOverlay" onclick="closeClientDetails()"></div>
+<div class="client-details-modal modal-panel" id="clientDetailsModal" role="dialog" aria-label="Client Details" aria-modal="true">
+    <form id="myForm">
+        <h2>Client Details</h2>
+        <input type="text" id="memberInput" placeholder="Member" oninput="validateInput(this)" onfocus="clearPlaceholder(this)" onblur="restorePlaceholder(this)" autocomplete="off">
+        <span class="script-type RESPONSE PHANTASTICS-RESPONSE" style="display: none;">
+        <input type="text" id="benInput" placeholder="Beneficiary" oninput="validateInput(this)" onfocus="clearPlaceholder(this)" onblur="restorePlaceholder(this)" autocomplete="off">
+        </span>
+        <input type="text" id="spouseInput" placeholder="Spouse" oninput="validateInput(this)" onfocus="clearPlaceholder(this)" onblur="restorePlaceholder(this)" autocomplete="off" style="opacity: 1;">
+        <span class="script-type RESPONSE" style="display: none;">
+        <input type="text" id="groupInput" placeholder="Group" oninput="validateInput(this)" onfocus="clearPlaceholder(this)" onblur="restorePlaceholder(this)" autocomplete="off">
+        </span> <span class="script-type REFERRAL OLDREFERRAL BENEFICIARY ADDREF AGENCYREFERRAL AGENCYBENEFICIARY" style="display: none;">
+        <input type="text" id="sponsorInput" placeholder="Sponsor" oninput="validateInput(this)" onfocus="clearPlaceholder(this)" onblur="restorePlaceholder(this)" autocomplete="off">
+        <input type="text" id="sponsorgroupInput" placeholder="Group" oninput="validateInput(this); toggleUnion()" onfocus="clearPlaceholder(this)" onblur="restorePlaceholder(this)" autocomplete="off">
+        </span>
+        <input type="text" id="agentName" placeholder="Agent" value="" oninput="validateInput(this)" onfocus="clearPlaceholder(this)" onblur="restorePlaceholder(this)" autocomplete="off">
+    </form>
+    <button type="button" class="ts-close fixed-top-right" aria-label="Close client details" translate="no" onclick="closeClientDetails()">✕</button>
+</div>
+  <div class="container">
+    <div class="left-column" style="">
+        <div class="left-column-header">
+                            <select id="myDropdown" onchange="handleSelection()" class="lead-type-dropdown">
+                            <option value="RESPONSE">
+                    Response Card                </option>
+                            <option value="WILLKIT">
+                    Will Kit                </option>
+                            <option value="CHILDSAFE">
+                    Child Safe                </option>
+                            <option value="MPCHILDSAFE">
+                    MediaPlex Child Safe                </option>
+                            <option value="REFERRAL">
+                    Referral                </option>
+                            <option value="POS">
+                    POS                </option>
+                            <option value="LAPSED-POS">
+                    Lapsed POS                </option>
+                            <option value="BENEFICIARY">
+                    Beneficiary                </option>
+                            <option value="GLOBE">
+                    Globe                </option>
+                            <option value="GLOBELAPSE">
+                    Globe Lapse                </option>
+                            <option value="APLUS">
+                    AILPlus                </option>
+                            <option value="AILPLUS-NONCUST">
+                    AILPlus (Non-Customer)                </option>
+                            <option value="FE">
+                    Final Expense                </option>
+                        </select>
+                        <label class="single-toggle tip" data-tooltip="Toggle Single" onclick="togglesingle(event)">
+                <input type="checkbox" id="singleCheckbox">
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">SINGLE</span>
+            </label>
+        </div>
+                    <span class="script-type RESPONSE" style="display: none;">
+<div class="phone-step">INTRO</div>
+Hey, <span class="VERBALChar memberOutput">(Member)</span>??! Hey <span class="VERBALChar memberOutput">(Member)</span>, this is <span class="VERBALChar"><span class="output agentOutput">(Agent)</span></span>&nbsp;with <span class="VERBALChar">American Income Life</span>. We handle some of your benefits through <span class="VERBALChar groupOutput">(Group)</span>.                                <p></p>
+<div class="phone-step">REASON FOR MEETING</div>
+	They sent you a letter about this and you sent back a reply card. I just need to verify the information that you wrote down. Now, <span class="VERBALChar memberOutput">(Member)</span>, you wrote down your address as <span class="VERBALChar addressOutput">(ADDRESS)</span>. Is that correct? Okay great! You also wrote down your date of birth as <span class="VERBALChar">DOB</span>. Is that correct? Awesome! For the beneficiary of the life insurance policy, you wrote down <span class="VERBALChar beneficiaryOutput">(Beneficiary)</span>. Is that still correct? Perfect!
+	<p>It looks like you're one of the members who hasn't received their benefits package yet. It's my job to explain the benefits, activate the permanent ones, and get you caught up.</p>                            </span>
+                    <span class="script-type WILLKIT" style="display: none;">
+<div class="phone-step">INTRO</div>
+Hey, <span class="VERBALChar memberOutput">(Member)</span>??! Hey <span class="VERBALChar memberOutput">(Member)</span>, this is <span class="VERBALChar"><span class="output agentOutput">(Agent)</span></span>, with American Income Life. We provide the Will Kit that you requested from TheFreeWillKit.com.                                <p></p>
+<span class="phone-step">REASON FOR CALLING</span><br>
+I'm calling to let you know that the Will Kits you ordered have just arrived! First I'll need to verify the information that you provided. You listed your street address as <span class="VERBALChar addressOutput">(ADDRESS)</span> and your email address as <span class="VERBALChar">EMAIL</span>. Is that correct? Then it looks like you ordered <span class="VERBALChar">#</span> Will Kit(s). Is that correct?
+<br>
+<div class="button-response-container">
+    <div class="button-container">
+        <button class="showhide" data-target="oneWillResponse">1 Will Kit</button>
+        <button class="showhide" data-target="twoWillResponse">2 Will Kits</button>
+    </div>
+    <div class="response-container">
+        <span id="oneWillResponse" class="response" style="display: none;">
+            <span class="couple" style="display: inline;">Do you have a spouse or significant other? <strong>(If Yes)</strong>: I'll give you one for them as well.</span><span class="single" style="display: none;">Perfect — I'll have that one ready for you.</span>
+        </span>
+        <span id="twoWillResponse" class="response" style="display: none;">
+            Is the other will kit for <span class="couple" style="display: inline;">your spouse</span><span class="single" style="display: none;">someone else</span>? Okay, what's their name?
+        </span>
+    </div>
+</div>
+<p></p>
+Now, <span class="VERBALChar memberOutput">(Member)</span>, did you request this program because you just recently lost a loved one, or are you trying to be proactive? <span class="TECHNICALChar">GIVE A GENUINE COMPLIMENT</span>
+<br>
+<div class="button-response-container">
+    <div class="button-container">
+        <button class="showhide" data-target="lostLovedOneResponse">Lost Loved One</button>
+        <button class="showhide" data-target="proactiveResponse">Proactive</button>
+    </div>
+    <div class="response-container">
+        <span id="lostLovedOneResponse" class="response" style="display: none;">
+            I am very sorry for your loss. I'll be sure to make you a priority today.
+        </span>
+        <span id="proactiveResponse" class="response" style="display: none;">
+            That's a very good decision! I'll be sure to make you a priority today.
+        </span>
+    </div>
+</div>
+<p><span class="VERBALChar memberOutput">(Member)</span>, I'll briefly go over the Will Kit and make sure you know where to get it notarized. That way your family doesn't end up in probate court.</p>                            </span>
+                    <span class="script-type CHILDSAFE" style="display: inline;">
+<div class="phone-step">INTRO</div>
+Hey, <span class="VERBALChar memberOutput">(Member)</span>??! Hey <span class="VERBALChar memberOutput">(Member)</span>, this is <span class="VERBALChar"><span class="output agentOutput">(Agent)</span></span>&nbsp;with the Child Safe Division of American Income Life calling about the Child Safe Kits that you requested online — you probably remember doing that through Facebook. When you filled out the form you requested <span class="VERBALChar">#</span> child safe kits. Is that correct?
+                                <p></p>
+<div class="phone-step">REASON FOR MEETING</div>
+	Perfect! Over 2,000 children go missing every day in the U.S. and these kits double their chances of a safe return, so we need to get these set up as quickly as possible — the first part of the program is to protect your children if anything were to happen to them, and the second part of the program is designed to protect the kids in case anything happens to you. Most families like to take care of this right away.
+                            </span>
+                    <span class="script-type MPCHILDSAFE" style="display: none;">
+<div class="cs_phone_intro">
+<div class="phone-step">INTRO</div>
+Hey, <span class="VERBALChar memberOutput">(Member)</span>??! Hey <span class="VERBALChar memberOutput">(Member)</span>, this is <span class="VERBALChar"><span class="output agentOutput">(Agent)</span></span>&nbsp;with the Child Safe Division- I'm calling because you requested the Child Safe ID Kits online a little bit ago- Now, did you get those kits for your kids or for your grandkids?
+</div>                                <p></p>
+<div class="cs_phone_reason"> <div class="phone-step">REASON FOR MEETING</div>
+  These kits are provided at no cost to you becuase they are endorsed by the International Union of Police Associations Associations and the American Federation of Teachers. So, I have you down at <span class="VERBALChar addressOutput">(ADDRESS)</span>, is that correct? Also, looks like you requested # child safe kits did you only need that amount or did you have a few more kids? Okay Perfect.
+  <p>I do have the kits. My job is to deliver and review the entire Child Safe program and mobile app. In fact, so many parents have even been asking about how to get their hands on the list of sexual offenders and predators in their area... So I'm going to make sure you see how that works as well.</p>
+</div>
+                            </span>
+                    <span class="script-type REFERRAL" style="display: none;">
+<div class="phone-step">INTRO</div>
+Hey, <span class="VERBALChar memberOutput">(Member)</span>??! Hey <span class="VERBALChar memberOutput">(Member)</span>, this is <span class="VERBALChar"><span class="output agentOutput">(Agent)</span></span>&nbsp;with American Income Life. I just spoke with <span class="VERBALChar sponsorOutput">(Sponsor)</span> and the reason I'm calling you now is because they sponsored you for some very important benefits for your family<span class="union"> through <span class="VERBALChar sponsorgroupOutput">(Sponsor's Group)</span></span>! They told you about this, right?
+<div class="button-response-container">
+    <div class="button-container">
+        <button class="showhide" data-target="response-yes">Yes</button>
+        <button class="showhide" data-target="response-no">No</button>
+    </div>
+    <div class="response-container">
+        <span id="response-yes" class="response" style="display: none;">
+            Great!
+        </span>
+        <span id="response-no" class="response" style="display: none;">
+            They didn't? <span class="TECHNICALChar">Act surprised</span> Well, <span class="VERBALChar"><span class="output sponsorOutput">(Sponsor)</span></span> promised me they would tell you about it! No worries though! They probably wanted me to explain it to you personally.
+        </span>
+    </div>
+</div>
+                                <p></p>
+<div class="phone-step">REASON FOR MEETING</div>
+		Let me fill you in! <span class="VERBALChar"><span class="output sponsorOutput">(Sponsor)</span></span> has given you some benefits that are usually only available to unions and special groups like the police, firefighters, and teachers. I gave my word to <span class="VERBALChar"><span class="output sponsorOutput">(Sponsor)</span></span> that I would get these out to you and explain everything. The only problem is that I'm getting very busy. I decided to call you now so that we don't miss you altogether.<span class="couple" style="display: inline;"> Are you single or do you have a significant other?</span><p></p>                            </span>
+                    <span class="script-type POS" style="display: none;">
+<div class="phone-step">INTRO</div>
+Hey, <span class="VERBALChar memberOutput">(Member)</span>??! Hey <span class="VERBALChar memberOutput">(Member)</span>, this is <span class="VERBALChar"><span class="output agentOutput">(Agent)</span></span>&nbsp;with American Income Life, your life insurance company, how are you doing? The reason I'm calling is to set up a review on your policy. So that way you know where your money is going, answer any questions you have and also update your claim forms. Now, do you remember that Freedom of Choice certificate?
+<div class="button-response-container">
+    <div class="button-container">
+        <button class="showhide" data-target="yesResponse">Yes</button>
+        <button class="showhide" data-target="noResponse">No</button>
+    </div>
+    <div class="response-container">
+        <span id="yesResponse" class="response" style="display: none;">
+            Ok, great because that's the <strong>certificate</strong> that will take care of your <strong>funeral costs</strong> for your family.
+        </span>
+        <span id="noResponse" class="response" style="display: none;">
+            Ok, well don't feel bad—most members actually forget about it, and that's exactly why I'm calling. This is the <strong>certificate</strong> that will take care of your <strong>funeral costs</strong> for your family.
+        </span>
+    </div>
+</div>
+	<p>I'll be able to help you copy the policy number over to the back of that certificate and organize your folder. That way your family never has to worry about digging through papers looking for policy numbers or trying to contact insurance companies. I'll also review your policy with you and reeducate you about how all this stuff works.</p>                                <p></p>
+                            </span>
+                    <span class="script-type LAPSED-POS" style="display: none;">
+Hi, is <span class="VERBALChar memberOutput">(Member)</span> there? Hey <span class="VERBALChar memberOutput">(Member)</span>, I'm glad I finally got ahold of you, this is <span class="VERBALChar agentOutput">(Agent)</span> over here at American Income Life—your life insurance company…and an audit was done of past policyholders…were you aware that your policy had lapsed? <span class="TECHNICALChar">sound shocked</span>                                <p></p>
+It looks like you had a really good plan…do you happen to know or remember why it lapsed?
+    <div class="button-response-container">
+        <div class="button-container">
+            <button class="showhide" data-target="response-agent">Issue with an agent</button>
+            <button class="showhide" data-target="response-afford">Couldn't afford it</button>
+            <button class="showhide" data-target="response-company">Issue with the company</button>
+        </div>
+        <div class="response-container">
+            <span id="response-agent" class="response" style="display: none;">
+                That's what I assumed and that's why I'm calling. The company wanted to give you a chance to work with one of the Servicing Managers on this…
+            </span>
+            <span id="response-afford" class="response" style="display: none;">
+                That's what I assumed and that's why I'm calling. I already see a couple of ideas where we might be able to save you some money.
+            </span>
+            <span id="response-company" class="response" style="display: none;">
+                That's what I assumed and that's why I'm calling. Let me first apologize and also let you know that it's why they wanted to give you a chance to work with one of the Servicing Managers on this…
+            </span>
+        </div>
+    </div>
+<p>Since it's so rare that a policy would fall off like this, and even though it isn't your enrollment period, I wanted to meet with you personally, introduce myself to you, go over a few ideas with you, and if it makes sense, get the coverage back in place for you and for your family.</p>
+                            </span>
+                    <span class="script-type BENEFICIARY" style="display: none;">
+<div class="phone-step">INTRO</div>
+Hey, <span class="VERBALChar memberOutput">(Member)</span>??! Hey <span class="VERBALChar memberOutput">(Member)</span>, this is <span class="VERBALChar"><span class="output agentOutput">(Agent)</span></span>&nbsp;with American Income Life. I just spoke with <span class="VERBALChar sponsorOutput">(Sponsor)</span> and they listed you as one of the beneficiaries on their life insurance policy. They told you about this, right?
+<p><span class="VERBALChar">Yes or No:</span> Okay, that's exactly why I'm calling you. They wanted me to explain it to you personally. We actually sat down with <span class="VERBALChar sponsorOutput">(Sponsor)</span> the other day to review their insurance through their <span class="VERBALChar sponsorgroupOutput">(Sponsor's Group)</span> <span class="TECHNICALChar">insert rapport reference here</span></p>                                <p></p>
+<span class="phone-step">REASON FOR CALLING</span><br>
+It's my job make sure that you accept responsibility of being the beneficiary and explain everything. Do you
+accept responsibility of that? I'll also get you the forms so if anything happens to <span class="VERBALChar sponsorOutput">(Sponsor)</span> you'll be able to make a claim and take care of things for their family. Also, as a beneficiary on their policy, that gives you access to some of the benefits for you and your family; you'll just have to qualify for them.
+<p>I gave my word to <span class="VERBALChar sponsorOutput">(Sponsor)</span> that I would get out to you and explain everything. The only problem is that I'm gettng very busy. I decided to call you now so that we don't miss you altogether.</p>                            </span>
+                    <span class="script-type GLOBE" style="display: none;">
+<div class="phone-step">INTRO</div>
+Hey, <span class="VERBALChar memberOutput">(Member)</span>??! Hey <span class="VERBALChar memberOutput">(Member)</span>, this is <span class="VERBALChar"><span class="output agentOutput">(Agent)</span></span>&nbsp;your agent with <span class="VERBALChar">Globe Life!</span>                                <p></p>
+<div class="phone-step">REASON FOR MEETING</div>
+I'm reaching out because we got your request to speak with an agent about our life insurance options and we wanted to follow up and ask, are you looking for life insurance for yourself or someone else?
+<br>
+<div class="button-response-container">
+    <div class="button-container">
+        <button class="showhide" data-target="myselfResponse">Myself</button>
+        <button class="showhide" data-target="someoneElseResponse">Someone else</button>
+    </div>
+    <div class="response-container">
+        <span id="myselfResponse" class="response" style="display: none;">
+            Are you looking to protect your family from paying out of pocket for your Final Expenses, or was it because you wanted to leave some money behind for your family?
+        </span>
+        <span id="someoneElseResponse" class="response" style="display: none;">
+            Are you looking to cover their Final Expenses, or was it because you wanted to leave a nest egg for their family?
+        </span>
+    </div>
+</div>
+<p>Before we get started, let me verify everything that you listed on your request. You listed your address as <span class="VERBALChar addressOutput">(ADDRESS)</span>. Is that correct? You listed your full name as <span class="VERBALChar">NAME</span>. Is that correct? It looks like you didn't put down your DOB. So, what's your DOB?<span class="couple" style="display: inline;"> Great and are you currently single, married or have a significant other?</span></p>
+<p>Okay great, <span class="VERBALChar memberOutput">(Member)</span>! What I'm going to do for you is explain the different options that we have and do a quick needs analysis to see what makes the most sense for your situation.</p>                            </span>
+                    <span class="script-type GLOBELAPSE" style="display: none;">
+<div class="phone-step">INTRO</div>
+Hey, <span class="VERBALChar memberOutput">(Member)</span>??! Hey <span class="VERBALChar memberOutput">(Member)</span>, this is <span class="VERBALChar"><span class="output agentOutput">(Agent)</span></span>&nbsp;with <span class="VERBALChar">Globe Life Insurance</span>, how are you doing today?
+<p>I'm giving you a call because your policy with Globe came across my desk for update and review. I just need to verify the information we have on record and I'll have you off the phone real quick.</p>
+<ul>
+<li>First, you listed your address as <span class="VERBALChar addressOutput">(ADDRESS)</span>, is that correct?
+</li><li>You listed your Date of Birth as <span class="VERBALChar">(DOB)</span>, is that correct?</li>
+<li>And it looks like there's no beneficiary on file. So, we need to update that for you. <span class="TECHNICALChar">not over the phone, this is used as another reason for the meeting</span></li>
+</ul>                                <p></p>
+<div class="phone-step">REASON FOR MEETING</div>
+Well <span class="VERBALChar memberOutput">(Member)</span>, the whole reason for my call is it appears that your coverage with Globe has lapsed and is up for review and renewal. Obviously you had this in place to take care of your family and we're going to make sure that stays the case. Plus, we'll need to confirm your beneficiary designation - that's part of why we do these reviews. It won't take long at all but they have me review policy options with other Globe members in your area over the next few days.
+<p></p>                            </span>
+                    <span class="script-type APLUS" style="display: none;">
+Hey, <span class="VERBALChar memberOutput">(Member)</span>??! Hey <span class="VERBALChar memberOutput">(Member)</span>, this is <span class="VERBALChar"><span class="output agentOutput">(Agent)</span></span>The reason I am calling is because you were seen by one our Globe Life - American Income Life Division representatives in the past, and received some benefits, including an AIL Plus Discount Card. The Program you have with the company has recently expired and it's just my job to handle your renewal… <span class="TECHNICALChar">no hesitation</span>                                <p></p>
+<p>OK, just to refresh you, the benefits provide discounts of up to 85% on things like eyeglasses, chiropractic services, prescription drugs, and dental care. And <span class="VERBALChar memberOutput">(Member)</span>, just to make sure everything is still the same:
+</p><ul>
+    <li>do you still live at <span class="VERBALChar addressOutput">(ADDRESS)</span>?</li>
+    <li>And your date or birth is <span class="VERBALChar">(DOB)</span>, right?</li>
+    <li>Also, I have your email address down as <span class="VERBALChar">(EMAIL)</span>, is that correct?</li>
+</ul><p></p>
+<p>Like I said it's just my job to handle the renewal and to get you your updated benefits.</p>                            </span>
+                    <span class="script-type AILPLUS-NONCUST" style="display: none;">
+Hey, <span class="VERBALChar memberOutput">(Member)</span>??! Hey <span class="VERBALChar memberOutput">(Member)</span>, this is <span class="VERBALChar"><span class="output agentOutput">(Agent)</span></span>The reason I am calling is because you were seen by one of our Globe Life - American Income Life Division representatives a while back and received your AIL Plus Discount Card, even though you didn't move forward with a policy at that time. That card has recently expired, so it's just my job to get it renewed for you at no cost — and this time make sure you know about everything you qualify for… <span class="TECHNICALChar">no hesitation</span>
+                                <p></p>
+<p>OK, just to refresh you, the benefits provide discounts of up to 85% on things like eyeglasses, chiropractic services, prescription drugs, and dental care. And <span class="VERBALChar memberOutput">(Member)</span>, just to make sure everything is still the same:
+</p><ul>
+    <li>do you still live at <span class="VERBALChar addressOutput">(ADDRESS)</span>?</li>
+    <li>And your date or birth is <span class="VERBALChar">(DOB)</span>, right?</li>
+    <li>Also, I have your email address down as <span class="VERBALChar">(EMAIL)</span>, is that correct?</li>
+</ul><p></p>
+<p>Like I said it's just my job to handle the renewal and to get you your updated benefits.</p>                            </span>
+                    <span class="script-type FE" style="display: none;">
+                                                        	<span class="phone-step">INTRO</span><br>
+Hey, <span class="VERBALChar memberOutput">(Member)</span>??! Hey <span class="VERBALChar memberOutput">(Member)</span>, this is <span class="VERBALChar"><span class="output agentOutput">(Agent)</span></span>. I'm calling on the request you sent in for final expense coverage —I just need to verify a couple quick details on your request so I can get you over some info.
+	<ul>
+	<li>Is your address still <span class="VERBALChar addressOutput">(ADDRESS)</span>?</li>
+	<li>And you listed <span class="VERBALChar">(Beneficiary Name)</span> to be in charge of your arrangements, is that still correct?</li>
+	</ul>
+	<p>Perfect. So here's how this works — my job is to get you some quick information through a quick Zoom appointment so you can have it for your notes and answer any questions you may have.</p>                                <p></p>
+                            </span>
+                <span>
+<div class="phone-step">SETTING THE APPOINTMENT</div>
+	<span class="couple" style="display: inline;">Do you have a spouse or significant other? </span>Are you familiar with Zoom?
+<div class="button-response-container" style="flex-direction: column;">
+  <div class="button-container" style="width: 100%;">
+    <button class="showhide" data-target="zoomFamiliarYes">Yes</button>
+        <div id="zoomFamiliarYes" class="response" style="display: none;">
+        Okay, great! I'm going to text you the Zoom link right now. <span class="TECHNICALChar">Set the virtual appointment for right now on impact and get them on Zoom — if <span class="couple" style="display: inline;">the spouse is not available or </span>it's a bad time while on Zoom, proceed to "Can't get on zoom right now" below.</span>
+        </div>
+    <button class="showhide" data-target="zoomFamiliarNo">No</button>
+        <div id="zoomFamiliarNo" class="response" style="display: none;">
+        No worries, it's simple. It's the same video call app teachers and doctors are using for their patients and students. <span class="TECHNICALChar">Proceed with helping them download Zoom. Set the virtual appointment for right now on impact and get them on Zoom — if <span class="couple" style="display: inline;">the spouse is not available or </span>it's a bad time while on Zoom, proceed to "Can't get on zoom right now" below.</span>
+        </div>
+  </div>
+</div>
+<div class="button-response-container" style="flex-direction: column;">
+  <div class="button-container" style="width: 100%;">
+    <button class="showhide" data-target="noBothHome">Can't get on zoom right now</button>
+        <div id="noBothHome" class="response" style="display: none;">
+        So, what time do you<span class="couple" style="display: inline;"> and <span class="spouseOutput VERBALChar">your Spouse/Partner</span></span> normally get home from work? Perfect! I have a very booked up schedule right now, but I can squeeze you in today at either <span class="VERBALChar">TIME</span> or <span class="VERBALChar">TIME</span>. Which one works best for you<span class="couple" style="display: inline;"> and <span class="spouseOutput VERBALChar">your Spouse/Partner</span></span>?
+<p></p>
+        <div class="phone-step">SOLIDIFY THE APPOINTMENT</div>
+        Okay great! Do me a favor, go ahead and grab a pen and paper, I have some very important information that I need you to write down. Let me know when you're ready.
+        <ul>
+            <li>First, please write down my name: <span class="VERBALChar output agentOutput">(Agent)</span></li>
+            <li>Second, write down the confirmation number. <span class="TECHNICALChar">This can be the Zoom Meeting ID or the one on the lead.</span> Please repeat it back to me to make sure we've got it right.</li>
+            <li>Next, write down the appointment time: <span class="VERBALChar">DAY at TIME</span></li>
+        </ul>
+        <p>What's a good email address so we can send text and email reminders?</p>
+        <p>Now, <span class="VERBALChar memberOutput">(Member)</span>, if I save that spot for you then I can't save it for another family. Do you see ANY reason why <span class="VERBALChar">DAY at TIME</span> would not work? It's very IMPORTANT that you're <span class="couple" style="display: inline;">both </span>there. Sound good? Awesome! I'll be on <span class="VERBALChar">DAY at TIME</span>. If for some reason I'm running behind, I'll be sure to call you.</p>
+        <p>
+        </p><div class="phone-step">Extra to improve show ratio:</div>
+        One last thing! I'm sending the meeting link to you so that we can test it right now. We need to make sure it works with your device<span id="more-text" style="display: none;">. Please check your email/phone and click on the link.
+            <span class="TECHNICALChar">
+            Walk them through getting connected. Introduce yourself and let them know that this is the same link they will be using for the scheduled meeting. Remember to be friendly so that they are excited for the appointment. You can also try to turn it into an instant appointment if they are<span class="couple" style="display: inline;"> both</span> available.
+            </span>
+        </span>
+        <a href="javascript:void(0);" id="toggle-button">...more</a>
+        <p></p>
+    </div>
+  </div>
+</div>
+                    </span>
+    </div>
+    <div class="right-column" id="rebuttalsColumn" style="">
+        <div class="rebuttals-header">
+            <button id="rebuttalsToggle" class="rebuttals-toggle-btn" aria-label="Hide Rebuttals">
+                <i class="fas fa-chevron-right"></i>
+            </button>
+            <h3>Rebuttals</h3>
+        </div>
+        <div class="rebuttals-content">
+        <div class="rebuttal-expand-controls">
+            <button id="expandAllRebuttals" class="rebuttal-ctrl-btn" title="Expand All"><i class="fas fa-angles-down"></i> Expand All</button>
+            <button id="collapseAllRebuttals" class="rebuttal-ctrl-btn" title="Collapse All"><i class="fas fa-angles-up"></i> Collapse All</button>
+        </div>
+                    <span class="script-type RESPONSE" style="display: none;">
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I'm not interested.</span><div class="rebuttal-answer">
+No problem. But let's take a step back. Have you been to the meetings where they talked about this program? <span class="TECHNICALChar">No matter what they say, move on!</span> That's exactly why I'm calling. It's just my job to explain your benefits and get you caught up. <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Can you mail it to me?</span><div class="rebuttal-answer">
+Great question! That was the first step. You got a letter in the mail and now I have your reply card. The final step is very easy. I just need to set you up with everything over a quick video meeting. <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>How long will this take?</span><div class="rebuttal-answer">
+It depends on how many questions you have. I'm very busy, so I'll need to keep it short. <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>How much will this cost?</span><div class="rebuttal-answer">
+Great question! The AD&amp;D benefit you receive as a union member is at no cost. It's just my job to explain your benefits and get you caught up. <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I can't talk right now. / I'm at work.</span><div class="rebuttal-answer">
+No problem, I'll get straight to the point! <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>We're not buying anything. / Are you trying to sell me something?</span><div class="rebuttal-answer">
+I don't even know if you would qualify. It's just my job to explain your benefits and get you caught up. <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Why does my spouse need to be there?</span><div class="rebuttal-answer">
+Great question! When something happens to you, your spouse will need to understand how the benefits work and how to make a claim. <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Are you trying to sell me insurance?</span><div class="rebuttal-answer">
+My job is to deliver your benefits, explain them to you and get you caught up with all the other members. Just like your letter said, there are other insurance programs that are available, but the option is, of course, yours. <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I don't remember any card.</span><div class="rebuttal-answer">
+That's exactly why I'm calling. There are so many members who sent back the card that it has taken us a while to get to them all. However, I'll show you a copy of the card, which will help to refresh your memory. <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I'm not part of the union anymore.</span><div class="rebuttal-answer">
+That's exactly why I'm calling. These benefits are permanent, and you can keep them even if you are no longer part of the union. It's just my job to explain your benefits and get you caught up. <span class="smallfont">(back to script)</span></div></p>
+                            </span>
+                    <span class="script-type WILLKIT" style="display: none;">
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I'm not interested.</span><div class="rebuttal-answer">
+<span class="rebuttal">I can understand that. Nobody likes to think about this subject. I've even heard a few people say that in the past, but when I explained the Will Kit to them, they were super grateful, especially since it's at no cost and comes with a living will too. <span class="smallfont">(back to script)</span></span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Can you mail it to me?</span><div class="rebuttal-answer">
+<span class="rebuttal">That's exactly what I'm going to do. They just require me to explain how to fill it out and where to get it notarized. <span class="smallfont">(back to script)</span></span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>How long will this take?</span><div class="rebuttal-answer">
+<span>It depends on how many questions you have. I'm very busy, so I'll need to keep it short. <span class="smallfont">(back to script)</span></span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I don't need help filling it out.</span><div class="rebuttal-answer">
+<span class="rebuttal">Thank you for letting me know because that's going to save us some time. I'll skip all of the boring stuff and point out the most important parts since these are legal documents that require some expertise to fill out properly. <span class="smallfont">(back to script)</span></span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Why does my spouse need to be there?</span><div class="rebuttal-answer">
+<span class="rebuttal">Because married couples and partners have a vested interest in their will and testament and if there are any questions, everyone will be on the same page. <span class="smallfont">(back to script)</span></span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I don't remember filling this out.</span><div class="rebuttal-answer">
+<span class="rebuttal">I completely understand, you must have been thinking about your family and how to better protect them. <span class="VERBALChar memberOutput">(Member)</span>, looking at my records, it says here that you requested this on <span class="VERBALChar">(DAY) and (TIME)</span>. You were probably on your phone or tablet and looking at Facebook and saw something about getting a free will and testament. When you clicked on it, it took you to a form that you filled out online. Also, you listed your email address as <span class="VERBALChar">(EMAIL)</span>. Is that correct? Okay perfect. <span class="smallfont">(back to script)</span></span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I already have one set up.</span><div class="rebuttal-answer">
+<span class="rebuttal">Thank you for letting me know because that's going to save us some time. They've recently added some details that are very important. We'll just need to update yours with the new one. <span class="smallfont">(back to script)</span></span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I don't want it.</span><div class="rebuttal-answer">
+<span class="rebuttal">I can understand that. Nobody likes to think about this subject. I've even heard a few people say that in the past, but when I explained the Will Kit to them, they were super grateful, especially since it's at no cost and comes with a living will too. <span class="smallfont">(back to script)</span></span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I ordered these a while ago.</span><div class="rebuttal-answer">
+<span class="rebuttal">Thank you for letting me know, and that's exactly why I'm calling. We've been on back order since COVID-19. I must say, I'm shocked that we got yours in as quickly as we did. <span class="smallfont">(back to script)</span></span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>What is in it for you? Or how is it free? Or are you going to try to sell me something?</span><div class="rebuttal-answer">
+<span class="rebuttal">Well, <span class="VERBALChar memberOutput">(Member)</span>, we are an insurance company called American Income Life and we do not do any paid advertising on the radio or TV. This is how we get to know people in the neighborhood by giving you a no cost will kit that will save you on lawyer fees, and if you are ever in the market for life insurance, then you will know my name and the name of our company. So, like I was saying… <span class="smallfont">(back to script)</span></span></div></p>                            </span>
+                    <span class="script-type CHILDSAFE" style="display: inline;">
+    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I'm not interested.</span><div class="rebuttal-answer">
+    <span>I can understand how you feel about that. However, the police tell us that when a child goes missing it takes parents up to 5 hours to gather this vital information in order to organize the search to find the child ALIVE. This Child Safe Kit is designed to minimize the time to locate a missing child. It's my job to deliver the Child Safe Kits and explain the Family Care Program. <span class="smallfont">(back to script)</span></span></div></p>
+    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Can you mail it to me?</span><div class="rebuttal-answer">
+    <span>We used to mail them but we found out that not everyone was filling them out correctly. Once we explain the Child Safe Kits, you'll scan a unique QR code to set up your Child Safe app. <span class="smallfont">(back to script)</span></span></div></p>
+    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I don't remember doing this!</span><div class="rebuttal-answer">
+    <span>Oh really? Well, don't feel bad if you forgot. You requested this on Facebook back on <span class="VERBALChar">(date)</span>. <span class="smallfont">(back to script)</span></span></div></p>
+    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Do we have to do a Zoom meeting? / Do I have to do this? / Why do I have to do this?</span><div class="rebuttal-answer">
+    <span>Once we explain the Child Safe Kits, you'll scan a unique QR code to set up your Child Safe app. <span class="smallfont">(back to script)</span></span></div></p>
+    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>What is this all about?</span><div class="rebuttal-answer">
+    <span>This is about the Child Safe Kits that you (requested online/were sponsored) for by <span class="VERBALChar sponsorOutput">(Sponsor)</span>. The Child Safe Kits are basically fingerprint kits for your kids. If they ever go missing, you'll be able to use these kits to help find them faster. <span class="smallfont">(back to script)</span></span></div></p>
+    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I already have a Child Safe Kit.</span><div class="rebuttal-answer">
+    <span>That's exactly why I'm calling! They went digital now so everyone is getting an update. Once we explain the new Child Safe Kits, you'll scan a unique QR code to set up your Child Safe app. <span class="smallfont">(back to script)</span></span></div></p>
+    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>How much will this cost?</span><div class="rebuttal-answer">
+    <span>Great news! There's absolutely no cost to you for the Child Safe Kits.  <span class="smallfont">(back to script)</span><br>
+    - OR -<br>
+    Lucky you! You were sponsored by <span class="VERBALChar sponsorOutput">(Sponsor)</span> and there's absolutely no cost to you for the Child Safe Kits! <span class="smallfont">(back to script)</span></span></div></p>
+    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Can you call me back?</span><div class="rebuttal-answer">
+    <span>Oh ok, I'll get you off the phone real quick. <span class="smallfont">(back to script)</span></span></div></p>
+    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>What is the two part program?</span><div class="rebuttal-answer">
+    <span>The first part of the program is the child safe kits. They are an ID Kit that holds all your children's information in one easy kit that you could turn over to the Police to activate a search. We don't take any of your children's information, we simply show you how to fill them out and what to do in the event you do need to start a search. The second part are some of the exclusive police officer benefits that get unlocked to the community as a way of thanking you for protecting the community, similar to Gerber. <span class="smallfont">(back to script)</span></span></div></p>                            </span>
+                    <span class="script-type MPCHILDSAFE" style="display: none;">
+                                    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Do I have to do this right now?</span><div class="rebuttal-answer">
+Yes. <span class="smallfont">(Always answer "Yes" first and pause. If they can get on, they usually will.)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I'm driving, at work, or busy!</span><div class="rebuttal-answer">
+No problem. What time do you get home? <span class="smallfont">(Set same-day appointment.)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I can't do it today!</span><div class="rebuttal-answer">
+No problem. Do you work the day shift or night shift? When do you usually get home?<span class="couple" style="display: inline;"> And does your significant other work the day shift or night shift? When does that person get home?</span><br>
+Let me tell you what I'm going to do for you... <span class="smallfont">(Back to script.)</span></div></p>                            </span>
+                    <span class="script-type REFERRAL" style="display: none;">
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I'm not interested.</span><div class="rebuttal-answer">
+<span class="rebuttal">No problem. But let's take a step back. Did <span class="VERBALChar sponsorOutput">(Sponsor)</span> send you a text about this? <span class="TECHNICALChar">No matter what they say, move on!</span> Either way, I made a promise to get these out to you. I'm sorry to catch you off guard but it's just my job to explain the benefits that <span class="VERBALChar sponsorOutput">(Sponsor)</span> sponsored you for. <span class="smallfont">(back to script)</span></span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Can you mail it to me?</span><div class="rebuttal-answer">
+<span class="rebuttal">That's exactly what I'm going to do. <span class="VERBALChar sponsorOutput">(Sponsor)</span> sponsored you, so I just need to explain everything over a quick video meeting before I can mail it out. <span class="smallfont">(back to script)</span></span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>How long will this take?</span><div class="rebuttal-answer">
+<span class="rebuttal">It depends on how many questions you have. I'm very busy, so I'll need to keep it short. <span class="smallfont">(back to script)</span></span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>How much will this cost?</span><div class="rebuttal-answer">
+<span class="rebuttal">Great question! You were sponsored by <span class="VERBALChar sponsorOutput">(Sponsor)</span> and there is no cost to you. It's just my job to explain your benefits and get you caught up here. <span class="smallfont">(back to script)</span></span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I can't talk right now. / I'm at work.</span><div class="rebuttal-answer">
+<span class="rebuttal">No problem, I'll get straight to the point! <span class="smallfont">(back to script)</span></span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>We're not buying anything.</span><div class="rebuttal-answer">
+<span class="rebuttal">I don't even know if you would qualify. It's just my job to explain your benefits and get you caught up here. <span class="smallfont">(back to script)</span></span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Why does my spouse need to be there?</span><div class="rebuttal-answer">
+<span class="rebuttal">Great question! When something happens to you, <span class="VERBALChar spouseOutput">your Spouse/Partner</span> will need to understand how the benefits work and how to make a claim. <span class="smallfont">(back to script)</span></span></div></p>
+                            </span>
+                    <span class="script-type POS" style="display: none;">
+    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I'm not interested.</span><div class="rebuttal-answer">
+    <span class="rebuttal">No problem! My job is just to review your coverage and go over everything for you. <span class="smallfont">(back to script)</span></span></div></p>
+    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>That time won't work.</span><div class="rebuttal-answer">
+    <span class="rebuttal">No problem I understand. I could also fit you in on my schedule at (Time) or tomorrow at (Time). Which one works best for you<span class="couple" style="display: inline;"> (and spouse/SO)</span>? (continue to work with them, give 2 times, which one works best?)</span></div></p>
+    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>How long will this take?</span><div class="rebuttal-answer">
+    <span class="rebuttal">It depends on how many questions you have. I run a very booked-up schedule, so for me, the shorter the better. <span class="smallfont">(back to script)</span></span></div></p>
+    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I already spoke with someone.</span><div class="rebuttal-answer">
+    <span class="rebuttal">That's exactly why I'm calling. There have been several changes and every policyholder is getting a quick review for the updates. It won't take long, and there might be a few ways you can save some money as well. <span class="smallfont">(back to script)</span></span></div></p>
+                            </span>
+                    <span class="script-type LAPSED-POS" style="display: none;">
+                                    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>After first objection where there is ANY confusion…</span><div class="rebuttal-answer">
+        <span class="rebuttal">It looks like the last time your policy was updated was about (check last application date), so you might not remember…it's the reason I'm calling you from the Service Department…</span> <span class="smallfont">(continue no hesitation)</span></div></p>
+    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>How long is this going to take...</span><div class="rebuttal-answer">
+        <span class="rebuttal">Not long at all...especially since it's on Zoom now...it's super quick…</span> <span class="smallfont">(continue no hesitation)</span></div></p>
+    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>You guys do this every year...</span><div class="rebuttal-answer">
+        <span class="rebuttal">It looks like for whatever reason, the paperwork wasn't filled out to get this resolved and that's the reason for my call. It's to make sure that it is and it's corrected for you…</span> <span class="smallfont">(continue no hesitation)</span></div></p>
+    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Why does my spouse have to be there...</span><div class="rebuttal-answer">
+        <span class="rebuttal">The reason your spouse has to be there is because your spouse is also covered on this plan or a beneficiary of the plan. It's important that your spouse knows how everything works as well as what options he/she has.</span> <span class="smallfont">(continue no hesitation)</span></div></p>
+    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Just mail it...</span><div class="rebuttal-answer">
+        <span class="rebuttal">I sure wish we could. That would make my job a lot easier, but I need to introduce myself personally to you, and there are some things that I need to review with you that would be confusing through the phone and impossible through the mail…</span> <span class="smallfont">(continue no hesitation)</span></div></p>
+    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>If they are single...</span><div class="rebuttal-answer">
+        <span class="rebuttal">I can't tell by looking at your policy if you are married or not because nothing is listed for a spouse. Are you married or have you gotten married since the policy was originally issued?</span> <span class="smallfont">(continue no hesitation)</span></div></p>
+    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Not interested...</span><div class="rebuttal-answer">
+        <span class="rebuttal">I wouldn't be interested if I were you either. The reason they wanted me to get in contact with you was so that you are aware of all of your options. Usually when people are interested in this stuff it's too late...they are too old or their health has changed...so they don't have any other options. So I'd say that it's best we handle this when you're not interested instead of waiting until the day you are…</span> <span class="smallfont">(continue no hesitation)</span></div></p>
+    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Is someone going to try and sell me something/someone always wants to come out and sell me more insurance...</span><div class="rebuttal-answer">
+        <span class="rebuttal">It's our job to review your policy with you and let you know if they have any updates for your coverage. I can't make you do anything you don't want to do--I'm not that good! You do what you want with that information. I promise I'm a super nice guy/gal...</span> <span class="smallfont">(continue no hesitation)</span></div></p>                            </span>
+                    <span class="script-type BENEFICIARY" style="display: none;">
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I'm not interested.</span><div class="rebuttal-answer">
+<span class="rebuttal">Thank you for letting me know that. It's just my job to explain how the benefits work and how to make a claim. <span class="smallfont">(back to script)</span></span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Can you mail it to me?</span><div class="rebuttal-answer">
+<span class="rebuttal">That's exactly what I'm going to do. It's just my job to explain everything over a quick video meeting before I can mail it out. <span class="smallfont">(back to script)</span></span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>How long will this take?</span><div class="rebuttal-answer">
+<span class="rebuttal">It depends on how many questions you have. I'm very busy, so I'll need to keep it short. <span class="smallfont">(back to script)</span></span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>How much will this cost?</span><div class="rebuttal-answer">
+<span class="rebuttal">Great question! The AD&amp;D benefit you receive as a union member is at no cost. It's just my job to explain your benefits and get you caught up. <span class="smallfont">(back to script)</span></span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I can't talk right now. / I'm at work.</span><div class="rebuttal-answer">
+<span class="rebuttal">No problem, I'll get straight to the point! <span class="smallfont">(back to script)</span></span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Why does my spouse need to be there?</span><div class="rebuttal-answer">
+<span class="rebuttal">Great question! If something happens to you, your spouse will need to understand how the benefits work and how to make a claim. <span class="smallfont">(back to script)</span></span></div></p>
+                            </span>
+                    <span class="script-type GLOBE" style="display: none;">
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I'm not interested.</span><div class="rebuttal-answer">
+No problem at all! Were you looking for life insurance for yourself or someone else? <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Can you mail it to me?</span><div class="rebuttal-answer">
+That's exactly what I'm going to do. They just require me to explain all the different options, do a needs analysis, and find a policy that fits your needs. <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I thought it was the $1 insurance policy? Or I sent in my application already.</span><div class="rebuttal-answer">
+Yes, that is for the accidental. Most people didn't get a proper explanation. So, it's my job to explain all the different options, do a needs analysis, and find a policy that fits your needs. <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>No way, we already got quotes and it's too expensive.</span><div class="rebuttal-answer">
+No problem at all. Did you have anybody explain how those policies work yet? (either way yes or no, continue). That's exactly why I am calling. Most people didn't get a proper explanation. So, it's my job to explain all the different options, do a needs analysis, and find a policy that fits your needs. <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I already spoke with someone.</span><div class="rebuttal-answer">
+Oh, that's perfect! Were you able to protect your Final Expenses or were you just trying to leave a nest egg for your family? (no matter what they say, continue) No problem, you might still be eligible for our coverage. We have an advanced needs analysis that helps to find any gaps in your coverage. So, let's see what we can do. <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I was just shopping around.</span><div class="rebuttal-answer">
+Perfect! Were you looking for life insurance for yourself or someone else? <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I already have Globe Life:</span><div class="rebuttal-answer">
+<span class="VERBALChar">Option 1.</span> Yes, that's why I'm calling. The company just unlocked some extra benefits that we believe you're eligible for. It includes some ‘permanent' coverage with other benefits. What time would you be available for a Zoom today? Before 6pm or afterwards?<p><span class="VERBALChar">Option 2.</span> Understood, that's why we are calling. The policy they will send is term insurance (temporary terminating coverage). We are reaching out about whole life permanent coverage. Our job is to explain the differences and go over the best options for your family so you have someone who can help you with your decision. <span class="smallfont">(back to script)</span></p></div></p>
+                            </span>
+                    <span class="script-type GLOBELAPSE" style="display: none;">
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I'm not interested.</span><div class="rebuttal-answer">
+No problem at all! Were you looking for life insurance for yourself or someone else? <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Can you mail it to me?</span><div class="rebuttal-answer">
+That's exactly what I'm going to do. They just require me to explain all the different options, do a needs analysis, and find a policy that fits your needs. <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I thought it was the $1 insurance policy? Or I sent in my application already.</span><div class="rebuttal-answer">
+Yes, that is for the accidental. Most people didn't get a proper explanation. So, it's my job to explain all the different options, do a needs analysis, and find a policy that fits your needs. <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>No way, we already got quotes and it's too expensive.</span><div class="rebuttal-answer">
+No problem at all. Did you have anybody explain how those policies work yet? (either way yes or no, continue). That's exactly why I am calling. Most people didn't get a proper explanation. So, it's my job to explain all the different options, do a needs analysis, and find a policy that fits your needs. <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I already spoke with someone.</span><div class="rebuttal-answer">
+Oh, that's perfect! Were you able to protect your Final Expenses or were you just trying to leave a nest egg for your family? (no matter what they say, continue) No problem, you might still be eligible for our coverage. We have an advanced needs analysis that helps to find any gaps in your coverage. So, let's see what we can do. <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I was just shopping around.</span><div class="rebuttal-answer">
+Perfect! Were you looking for life insurance for yourself or someone else? <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I already have Globe Life:</span><div class="rebuttal-answer">
+<span class="VERBALChar">Option 1.</span> Yes, that's why I'm calling. The company just unlocked some extra benefits that we believe you're eligible for. It includes some ‘permanent' coverage with other benefits. What time would you be available for a Zoom today? Before 6pm or afterwards?<p><span class="VERBALChar">Option 2.</span> Understood, that's why we are calling. The policy they will send is term insurance (temporary terminating coverage). We are reaching out about whole life permanent coverage. Our job is to explain the differences and go over the best options for your family so you have someone who can help you with your decision. <span class="smallfont">(back to script)</span></p></div></p>
+                            </span>
+                    <span class="script-type APLUS" style="display: none;">
+                                    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>After first objection where there is ANY confusion…</span><div class="rebuttal-answer">
+Do you happen to have a copy of the letter you received about the renewal?...OK that's probably why you're a little bit confused and that's why they asked me to call you personally about this...it's not something you want to lose because it covers gaps your health insurance doesn't… <span class="smallfont">(continue no hesitation)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>If they don't remember the letter or filling out the card…</span><div class="rebuttal-answer">
+Like I said, you absolutely had an active membership but you just didn't use the card the required number of times, so it makes sense that you may not remember and that's why I'm calling... <span class="smallfont">(continue no hesitation)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>How long is this going to take?</span><div class="rebuttal-answer">
+Not long at all...especially since it's on Zoom now...it's super quick… <span class="smallfont">(continue no hesitation)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Why does my spouse have to be there...</span><div class="rebuttal-answer">
+The reason your spouse needs to be there is because these benefits pertain to both of you and for me to do my job properly, I need to speak with you both. <span class="smallfont">(continue no hesitation)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Just mail it...</span><div class="rebuttal-answer">
+I sure wish we could. We moved everything to digital delivery for your health and safety and that delivery needs to be done by someone licensed to do this kind of work in the state of Texas--which I am. I have to request your activation using our Benefit Software and I'm not allowed to do that over the phone... <span class="smallfont">(continue no hesitation)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Not interested...</span><div class="rebuttal-answer">
+Since it's been a little while and you hadn't responded to get your renewal, that's why they asked me to contact you personally about this--you'll see why everyone loves this package so much and TRUST ME, it doesn't take long. Plus, I think you'd definitely use this...and it's at NO-COST to you...and honestly you'd really be helping me out… <span class="smallfont">(continue no hesitation)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Are you going to try to sell me something...</span><div class="rebuttal-answer">
+It's just my job to deliver and explain your benefits...I can't make you do anything you don't want to do--I'm not that good! So my job, like the letter said, is to deliver and explain your no-cost benefits, and answer your questions...if I can't help you, I promise I won't hurt you. I'm a super nice guy/gal I promise... <span class="smallfont">(continue no hesitation)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>If they sound nervous or hesitant (trust issue)...</span><div class="rebuttal-answer">
+So you know we are very proud to be the exclusive provider of the AIL Plus Program. It's part of the reason that 20,000 groups like Police, Firefighters, and Teachers trust us and us alone to handle these kinds of benefits; it's just my job to explain what's been set up for you and to handle your renewal…it doesn't take long at all and I promise I'm really nice… <span class="smallfont">(continue no hesitation)</span></div></p>                            </span>
+                    <span class="script-type AILPLUS-NONCUST" style="display: none;">
+                                    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>After first objection where there is ANY confusion…</span><div class="rebuttal-answer">
+Do you happen to have a copy of the letter you received about the renewal?...OK that's probably why you're a little bit confused and that's why they asked me to call you personally about this...it's not something you want to lose because it covers gaps your health insurance doesn't… <span class="smallfont">(continue no hesitation)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>If they don't remember the letter or filling out the card…</span><div class="rebuttal-answer">
+Like I said, you absolutely had an active membership but you just didn't use the card the required number of times, so it makes sense that you may not remember and that's why I'm calling... <span class="smallfont">(continue no hesitation)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>How long is this going to take?</span><div class="rebuttal-answer">
+Not long at all...especially since it's on Zoom now...it's super quick… <span class="smallfont">(continue no hesitation)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Why does my spouse have to be there...</span><div class="rebuttal-answer">
+The reason your spouse needs to be there is because these benefits pertain to both of you and for me to do my job properly, I need to speak with you both. <span class="smallfont">(continue no hesitation)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Just mail it...</span><div class="rebuttal-answer">
+I sure wish we could. We moved everything to digital delivery for your health and safety and that delivery needs to be done by someone licensed to do this kind of work in the state of Texas--which I am. I have to request your activation using our Benefit Software and I'm not allowed to do that over the phone... <span class="smallfont">(continue no hesitation)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Not interested...</span><div class="rebuttal-answer">
+Since it's been a little while and you hadn't responded to get your renewal, that's why they asked me to contact you personally about this--you'll see why everyone loves this package so much and TRUST ME, it doesn't take long. Plus, I think you'd definitely use this...and it's at NO-COST to you...and honestly you'd really be helping me out… <span class="smallfont">(continue no hesitation)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Are you going to try to sell me something...</span><div class="rebuttal-answer">
+It's just my job to deliver and explain your benefits...I can't make you do anything you don't want to do--I'm not that good! So my job, like the letter said, is to deliver and explain your no-cost benefits, and answer your questions...if I can't help you, I promise I won't hurt you. I'm a super nice guy/gal I promise... <span class="smallfont">(continue no hesitation)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>If they sound nervous or hesitant (trust issue)...</span><div class="rebuttal-answer">
+So you know we are very proud to be the exclusive provider of the AIL Plus Program. It's part of the reason that 20,000 groups like Police, Firefighters, and Teachers trust us and us alone to handle these kinds of benefits; it's just my job to explain what's been set up for you and to handle your renewal…it doesn't take long at all and I promise I'm really nice… <span class="smallfont">(continue no hesitation)</span></div></p>                            </span>
+                    <span class="script-type FE" style="display: none;">
+                                    <p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>I'm not interested.</span><div class="rebuttal-answer">
+No problem at all! Were you looking for life insurance for yourself or someone else? <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>How is it free? Why is it free?</span><div class="rebuttal-answer">
+That's a great question! The health discount card is free to you because it's fully sponsored by organizations like the International union of police, EMS Workers United, and other partnerships. These organizations work together to provide valuable benefits to first responders like yourself as a way of giving back and showing appreciation for your service. It's part of their commitment to supporting the first responder community, so there's no cost to you at all. Does that help clarify things? <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Why do we have to meet a benefits coordinator?</span><div class="rebuttal-answer">
+I'm glad you asked <span class="VERBALChar memberOutput">(Member)</span>! The benefits coordinator's role is to walk you through how to maximize the discounts and answer any specific questions you might have. It's quick and ensures you don't miss anything important. <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>You're not going to try and sell me anything are you?</span><div class="rebuttal-answer">
+You must be talking about the permanent benefits option, <span class="VERBALChar memberOutput">(Member)</span>. This isn't about selling anything—it's simply about making sure you get the free health discount card you requested and how to take advantage of it. That's it, there is no obligation to buy anything. <span class="smallfont">(back to script)</span></div></p>
+<p class="rebuttal-item collapsed"><span class="ConditionalChar"><i class="fas fa-chevron-right rebuttal-chevron"></i>Why do we have to do it by zoom or virtual call?</span><div class="rebuttal-answer">
+That's a great question! We do it virtually to make it as easy as possible for you. It saves time, ensures everything is explained clearly, and you don't even have to leave the comfort of your home. <span class="smallfont">(back to script)</span></div></p>                            </span>
+                </div>
+    </div>
+</div>
+</div>
+<div class="modal-overlay" id="leadGlossaryOverlay" onclick="closeLeadGlossary()"></div>
+<div class="lead-glossary-modal modal-panel" id="leadGlossaryModal"><div class="lead-glossary-content"><h2>Lead Glossary</h2><p>(trimmed from the fixture)</p></div>
+    <button type="button" class="ts-close fixed-top-right" aria-label="Close lead glossary" translate="no" onclick="closeLeadGlossary()">✕</button>
+</div>
+</body></html>

@@ -11,6 +11,7 @@ import { scriptFieldsFromLead } from './script-fields.js';
 
 const SCRIPT_LEAD_KEY = 'impact.scriptLead';
 const SCRIPT_FILL_CONTENT_SCRIPT = 'src/content/salebase-personalize.js';
+const CALM_SCRIPT_CONTENT_SCRIPT = 'src/content/salebase-calm.js';
 const IMPACT_LEAD_PAGE = /^https:\/\/mobile\.impact\.ailife\.com\/Lead\/(InboxDetail|WhatHappend|SetAppointment)(?:[?#]|$)/;
 
 let lastAutoPublishFingerprint = "";
@@ -638,7 +639,7 @@ async function clearScriptLead() {
 
 async function injectScriptFill() {
   const tabs = await findSalebaseScriptTabs(chrome).catch(() => []);
-  await Promise.all(tabs.map((tab) => chrome.scripting.executeScript({ target: { tabId: tab.id }, files: [SCRIPT_FILL_CONTENT_SCRIPT] }).catch(() => {})));
+  await Promise.all(tabs.map((tab) => chrome.scripting.executeScript({ target: { tabId: tab.id }, files: [SCRIPT_FILL_CONTENT_SCRIPT, CALM_SCRIPT_CONTENT_SCRIPT] }).catch(() => {})));
 }
 
 function makeLeadFingerprint(lead) {
