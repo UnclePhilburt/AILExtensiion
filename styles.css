@@ -105,6 +105,9 @@ html[data-bg="aurora"], [data-bg-swatch="aurora"] { --page-bg: linear-gradient(1
 html[data-bg="ocean"], [data-bg-swatch="ocean"] { --page-bg: linear-gradient(180deg, #0b2545 0%, #133f5d 55%, #1a6272 100%); --page-base: #1a6272; }
 html[data-bg="dusk"], [data-bg-swatch="dusk"] { --page-bg: linear-gradient(165deg, #161a33 0%, #372b58 60%, #553a68 100%); --page-base: #553a68; }
 html[data-bg="sunset"], [data-bg-swatch="sunset"] { --page-bg: linear-gradient(165deg, #2c1a3c 0%, #672b45 55%, #8e4433 100%); --page-base: #8e4433; }
+html[data-bg="sand"], [data-bg-swatch="sand"] { --page-bg: linear-gradient(165deg, #d6c09a 0%, #b99566 100%); --page-base: #b99566; --page-ink: #53432d; --panel-bg: #fff8eb; }
+html[data-bg="linen"], [data-bg-swatch="linen"] { --page-bg: linear-gradient(165deg, #d8d0bb 0%, #a99978 100%); --page-base: #a99978; --page-ink: #4c463a; --panel-bg: #fffaf0; }
+html[data-bg="clay"], [data-bg-swatch="clay"] { --page-bg: linear-gradient(165deg, #bd8e72 0%, #8e614c 100%); --page-base: #8e614c; --page-ink: #fff4e9; --panel-bg: #fff8f1; }
 
 /* Home settings gear */
 .homeTop { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
@@ -241,3 +244,26 @@ html[data-bg] .workspace .navControls button:disabled { border: 1px solid #fffff
 .workspace .leadCard { position: relative; }
 .workspace .leadGhost { position: absolute; inset: 0; padding: inherit; overflow: hidden; pointer-events: none; }
 .workspace .leadCard.leadMoving { overflow-x: clip; }
+
+/* Phone appearance settings. Parchment changes only the lead surface; dark
+   mode lowers glare across every page without changing the call-action colors. */
+html[data-lead-paper="beige"] .workspace .leadCard { background: #f7eedc; border-color: #e0ceb0; box-shadow: 0 1px 2px #5d48251a, 0 14px 34px #5d482522; }
+html[data-lead-paper="beige"] .workspace .leadCard h2 { color: #443525; }
+html[data-lead-paper="beige"] .workspace .requestBadge { background: #ebdcc2; color: #69502e; }
+html[data-lead-paper="beige"] .workspace .leadNotes { background: #f2e6d1; box-shadow: inset 3px 0 0 #b89564; }
+html[data-theme="dark"] { color-scheme: dark; --page-bg: #121714; --page-base: #121714; --page-ink: #b6c4bc; --panel-bg: #202823; }
+html[data-theme="dark"] body { background: #121714; color: #e4ebe6; }
+html[data-theme="dark"] .wsBand, html[data-theme="dark"] .homeBand { background-color: #172a23; background-image: radial-gradient(70% 90% at 12% 0%, #28523f 0%, #28523f00 70%); }
+html[data-theme="dark"] :is(.settingsCard,.homeMain,.homeShortcuts,.workspace .leadCard,.workspace .bridgeSetup,.workspace .appointmentPicker,.workspace .historyCard,.workspace .controls,.historyCard) { background: #202823; border-color: #34433a; box-shadow: 0 8px 28px #00000033; color: #e2e9e4; }
+html[data-theme="dark"] :is(.settingsCardHead h2,.settingText strong,.settingSelect,.workspace .leadCard h2,.workspace .sideHead h2) { color: #edf4ef; }
+html[data-theme="dark"] :is(.settingText small,.hint,.settingsIntro,.workspace .leadCard.empty,.workspace .historyHint) { color: #b0c0b6; }
+html[data-theme="dark"] :is(.settingRow,.workspace .headsUpChip,.workspace .leadNotes) { border-color: #34433a; }
+html[data-theme="dark"] .settingSelect, html[data-theme="dark"] .segmented { background: #18201b; border-color: #405046; color: #edf4ef; }
+html[data-theme="dark"] .segment:has(input:checked) { background: #2d3c33; color: #d8f2e1; }
+html[data-theme="dark"] .workspace .headsUpChip, html[data-theme="dark"] .workspace .leadNotes { background: #29342e; color: #d8e3dc; }
+html[data-theme="dark"] .workspace .navControls button { background: #27322c; color: #e2ece5; box-shadow: none; }
+html[data-theme="dark"] .workspace #nextLead:not(:disabled) { background: #31543f; color: #e4f4e8; }
+html[data-theme="dark"] .workspace #bestNextLead:not(:disabled) { background: #5d4825; color: #fff1cf; }
+html[data-theme="dark"] .workspace .controls button { background: #27322c; border-color: #405046; color: #e2ece5; }
+html[data-theme="dark"][data-lead-paper="beige"] .workspace .leadCard { background: #332c22; border-color: #5d4c33; }
+html[data-theme="dark"][data-lead-paper="beige"] .workspace .leadCard h2 { color: #f4e4c7; }

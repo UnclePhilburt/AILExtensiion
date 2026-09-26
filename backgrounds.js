@@ -19,6 +19,9 @@ export const BACKGROUNDS = [
   { id: 'ocean', label: 'Ocean', kind: 'gradient' },
   { id: 'dusk', label: 'Dusk', kind: 'gradient' },
   { id: 'sunset', label: 'Sunset', kind: 'gradient' }
+  , { id: 'sand', label: 'Sand', kind: 'light' }
+  , { id: 'linen', label: 'Linen', kind: 'light' }
+  , { id: 'clay', label: 'Clay', kind: 'light' }
 ];
 
 // A known background id, or the default for anything else (missing, removed, junk).
