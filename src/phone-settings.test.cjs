@@ -12,7 +12,7 @@ function memoryStorage(initial = {}) {
   const data = { ...initial };
   return { data, getItem: (k) => (k in data ? data[k] : null), setItem: (k, v) => { data[k] = String(v); }, removeItem: (k) => { delete data[k]; } };
 }
-const DEFAULTS = { swipeLeads: true, keepAwake: true, vibrate: true, confirmResults: true, textSize: 'normal', showHeadsUp: true, showDoNotKnock: true, autoSkipQuietHours: false, showEncouragement: true, encourageAfterResults: true, organization: 'shaefinator', darkMode: false, beigeLeadCard: false };
+const DEFAULTS = { swipeLeads: true, keepAwake: true, vibrate: true, confirmResults: true, textSize: 'normal', showHeadsUp: true, showDoNotKnock: true, autoSkipQuietHours: false, showEncouragement: true, encourageAfterResults: true, organization: 'shaefinator', darkMode: false, beigeLeadCard: false, bestNextLead: false };
 
 test('defaults: everything on, Normal text, one JSON key', () => {
   assert.equal(store.SETTINGS_KEY, 'impact.phoneSettings');
@@ -48,7 +48,8 @@ test('the boot script sets the same <html> attributes as settings-store.js, befo
   const cases = [
     {}, { textSize: 'large' }, { textSize: 'xlarge', showHeadsUp: false }, { showDoNotKnock: false },
     { textSize: 'huge', showHeadsUp: 'no', showDoNotKnock: 0 }, { showHeadsUp: false, showDoNotKnock: false, textSize: 'normal' },
-    { darkMode: true, beigeLeadCard: true, swipeLeads: false }, { darkMode: 'yes', beigeLeadCard: 1, swipeLeads: 'no' }
+    { darkMode: true, beigeLeadCard: true, swipeLeads: false }, { darkMode: 'yes', beigeLeadCard: 1, swipeLeads: 'no' },
+    { bestNextLead: true }, { bestNextLead: 'yes' }, { bestNextLead: false, darkMode: true }
   ];
   for (const saved of cases) {
     const attrs = {}; const listeners = {};
@@ -77,10 +78,10 @@ test('the CSS implements every display setting', () => {
 
 test('the settings page has a control for every setting, and the back link only goes to known pages', () => {
   const html = read('settings.html');
-  for (const id of ['bgGrid', 'swipeLeads', 'darkMode', 'beigeLeadCard', 'keepAwake', 'vibrate', 'confirmResults', 'textSize', 'organization', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'resetSettings', 'savedHint', 'settingsBack']) assert.match(html, new RegExp(`id="${id}"`), id);
+  for (const id of ['bgGrid', 'swipeLeads', 'darkMode', 'beigeLeadCard', 'bestNextLead', 'keepAwake', 'vibrate', 'confirmResults', 'textSize', 'organization', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'resetSettings', 'savedHint', 'settingsBack']) assert.match(html, new RegExp(`id="${id}"`), id);
   assert.doesNotMatch(html, /Bad Number/, 'Bad Number is not wired to IMPACT, so it is not offered');
   const js = read('settings.js');
-  assert.match(js, /const SWITCHES = \['swipeLeads', 'keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard'\];/);
+  assert.match(js, /const SWITCHES = \['swipeLeads', 'keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard', 'bestNextLead'\];/);
   assert.match(js, /BACK\[new URLSearchParams\(location\.search\)\.get\('from'\)\] \|\| BACK\.workspace/);
   assert.match(js, /'workspace-local': \['workspace\.html\?mode=local'/);
 });

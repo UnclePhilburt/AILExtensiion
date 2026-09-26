@@ -55,7 +55,7 @@ export function friendlySendError(message, type) {
   const text = String(message || '');
   if (isNetworkFailure(text)) return NETWORK_MESSAGE;
   if (/lead changed/i.test(text)) {
-    return ['next', 'previous'].includes(type)
+    return ['next', 'previous', 'best-next'].includes(type)
       ? 'Your phone was still catching up to IMPACT. Check the lead shown and tap again.'
       : 'IMPACT is on a different lead now. Check the lead on your phone and try again.';
   }

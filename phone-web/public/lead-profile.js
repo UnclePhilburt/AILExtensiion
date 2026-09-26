@@ -15,11 +15,6 @@ export function buildLeadProfile(card, history, lead, expanded = false) {
   bio.append(body);
   const hero = document.createElement('div');
   hero.className = 'profileHero';
-  const monogram = document.createElement('div');
-  monogram.className = 'profileMonogram';
-  monogram.setAttribute('aria-hidden', 'true');
-  monogram.textContent = String(lead.leadName || '?').split(/[\s,]+/).filter(Boolean).slice(0, 2).map(word => [...word][0]).join('').toUpperCase();
-  hero.append(monogram);
   for (const item of [...card.children]) {
     if (item.matches('.requestBadge,h2')) hero.append(item);
   }
