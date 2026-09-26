@@ -27,7 +27,11 @@ const detailActions = [
   ["#noShow", "no-show"],
   ["#sendText", "send-text"],
   ["#droppedBy", "dropped-by"],
-  ["#addComments", "add-comments"]
+  ["#addComments", "add-comments"],
+  ["#inHome", "in-home"],
+  ["#callBack", "call-back"],
+  ["#leftMessage", "left-message"],
+  ["#dropbyAppointment", "dropby-appointment"]
 ].map(([selector, type]) => ({ button: document.querySelector(selector), type }));
 const virtualAppointmentButton = document.querySelector("#virtualAppointment");
 const refusedAppointmentButton = document.querySelector("#refusedAppointment");
