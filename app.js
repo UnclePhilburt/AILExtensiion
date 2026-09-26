@@ -1,5 +1,5 @@
 import { buildLeadProfile } from './lead-profile.js';
-import { installLeadSwipe } from './lead-swipe.js';
+import { installLeadSwipe } from './lead-swipe.js?v=3';
 import { client, accessToken } from './auth-runtime.js';
 import { cloudEnabled, cloudState, cloudTouchPhone, cloudSend, watchCloud, visibleLead, isOnline } from './cloud-sync.js';
 import { NETWORK_MESSAGE, SIGN_IN_MESSAGE, RESULT_COMMANDS, checkBeforeSend, isStateFresh, isAuthFailure, isNetworkFailure, friendlySendError, withTimeout } from './phone-actions.js';
