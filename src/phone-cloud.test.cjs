@@ -9,6 +9,7 @@ const leadHighlightsSource=(require('node:fs').readFileSync(require('node:path')
 const leadRulesSource=require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/lead-rules.js'),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
 const settingsStoreSource=require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/settings-store.js'),'utf8').replace(/^export /gm,'');
 const leadTransitionSource=require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/lead-transition.js'),'utf8').replace(/^export /gm,'');
+const leadSwipeSource=require('node:fs').readFileSync(require('node:path').join(__dirname,'../phone-web/public/lead-swipe.js'),'utf8').replace(/^export /gm,'');
 const pendingCallSource=fs.readFileSync(path.join(__dirname,'../phone-web/public/pending-call.js'),'utf8').replace(/^export /gm,'');
 test('phone cloud flow shows live leads, collapses history for a call and clears on logout', async()=>{
   const elements=new Map();
@@ -27,7 +28,7 @@ test('phone cloud flow shows live leads, collapses history for a call and clears
     localStorage:{getItem:()=>null,setItem(){}},location:{search:'',origin:'https://example.test',replace:url=>{redirected=url;}},
     URLSearchParams, Date, crypto:require('node:crypto'), setInterval(){},setTimeout(){}, console
   });
-  vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context); vm.runInContext(leadHighlightsSource,context); vm.runInContext(leadRulesSource,context); vm.runInContext(settingsStoreSource,context); vm.runInContext(leadTransitionSource,context);
+  vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context); vm.runInContext(leadHighlightsSource,context); vm.runInContext(leadRulesSource,context); vm.runInContext(settingsStoreSource,context); vm.runInContext(leadTransitionSource,context); vm.runInContext(leadSwipeSource,context);
   const source=fs.readFileSync(path.join(__dirname,'../phone-web/public/app.js'),'utf8').replace(/^import .*;\r?\n/gm,'');
   const app=await vm.runInContext(`(async()=>{${source}\nreturn {refreshCloud,receiveBridgeLead};})()`,context);
   authChanged('SIGNED_IN',{user:{id:'test-user'}});
@@ -67,7 +68,7 @@ test('phone locks Previous/Next until the moved-to lead arrives, so stale taps a
     localStorage:{getItem:()=>null,setItem(){}},location:{search:'',origin:'https://example.test',replace(){}},
     URLSearchParams, Date, crypto:require('node:crypto'), setInterval(){},setTimeout(){}, console
   });
-  vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context); vm.runInContext(leadHighlightsSource,context); vm.runInContext(leadRulesSource,context); vm.runInContext(settingsStoreSource,context); vm.runInContext(leadTransitionSource,context);
+  vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context); vm.runInContext(leadHighlightsSource,context); vm.runInContext(leadRulesSource,context); vm.runInContext(settingsStoreSource,context); vm.runInContext(leadTransitionSource,context); vm.runInContext(leadSwipeSource,context);
   const source=fs.readFileSync(path.join(__dirname,'../phone-web/public/app.js'),'utf8').replace(/^import .*;\r?\n/gm,'');
   const app=await vm.runInContext(`(async()=>{${source}\nreturn {refreshCloud};})()`,context);
   authChanged('SIGNED_IN',{user:{id:'test-user'}});
@@ -105,7 +106,7 @@ test('phone refetches on realtime (re)subscribe, rebuilds a failed channel, and 
     localStorage:{getItem:()=>null,setItem(){}},location:{search:'',origin:'https://example.test',replace(){}},
     URLSearchParams, Date, crypto:require('node:crypto'), setInterval(){},setTimeout:(fn,ms)=>{timers.push({fn,ms});return timers.length;}, clearTimeout(){}, console
   });
-  vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context); vm.runInContext(leadHighlightsSource,context); vm.runInContext(leadRulesSource,context); vm.runInContext(settingsStoreSource,context); vm.runInContext(leadTransitionSource,context);
+  vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context); vm.runInContext(leadHighlightsSource,context); vm.runInContext(leadRulesSource,context); vm.runInContext(settingsStoreSource,context); vm.runInContext(leadTransitionSource,context); vm.runInContext(leadSwipeSource,context);
   const source=fs.readFileSync(path.join(__dirname,'../phone-web/public/app.js'),'utf8').replace(/^import .*;\r?\n/gm,'');
   const app=await vm.runInContext(`(async()=>{${source}\nreturn {refreshCloud,sendComputerCommand};})()`,context);
   authChanged('SIGNED_IN',{user:{id:'test-user'}});

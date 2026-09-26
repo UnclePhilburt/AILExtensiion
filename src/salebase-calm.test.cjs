@@ -35,9 +35,9 @@ test('manifest loads the calm view after personalisation on the script page, and
   assert.match(worker, /files: \[SCRIPT_FILL_CONTENT_SCRIPT, CALM_SCRIPT_CONTENT_SCRIPT\]/);
 });
 
-test('"Calm script view" popup toggle defaults on and is stored like the other settings', () => {
+test('"Easy-read script view" popup toggle (the calm view) defaults on and is stored like the other settings', () => {
   const html = read('extension/src/popup/popup.html');
-  assert.match(html, /<h2 id="calmViewTitle">Calm script view<\/h2>/);
+  assert.match(html, /<h2 id="calmViewTitle">Easy-read script view<\/h2>/);
   assert.match(html, /<input id="calmScripts" type="checkbox" role="switch" checked>/);
   const popup = read('extension/src/popup/popup.js');
   assert.match(popup, /stored\['impact\.calmScripts'\] !== false/);

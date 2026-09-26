@@ -136,7 +136,7 @@ async function loadWorkspace(){
     URLSearchParams, Date:FakeDate, JSON, crypto:require('node:crypto'), structuredClone,
     setInterval(){}, setTimeout(){return 0;}, clearTimeout(){}, console
   });
-  for(const file of ['time-zone.js','pending-call.js','phone-actions.js','lead-highlights.js','lead-rules.js','settings-store.js','lead-transition.js']) vm.runInContext(strip(read(file)),context);
+  for(const file of ['time-zone.js','pending-call.js','phone-actions.js','lead-highlights.js','lead-rules.js','settings-store.js','lead-transition.js','lead-swipe.js']) vm.runInContext(strip(read(file)),context);
   // Record what app.js asks for, and what the card shows at that moment.
   context.playLeadTransition=(card,kind)=>{played.push({kind,name:card.children.find(c=>c.textContent&&/Fictional/.test(c.textContent))?.textContent});};
   const app=await vm.runInContext(`(async()=>{${strip(read('app.js'))}\nreturn {refreshCloud};})()`,context);
