@@ -1,5 +1,5 @@
 import { client } from './auth-runtime.js';
-import { CLOSED_MESSAGE, callingHoursOpen } from './work-hours.js';
+import { CLOSED_MESSAGE, callingHoursOpen } from './work-hours.js?v=2';
 
 async function closeIfNeeded() {
   if (callingHoursOpen()) return;
