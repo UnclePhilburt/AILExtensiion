@@ -21,7 +21,7 @@ const OBJECTION_STATUS = {
   'page-not-reachable': 'Stopped at: talking to the Salebase page. Reload the Salebase tab and try again.',
   'page-error': 'Stopped at: opening the panel. The Salebase page script failed.',
   'rebuttal-not-found': 'Stopped at: finding the panel. That rebuttal was not found on the Salebase page.',
-  'other-script': 'Not in the selected script — the calm view shows it from another script.',
+  'other-script': 'Not in the selected script — the easy-read view shows it from another script.',
   'not-in-script': 'The selected script has no rebuttal for this.',
   error: 'Stopped at: opening the rebuttal. Something went wrong.'
 };
@@ -124,11 +124,11 @@ function renderScriptStatus(entry) {
 }
 chrome.storage.session.get('impact.scriptSelect').then((stored) => renderScriptStatus(stored['impact.scriptSelect'])).catch(() => {});
 chrome.storage.onChanged.addListener((changes, area) => { if (area === 'session' && changes['impact.scriptSelect']) renderScriptStatus(changes['impact.scriptSelect'].newValue); });
-// Calm script view over the Salebase page (on unless turned off; applies live).
+// Easy-read script view over the Salebase page (on unless turned off; applies live).
 chrome.storage.local.get('impact.calmScripts').then((stored) => { $('#calmScripts').checked = stored['impact.calmScripts'] !== false; });
 $('#calmScripts').addEventListener('change', (event) => {
   void chrome.storage.local.set({ 'impact.calmScripts': event.target.checked });
-  say(event.target.checked ? 'The Salebase script shows in the calm view.' : 'The Salebase script shows as the original page.');
+  say(event.target.checked ? 'The Salebase script now uses the easy-read view.' : 'The Salebase script shows as the original page.');
 });
 $('#fillScript').addEventListener('change', (event) => {
   void chrome.storage.local.set({ 'impact.fillScript': event.target.checked });
