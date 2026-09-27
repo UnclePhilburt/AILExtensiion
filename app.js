@@ -2,7 +2,7 @@ import { buildLeadProfile } from './lead-profile.js';
 import { installLeadSwipe } from './lead-swipe.js?v=5';
 import { createScriptOverlay } from './script-overlay.js?v=5';
 import { client, accessToken } from './auth-runtime.js';
-import { cloudEnabled, cloudState, cloudTouchPhone, cloudSend, watchCloud, visibleLead, isOnline } from './cloud-sync.js';
+import { cloudEnabled, cloudState, cloudTouchPhone, cloudSend, watchCloud, visibleLead, slotView, isOnline } from './cloud-sync.js';
 import { NETWORK_MESSAGE, SIGN_IN_MESSAGE, RESULT_COMMANDS, checkBeforeSend, isStateFresh, isAuthFailure, isNetworkFailure, friendlySendError, withTimeout } from './phone-actions.js';
 import { buildHeadsUp, splitHistory, localTimeNote, hasScheduledAppointment } from './lead-highlights.js?v=2';
 import { doNotKnockWarning, requestTypeLabel } from './lead-rules.js';
@@ -245,7 +245,7 @@ async function connectLiveUpdates() {
         if (frame.includes('event: auth-required')) throw new Error('Your account session expired. Sign in again.');
         const payload = JSON.parse(data.slice(6));
         if (frame.includes('event: command-result')) receiveComputerResult(payload.message);
-        else { eventsConnected = true; receiveBridgeLead(payload.lead, payload.updatedAt); }
+        else { eventsConnected = true; const shown = leadFromBridge(payload); receiveBridgeLead(shown.lead, shown.updatedAt); }
       }
     }
   } catch (error) {
@@ -308,7 +308,7 @@ async function refreshLead() {
       throw new Error(payload.error || `HTTP ${response.status}`);
     }
 
-    if (signedIn && !eventsConnected) receiveBridgeLead(payload.lead, payload.updatedAt);
+    if (signedIn && !eventsConnected) { const shown = leadFromBridge(payload); receiveBridgeLead(shown.lead, shown.updatedAt); }
   } catch (error) {
     statusEl.textContent = error.message;
   }
@@ -339,16 +339,36 @@ async function refreshCloud() {
   } finally { if (cloudReadBusy === startedAt) cloudReadBusy = 0; }
 }
 
+function thisPhoneSlot() {
+  return loadPhoneSettings(localStorage).phoneSlot === '2' ? '2' : '1';
+}
+
+function leadFromBridge(payload) {
+  const slot = thisPhoneSlot();
+  const packed = payload?.slots?.[slot];
+  if (packed?.lead) return { lead: packed.lead, updatedAt: packed.updatedAt };
+  if (slot === '2') return { lead: null, updatedAt: null };
+  return { lead: payload?.lead || null, updatedAt: payload?.updatedAt || null };
+}
+
 function applyCloudState(state, startedAt) {
   // Never let an older response overwrite a newer one.
   if (startedAt < lastCloudFetchAt) return false;
   lastCloudFetchAt = startedAt;
-  currentCloudState = state;
-  receiveBridgeLead(visibleLead(state), state?.lead_updated_at);
+  const slot = thisPhoneSlot();
+  const view = slotView(state, slot);
+  currentCloudState = view;
+  const slotLabel = document.querySelector('#phoneSlotLabel');
+  if (slotLabel) slotLabel.textContent = slot === '2' ? 'Phone 2' : 'Phone 1';
+  receiveBridgeLead(visibleLead(state, slot), view?.lead_updated_at);
   if (!isOnline(state?.desktop_seen)) statusEl.textContent = 'Open IMPACT on your computer to connect.';
-  else if (!visibleLead(state)) {
-    statusEl.textContent = "Your computer is connected but hasn't sent a lead recently.";
-    leadCard.textContent = "Your computer is connected, but IMPACT hasn't sent a current lead. Open the lead in IMPACT on your computer." +
+  else if (!visibleLead(state, slot)) {
+    statusEl.textContent = slot === '2'
+      ? 'Open a second IMPACT window on your computer. This phone controls that window.'
+      : "Your computer is connected but hasn't sent a lead recently.";
+    leadCard.textContent = (slot === '2'
+      ? 'Phone 2 is waiting for its own IMPACT window. Open IMPACT again so two windows are showing.'
+      : "Your computer is connected, but IMPACT hasn't sent a current lead. Open the lead in IMPACT on your computer.") +
       (pendingCall ? ` Your call to ${pendingCall.leadName || "your last lead"} is saved.` : "");
   }
   const result = state?.result;
@@ -654,6 +674,10 @@ async function sendComputerCommand(type, details = {}) {
   if (!signedIn) { showFeedback("You're signed out. Sign in again to continue.", "error"); return false; }
   showFeedback(commandProgressMessage(type, details), "loading", 12000);
   try {
+    const slot = thisPhoneSlot();
+    const lineId = loadPhoneSettings(localStorage).phoneLineId || '';
+    if (lineId && !details.healthNumberId && ['call', 'no-answer', 'refused-appointment', 'virtual-appointment-slot'].includes(type)) details = { ...details, healthNumberId: lineId };
+    details = { slot, ...details };
     if (useCloud) {
       const command = { type, leadId: displayedLead?.leadId, ...details };
       const state = await stateForSend();
@@ -697,7 +721,7 @@ async function sendComputerCommand(type, details = {}) {
     // Local bridge actions bypass companion_send, which records cloud calls atomically.
     if (details.healthCallId && ['call', 'no-answer', 'refused-appointment', 'virtual-appointment-slot'].includes(type)) {
       try {
-        const { error } = await client.rpc('calling_number_record', { p_call: details.healthCallId, p_type: type });
+        const { error } = await client.rpc('calling_number_record', { p_call: details.healthCallId, p_type: type, ...(details.healthNumberId ? { p_number: details.healthNumberId } : {}) });
         if (error) throw error;
       } catch {
         showFeedback('Action sent, but calling-number stats could not be saved. Check your connection.', 'error');

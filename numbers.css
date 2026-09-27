@@ -27,6 +27,7 @@
 .numbersPage .numberActions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .numbersPage .numberActions button { min-height: 46px; border-radius: 14px; }
 .numbersPage .numberActions button.secondary { background: transparent; }
+.numbersPage .numberActions button:nth-child(3) { grid-column: 1 / -1; }
 .numbersPage .spamRemoval, .numbersPage .archivedNumbers { border-top: 1px solid #eadfce; }
 .numbersPage .spamRemoval summary, .numbersPage .archivedNumbers > summary { min-height: 44px; display: flex; align-items: center; color: #17684e; font-weight: 750; cursor: pointer; }
 .numbersPage .spamRemoval { display: grid; gap: 8px; }

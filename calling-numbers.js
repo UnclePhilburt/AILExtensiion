@@ -1,6 +1,7 @@
 import { client } from './auth-runtime.js';
 import { normalizeCallingNumber, formatCallingNumber, numberHealth } from './calling-numbers-model.js?v=1';
 import { applyUserName } from './user-name.js';
+import { loadPhoneSettings, savePhoneSettings } from './settings-store.js';
 
 // Carrier forms open in the browser. Companion does not send the number.
 const SPAM_REMOVAL = [
@@ -75,6 +76,18 @@ function numberCard(number, stats) {
     archive.className = 'secondary';
     archive.addEventListener('click', () => void run(() => manage(number.id, 'archive')));
     actions.append(active, archive);
+    const mine = typeof loadPhoneSettings === 'function' && loadPhoneSettings(localStorage).phoneLineId === number.id;
+    const use = node('button', mine ? 'This phone dials this' : 'Use on this phone');
+    use.type = 'button';
+    use.className = 'secondary';
+    use.disabled = mine;
+    use.addEventListener('click', () => {
+      if (typeof savePhoneSettings === 'function') savePhoneSettings(localStorage, { phoneLineId: number.id });
+      status.textContent = 'This phone will count new calls on this number.';
+      use.textContent = 'This phone dials this';
+      use.disabled = true;
+    });
+    actions.append(use);
     card.append(actions);
   }
   card.append(spamRemoval(formatCallingNumber(number.phone)));
