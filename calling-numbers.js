@@ -32,45 +32,75 @@ function node(tag, text, className) {
 function controls(disabled) { section.querySelectorAll('button,input').forEach(item => { item.disabled = disabled; }); }
 function render(numbers, stats) {
   list.replaceChildren();
-  if (!numbers.length) list.append(node('p', 'No calling numbers saved. Add a number, then set it active before your next call.'));
-  for (const number of numbers) {
-    const card = node('article', '', 'callingNumberCard');
-    card.append(node('h3', formatCallingNumber(number.phone)), node('p', `${number.label || 'Calling number'} · ${number.active ? 'Active for new calls' : number.archived ? 'Archived · history saved' : 'Not active'}`, 'numberState'));
-    if (stats) {
-      const health = numberHealth(stats, number.id);
-      const badge = node('p', `Estimated health: ${health.estimateLabel}`, `healthEstimate ${health.estimate}`);
-      const grid = node('dl', '', 'numberMetrics');
-      for (const [label,value] of [['Calls started',health.calls],['Answered',health.answered],['No answer',health.no_answer],['No-answer rate',health.noAnswerRate],['Appointment rate',health.appointmentRate],['Appointments',health.appointments],['Refused',health.refused]]) {
-        const item = node('div',''); item.append(node('dt',label),node('dd',String(value))); grid.append(item);
-      }
-      card.append(badge, node('p','Last 30 days','numberPeriod'), grid,
-        node('p', health.estimateDetail),
-        node('p',`${health.missing} calls without a recorded result. Rates use recorded results only.`),node('p',health.trend));
-    } else card.append(node('p','Statistics are unavailable. Refresh to try again.'));
-    if (!number.archived) {
-      const actions = node('div','','numberActions');
-      const active = node('button',number.active ? 'Stop tracking new calls' : 'Set active'); active.type='button';
-      active.addEventListener('click',()=>void run(()=>manage(number.id,number.active?'pause':'activate')));
-      const archive = node('button','Archive'); archive.type='button'; archive.className='secondary';
-      archive.addEventListener('click',()=>void run(()=>manage(number.id,'archive')));
-      actions.append(active,archive); card.append(actions);
-    }
-    card.append(spamRemoval(formatCallingNumber(number.phone)));
-    list.append(card);
+  if (!numbers.length) {
+    list.append(node('p', 'No calling numbers saved. Add one above, then set it active before the next call.', 'emptyNumbers'));
+    return;
   }
+  const live = numbers.filter((number) => !number.archived).sort((a, b) => Number(b.active) - Number(a.active));
+  const archived = numbers.filter((number) => number.archived);
+  for (const number of live) list.append(numberCard(number, stats));
+  if (!archived.length) return;
+  const box = document.createElement('details');
+  box.className = 'archivedNumbers';
+  box.append(node('summary', `Archived (${archived.length})`));
+  for (const number of archived) box.append(numberCard(number, stats));
+  list.append(box);
 }
+
+function numberCard(number, stats) {
+  const card = node('article', '', `callingNumberCard${number.active ? ' isActive' : ''}`);
+  const top = document.createElement('div');
+  top.className = 'cardTop';
+  const state = number.active ? 'Active for new calls' : number.archived ? 'Archived · history saved' : 'Not in use';
+  if (stats) {
+    const health = numberHealth(stats, number.id);
+    top.append(node('p', health.estimateLabel, `healthEstimate ${health.estimate}`), node('p', state, 'numberState'));
+    card.append(top, node('h3', formatCallingNumber(number.phone)));
+    if (number.label) card.append(node('p', number.label, 'numberName'));
+    card.append(countRow([[health.answered, 'Answered'], [health.no_answer, 'No answer'], [health.appointments, 'Appointments']]));
+    if (health.estimate === 'early') card.append(node('p', health.estimateDetail, 'earlyNote'));
+  } else {
+    top.append(node('p', state, 'numberState'));
+    card.append(top, node('h3', formatCallingNumber(number.phone)));
+    if (number.label) card.append(node('p', number.label, 'numberName'));
+    card.append(node('p', 'Statistics are unavailable. Refresh to try again.', 'earlyNote'));
+  }
+  if (!number.archived) {
+    const actions = node('div', '', 'numberActions');
+    const active = node('button', number.active ? 'Stop tracking new calls' : 'Set active');
+    active.type = 'button';
+    active.addEventListener('click', () => void run(() => manage(number.id, number.active ? 'pause' : 'activate')));
+    const archive = node('button', 'Archive');
+    archive.type = 'button';
+    archive.className = 'secondary';
+    archive.addEventListener('click', () => void run(() => manage(number.id, 'archive')));
+    actions.append(active, archive);
+    card.append(actions);
+  }
+  card.append(spamRemoval(formatCallingNumber(number.phone)));
+  return card;
+}
+
+function countRow(pairs) {
+  const row = document.createElement('div');
+  row.className = 'countRow';
+  for (const [value, label] of pairs) {
+    const cell = document.createElement('div');
+    cell.append(node('strong', String(value)), node('span', label));
+    row.append(cell);
+  }
+  return row;
+}
+
 function spamRemoval(phone) {
   const box = document.createElement('details');
   box.className = 'spamRemoval';
-  box.append(node('summary', 'Remove from spam lists'));
-  box.append(node('p', 'Do this about once a month. Copy this number, then open each form and paste it.', 'numberHelp'));
+  box.append(node('summary', 'Clear spam lists'));
+  box.append(node('p', 'About once a month. Copy this number, then paste it into each form.'));
   const copy = node('button', 'Copy this number');
   copy.type = 'button';
   copy.addEventListener('click', () => { void copyNumber(copy, phone); });
-  box.append(copy);
-  box.append(linkRow(SPAM_REMOVAL, 'spamLinks'));
-  box.append(node('p', 'Short videos on the same problem:', 'numberHelp'));
-  box.append(linkRow(SPAM_HELP, 'spamLinks spamHelp'));
+  box.append(copy, linkRow(SPAM_REMOVAL, 'spamLinks'), linkRow(SPAM_HELP, 'spamLinks spamHelp'));
   return box;
 }
 

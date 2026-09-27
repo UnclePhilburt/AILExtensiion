@@ -1,20 +1,19 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Phone number health · IMPACT Companion</title><script src="settings-boot.js"></script><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="settings.css?v=3"><link rel="stylesheet" href="journal.css?v=1"></head>
-<body><main class="app settingsPage">
-<header><a class="backLink" href="./">← Home</a><p class="eyebrow" data-with-name="{name}'s numbers">YOUR CALLING NUMBERS</p><h1>Phone number health</h1><p class="settingsIntro">Save the numbers you call from, pick the active one, and clear them from spam lists.</p><p class="encLine" data-encourage="settings" aria-live="off"></p></header>
-<section id="callingNumbers" class="settingsCard" aria-labelledby="numbersHeading">
-<div class="settingsCardHead"><p class="eyebrow">YOUR CALLING NUMBERS</p><h2 id="numbersHeading">Numbers and spam lists</h2></div>
-<p>Save the numbers you call from and choose one active number. This tracks your selection; it does not change the number your phone or dialer uses.</p>
-<form id="callingNumberForm" class="callingNumberForm">
-<label for="callingNumberPhone">Calling phone number<input id="callingNumberPhone" class="settingSelect" name="phone" type="tel" autocomplete="tel" maxlength="24" placeholder="(555) 123-4567" required disabled></label>
-<label for="callingNumberLabel">Label (optional)<input id="callingNumberLabel" class="settingSelect" name="label" type="text" maxlength="40" placeholder="Work mobile" disabled></label>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Phone number health · IMPACT Companion</title><script src="settings-boot.js"></script><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="numbers.css?v=1"><link rel="stylesheet" href="journal.css?v=1"></head>
+<body class="wsPage"><main class="app calmApp numbersPage">
+<div class="wsBand"><header class="wsHeader"><div class="workspaceTop calmTop"><a class="brand homeBrand" href="./" aria-label="IMPACT Companion home"><span class="brandMark" aria-hidden="true">i.</span> IMPACT <span class="brandSub">COMPANION</span></a><a class="backLink" href="./">← Home</a></div><p class="eyebrow" data-with-name="{name}'s numbers">YOUR NUMBERS</p><h1>Phone number health</h1><p class="numbersLead">An estimate from the last 30 days of calls you logged. Not a carrier spam label.</p><p class="encLine" data-encourage="settings" aria-live="off"></p></header></div>
+<div class="wsBody">
+<section id="callingNumbers">
+<form id="callingNumberForm" class="calmCard addNumber">
+<p class="eyebrow">ADD</p>
+<h2>A calling number</h2>
+<label for="callingNumberPhone">Phone<input id="callingNumberPhone" name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="24" placeholder="(555) 123-4567" required disabled></label>
+<label for="callingNumberLabel">Name, if you want<input id="callingNumberLabel" name="label" type="text" maxlength="40" placeholder="Work phone" disabled></label>
 <button type="submit" disabled>Save number</button>
 </form>
-<p class="numberHelp">Saving an existing number updates its label or restores it from the archive. Archiving keeps its history.</p>
-<div class="numberHealthNote"><strong>Estimated from your calls</strong><p>After 8 logged results, each number gets an estimate: Steady, Mixed, or Wearing out. Answered means a refusal or an appointment was logged. No answer means nobody picked up. This is not a carrier spam label. The spam-list forms are still the way to ask Verizon, T-Mobile, AT&amp;T, and Sprint to clear a number.</p></div>
-<p class="numberHelp">Counts start when tracking is enabled and include calls registered through Companion. An appointment counts after its time is selected. These are recorded actions, not verified call connections or completed appointments. Earlier calls cannot be assigned retroactively.</p>
+<p id="callingNumberStatus" class="numberStatus" role="status" aria-live="polite">Loading calling numbers…</p>
 <div id="callingNumberList" class="callingNumberList"></div>
-<p id="callingNumberStatus" role="status" aria-live="polite">Loading calling numbers…</p>
-<button id="refreshCallingNumbers" class="secondary" type="button">Refresh numbers &amp; stats</button>
+<button id="refreshCallingNumbers" class="refreshNumbers" type="button">Refresh</button>
 </section>
-</main><script type="module" src="work-hours-guard.js?v=2"></script><script type="module" src="calling-numbers.js?v=3"></script><script type="module" src="encouragement-ui.js"></script></body></html>
+</div>
+</main><script type="module" src="work-hours-guard.js?v=2"></script><script type="module" src="calling-numbers.js?v=4"></script><script type="module" src="encouragement-ui.js"></script></body></html>

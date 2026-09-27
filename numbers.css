@@ -1,0 +1,57 @@
+.numbersPage .numbersLead { max-width: 34rem; margin: 8px 0 0; color: #d7ebe3; font: italic 16px/1.45 Georgia, "Times New Roman", serif; }
+.numbersPage .wsBody { gap: 12px; }
+.numbersPage #callingNumbers { display: grid; gap: 12px; }
+.numbersPage .addNumber { display: grid; gap: 10px; padding: 18px 18px 16px; }
+.numbersPage .addNumber h2 { margin: 0; color: var(--journal-ink, #173e38); font: 400 28px/1.1 Georgia, "Times New Roman", serif; }
+.numbersPage .addNumber label { display: grid; gap: 6px; color: #5d7368; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.numbersPage .addNumber input { width: 100%; min-height: 48px; padding: 0 14px; border: 1px solid var(--journal-line, #e4d8c4); border-radius: 14px; background: #fffdf8; color: #1f3531; font: 600 18px/1 system-ui, sans-serif; text-transform: none; letter-spacing: 0; }
+.numbersPage .addNumber button { min-height: 48px; border: 0; border-radius: 14px; background: #1c7658; color: #fff; }
+.numbersPage .numberStatus { margin: 0 4px; color: #5d7368; font-size: 13px; line-height: 1.4; }
+.numbersPage .callingNumberList { display: grid; gap: 12px; }
+.numbersPage .emptyNumbers { margin: 8px 6px 0; color: #6b7d73; font: italic 16px/1.45 Georgia, serif; }
+.numbersPage .callingNumberCard { display: grid; gap: 12px; padding: 16px 16px 14px; border: 1px solid var(--journal-line, #e4d8c4); border-radius: 18px; background: var(--journal-paper, #fffaf0); }
+.numbersPage .callingNumberCard.isActive { box-shadow: inset 4px 0 0 #1c7658; }
+.numbersPage .cardTop { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.numbersPage .healthEstimate { margin: 0; padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 750; letter-spacing: .02em; }
+.numbersPage .healthEstimate.steady { background: #e5f6ec; color: #17684e; }
+.numbersPage .healthEstimate.mixed { background: #fff4df; color: #8a5a14; }
+.numbersPage .healthEstimate.wearing { background: #fdecea; color: #8a3328; }
+.numbersPage .healthEstimate.early { background: #eef2ef; color: #5d6f66; }
+.numbersPage .numberState { margin: 0; color: #5d7368; font-size: 13px; font-weight: 650; }
+.numbersPage .callingNumberCard h3 { margin: 0; color: #173e38; font: 400 30px/1.05 Georgia, "Times New Roman", serif; overflow-wrap: anywhere; }
+.numbersPage .numberName { margin: -6px 0 0; color: #6b7d73; font-size: 14px; }
+.numbersPage .countRow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.numbersPage .countRow div { padding: 8px 4px 2px; }
+.numbersPage .countRow strong { display: block; color: #173e38; font: 400 28px/1 Georgia, serif; }
+.numbersPage .countRow span { color: #6b7d73; font-size: 12px; }
+.numbersPage .numberActions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.numbersPage .numberActions button { min-height: 46px; border-radius: 14px; }
+.numbersPage .numberActions button.secondary { background: transparent; }
+.numbersPage .spamRemoval, .numbersPage .archivedNumbers { border-top: 1px solid #eadfce; }
+.numbersPage .spamRemoval summary, .numbersPage .archivedNumbers > summary { min-height: 44px; display: flex; align-items: center; color: #17684e; font-weight: 750; cursor: pointer; }
+.numbersPage .spamRemoval { display: grid; gap: 8px; }
+.numbersPage .spamRemoval p, .numbersPage .earlyNote { margin: 0; color: #62776d; font-size: 13px; line-height: 1.4; }
+.numbersPage .spamRemoval button { justify-self: start; min-height: 42px; padding: 0 14px; border-radius: 12px; }
+.numbersPage .spamLinks { display: flex; flex-wrap: wrap; gap: 8px; }
+.numbersPage .spamLinks a { display: inline-flex; align-items: center; min-height: 40px; padding: 6px 12px; border-radius: 999px; background: #edf3ef; color: #17684e; font-size: 14px; font-weight: 700; text-decoration: none; }
+.numbersPage .spamHelp a { background: transparent; color: #5d7368; text-decoration: underline; text-underline-offset: 3px; }
+.numbersPage .archivedNumbers { display: grid; gap: 10px; padding-top: 4px; }
+.numbersPage .archivedNumbers .callingNumberCard { opacity: .86; }
+.numbersPage .refreshNumbers { justify-self: center; min-height: 40px; padding: 0 8px; border: 0; background: transparent; color: #5d7368; font-weight: 650; box-shadow: none; }
+html[data-theme="dark"] .numbersPage .callingNumberCard,
+html[data-theme="dark"] .numbersPage .addNumber { background: #202823; border-color: #34433a; }
+html[data-theme="dark"] .numbersPage .addNumber h2,
+html[data-theme="dark"] .numbersPage .callingNumberCard h3,
+html[data-theme="dark"] .numbersPage .countRow strong { color: #edf4ef; }
+html[data-theme="dark"] .numbersPage .addNumber input { background: #18201b; border-color: #405046; color: #edf4ef; }
+html[data-theme="dark"] .numbersPage .numberStatus,
+html[data-theme="dark"] .numbersPage .numberState,
+html[data-theme="dark"] .numbersPage .numberName,
+html[data-theme="dark"] .numbersPage .countRow span,
+html[data-theme="dark"] .numbersPage .earlyNote { color: #b0c0b6; }
+html[data-theme="dark"] .numbersPage .healthEstimate.steady { background: #1d4334; color: #d8f2e1; }
+html[data-theme="dark"] .numbersPage .healthEstimate.mixed { background: #3a3120; color: #f3e2c0; }
+html[data-theme="dark"] .numbersPage .healthEstimate.wearing { background: #3d2622; color: #f6d2cb; }
+html[data-theme="dark"] .numbersPage .healthEstimate.early { background: #2a342e; color: #c5d5cb; }
+html[data-theme="dark"] .numbersPage .spamLinks a { background: #213e35; color: #d8f2e1; }
+html[data-theme="dark"] .numbersPage .spamHelp a { background: transparent; color: #b0c0b6; }
