@@ -11,12 +11,13 @@ export function pendingCallStorageKey(userId) {
   return `impact.pendingCall.v1:${userId || 'unknown-user'}`;
 }
 
-export function createPendingCall({ leadKey, leadId, leadName, phoneLabel, now }) {
+export function createPendingCall({ leadKey, leadId, leadName, phoneLabel, now, healthCallId }) {
   return {
     leadKey: String(leadKey || ''),
     leadId: String(leadId || ''),
     leadName: String(leadName || ''),
     phoneLabel: String(phoneLabel || ''),
+    ...(healthCallId ? { healthCallId } : {}),
     startedAt: now,
     resultSentAt: 0
   };

@@ -3,6 +3,7 @@ import { parseBridgeUrl } from '../shared/bridge-config.js';
 import { STORAGE_KEYS } from '../shared/storage-keys.js';
 import { cloudEnabled, cloudState, isOnline, PHONE_URL } from '../shared/cloud-sync.js';
 import { scriptStatusText } from '../background/salebase-scripts.js';
+import { CLOSED_MESSAGE, callingHoursOpen } from '../shared/work-hours.js';
 const $ = selector => document.querySelector(selector);
 let session = null;
 let checking = false;
@@ -88,6 +89,7 @@ $('#loginForm').addEventListener('submit', async event => {
   event.preventDefault();
   $('#signIn').disabled = true; say('Signing in…');
   try {
+    if (!callingHoursOpen()) throw new Error(CLOSED_MESSAGE);
     const {data,error} = await client.auth.signInWithPassword({email:$('#email').value.trim(),password:$('#password').value});
     $('#password').value = '';
     if (error) throw error;

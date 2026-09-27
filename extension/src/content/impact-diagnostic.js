@@ -441,12 +441,9 @@
       return null;
     }
 
-    // IMPACT's server-side table normally shows ten leads. Expand it while
-    // the Inbox is open so the automatic selector can consider the whole
-    // current list (up to the site's 100-lead option), not just page one.
-    const grid = globalThis.dtLeadGrid;
-    if (grid?.page?.len && grid.page.len() !== 100) {
-      grid.page.len(100).draw(false);
+    // inbox-page-size.js asks IMPACT for 100 rows before this reads them.
+    // Skip a 10-row first paint so Next is not stuck on page one.
+    if (!inboxListReady()) {
       return { capturedAt: new Date().toISOString(), count: 0, expanding: true };
     }
 
@@ -469,31 +466,78 @@
     };
   }
 
-  function collectInboxLeadQueue() {
+  function leadFromInboxAnchor(element, order) {
+    const url = toSameOriginUrl(element?.getAttribute?.("href") || "");
+    if (!url || !url.pathname.includes("/Lead/InboxDetail")) return null;
+    const leadId = url.searchParams.get("LeadId") || "";
+    if (!leadId) return null;
+    return {
+      order,
+      leadId,
+      url: url.href,
+      safePath: `${url.pathname}?LeadId=[redacted]`,
+      text: redactCustomerText(element.innerText || element.textContent || "").slice(0, 80),
+      activity: inboxRowActivity(element),
+      selector: buildSelector(element)
+    };
+  }
+
+  // The row under a name is IMPACT's latest activity ("No Answer on Sep 25...").
+  // Another lead row is not activity.
+  function inboxRowActivity(element) {
+    const row = element?.closest?.("tr");
+    const next = row?.nextElementSibling;
+    if (!next || next.querySelector?.('a[href*="/Lead/InboxDetail?LeadId="]')) return "";
+    return String(next.innerText || next.textContent || "").replace(/\s+/g, " ").trim().slice(0, 180);
+  }
+
+  // The Inbox grid's current sort. Links elsewhere on the page (recent leads,
+  // duplicates from the scrolling table) must not reorder Next / Best next.
+  function collectGridInboxQueue() {
+    const grid = globalThis.dtLeadGrid;
+    if (typeof grid?.rows !== "function") return [];
     const seen = new Set();
-    return Array.from(document.querySelectorAll('a[href*="/Lead/InboxDetail?LeadId="]'))
-      .map((element, index) => {
-        const url = toSameOriginUrl(element.getAttribute("href") || "");
-        if (!url || !url.pathname.includes("/Lead/InboxDetail")) {
-          return null;
-        }
+    const leads = [];
+    try {
+      grid.rows({ search: "applied", order: "current" }).every(function () {
+        const node = typeof this.node === "function" ? this.node() : null;
+        const link = node?.querySelector?.('a[href*="/Lead/InboxDetail?LeadId="]');
+        const lead = leadFromInboxAnchor(link, leads.length);
+        if (!lead || seen.has(lead.leadId)) return;
+        seen.add(lead.leadId);
+        leads.push(lead);
+      });
+    } catch (_error) {
+      return [];
+    }
+    return leads;
+  }
 
-        const leadId = url.searchParams.get("LeadId") || "";
-        if (!leadId || seen.has(leadId)) {
-          return null;
-        }
+  // "Showing 1 to 10 of 86" is still the first page. Ready once the table
+  // shows every lead, or 100 of them when the Inbox is longer than that.
+  function inboxListReady() {
+    const info = document.querySelector('#LeadTable_info')?.textContent || '';
+    const match = info.match(/Showing\s+(\d+)\s+to\s+(\d+)\s+of\s+(\d+)/i);
+    if (!match) return false;
+    const shown = Number(match[2]) - Number(match[1]) + 1;
+    const total = Number(match[3]);
+    if (!total) return false;
+    return shown >= Math.min(100, total);
+  }
 
-        seen.add(leadId);
-        return {
-          order: index,
-          leadId,
-          url: url.href,
-          safePath: `${url.pathname}?LeadId=[redacted]`,
-          text: redactCustomerText(element.innerText || element.textContent || "").slice(0, 80),
-          selector: buildSelector(element)
-        };
-      })
-      .filter(Boolean);
+  function collectInboxLeadQueue() {
+    const fromGrid = collectGridInboxQueue();
+    if (fromGrid.length) return fromGrid;
+    const seen = new Set();
+    const leads = [];
+    const links = document.querySelectorAll('#LeadTable a[href*="/Lead/InboxDetail?LeadId="]');
+    for (const element of (links.length ? links : document.querySelectorAll('a[href*="/Lead/InboxDetail?LeadId="]'))) {
+      const lead = leadFromInboxAnchor(element, leads.length);
+      if (!lead || seen.has(lead.leadId)) continue;
+      seen.add(lead.leadId);
+      leads.push(lead);
+    }
+    return leads;
   }
 
   function collectInboxQueueSummary() {
@@ -649,6 +693,35 @@
         return;
       }
 
+      if (command.type === "open-lead") {
+        const target = String(command.targetLeadId || "");
+        if (!/^\d{1,20}$/.test(target)) {
+          await chrome.runtime.sendMessage({ type: "impact/commandResult", message: "That appointment could not be opened." });
+          return;
+        }
+        if (target === getCurrentLeadId()) {
+          await chrome.runtime.sendMessage({ type: "impact/commandResult", message: "That appointment is already on screen." });
+          return;
+        }
+        location.assign(new URL(`/Lead/InboxDetail?LeadId=${encodeURIComponent(target)}`, location.origin).href);
+        return;
+      }
+
+      if (["pres-done", "reschedule", "no-show", "send-text", "dropped-by", "add-comments", "in-home", "call-back", "left-message", "dropby-appointment"].includes(command.type)) {
+        const labels = {
+          "pres-done": "Pres Done", reschedule: "Reschedule", "no-show": "No Show", "send-text": "Send Text", "dropped-by": "Dropped By", "add-comments": "Add Comments",
+          "in-home": "Set In - Home Appointment", "call-back": "Set Call Back Appointment", "left-message": "Left Message", "dropby-appointment": "Bad Number/Set Dropby Appointment"
+        };
+        try {
+          if (["in-home", "call-back", "left-message", "dropby-appointment"].includes(command.type)) openWhatHappened(labels[command.type]);
+          else openDetailAction(labels[command.type]);
+          await chrome.runtime.sendMessage({ type: "impact/commandResult", message: `${labels[command.type]} opened in IMPACT.` });
+        } catch (error) {
+          await chrome.runtime.sendMessage({ type: "impact/commandResult", message: error.message });
+        }
+        return;
+      }
+
       if (command.type === "call") {
         try {
           clickLeadCallButton(command);
@@ -661,15 +734,19 @@
       }
 
       if (command.type === "next") {
-        await clickLeadNavigationButton("down");
+        await openInboxNeighbor("next");
       }
 
       if (command.type === "previous") {
-        await clickLeadNavigationButton("up");
+        await openInboxNeighbor("previous");
       }
 
       if (command.type === "best-next") {
-        await openBestNextLead(command);
+        try {
+          await openBestNextLead(command);
+        } catch (error) {
+          await chrome.runtime.sendMessage({ type: "impact/commandResult", message: error.message });
+        }
       }
     } catch (_error) {
       // Command polling must never interrupt IMPACT.
@@ -691,35 +768,282 @@
     else await chrome.runtime.sendMessage({ type: "impact/commandResult", message: `IMPACT's ${direction === "up" ? "Previous" : "Next"} button is unavailable. Open the lead on your computer and try again.` });
   }
 
-  async function openBestNextLead(command) {
+  // Next / Previous follow the saved Inbox list. IMPACT's own arrows use a
+  // separate cursor, so after a direct open they can jump back to an earlier lead.
+  function neighborInQueue(queue, currentLeadId, direction) {
+    const leads = (Array.isArray(queue) ? queue : []).filter((lead) => lead?.url && lead.leadId);
+    const index = leads.findIndex((lead) => lead.leadId === currentLeadId);
+    if (index === -1) return { status: "unknown" };
+    const neighbor = leads[direction === "previous" ? index - 1 : index + 1];
+    if (!neighbor) return { status: "end" };
+    return { status: "open", lead: neighbor };
+  }
+
+  // The lead after the one just worked, even if IMPACT's cursor already moved.
+  function leadAfterWorked(queue, finishedLeadId, currentLeadId) {
+    const choice = neighborInQueue(queue, finishedLeadId, "next");
+    if (choice.status === "open" && choice.lead.leadId === currentLeadId) return { status: "already", lead: choice.lead };
+    return choice;
+  }
+
+  // Best next walks the Inbox once before it may offer someone again.
+  function bestNextPool(queue, currentLeadId, seenIds) {
+    const leads = (Array.isArray(queue) ? queue : []).filter((lead) => lead?.url && lead.leadId && lead.leadId !== currentLeadId);
+    const seen = new Set((Array.isArray(seenIds) ? seenIds : []).map((id) => String(id)).filter(Boolean));
+    if (currentLeadId) seen.add(String(currentLeadId));
+    const waiting = (lead) => !seen.has(String(lead.leadId));
+    let pool = leads.filter(waiting);
+    let freshPass = false;
+    if (!pool.length && leads.length) {
+      freshPass = true;
+      seen.clear();
+      if (currentLeadId) seen.add(String(currentLeadId));
+      pool = leads.filter(waiting);
+    }
+    return { pool, seen: [...seen], freshPass };
+  }
+
+  const BEST_NEXT_SEEN_KEY = "impact.bestNextSeen";
+  const BEST_NEXT_CACHE_KEY = "impact.bestNextDetails";
+  const RECENT_ATTEMPT_MS = 4 * 60 * 60 * 1000;
+  const DETAIL_CACHE_MS = 30 * 60 * 1000;
+  const ACTIVITY_MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, sept: 8, oct: 9, nov: 10, dec: 11 };
+
+  function inboxActivityKind(text) {
+    const value = String(text || "").replace(/\s+/g, " ").trim();
+    if (!value) return "none";
+    if (/\b(do not call|bad (phone|number)|wrong number|disconnected)\b/i.test(value)) return "bad-number";
+    if (/\b(not interested|refused|declined)\b/i.test(value)) return "refused";
+    if (/\bcall[- ]?back\b/i.test(value)) return "callback";
+    if (/\b(appointment|appt)\b/i.test(value)) return "appointment";
+    if (/\b(no answer|voice ?mail|left (a )?message|busy)\b/i.test(value)) return "no-answer";
+    return "other";
+  }
+
+  function impactInstant(year, monthIndex, day, hour, minute) {
+    const zone = "America/Chicago";
+    const partsOf = (ms) => {
+      const parts = {};
+      for (const part of new Intl.DateTimeFormat("en-US", { timeZone: zone, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric" }).formatToParts(new Date(ms))) parts[part.type] = Number(part.value);
+      return parts;
+    };
+    const offsetAt = (ms) => {
+      const parts = partsOf(ms);
+      return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour % 24, parts.minute) - Math.floor(ms / 60000) * 60000;
+    };
+    const wanted = Date.UTC(year, monthIndex, day, hour, minute);
+    let instant = wanted - offsetAt(wanted);
+    return wanted - offsetAt(instant);
+  }
+
+  function parseInboxActivityTime(text) {
+    const match = String(text || "").match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})(?:\s+(?:at\s+|-+\s*)?(\d{1,2}):(\d{2})\s*([ap])\.?m\.?)?/i);
+    if (!match) return null;
+    const month = ACTIVITY_MONTHS[match[1].toLowerCase()];
+    const day = Number(match[2]);
+    const year = Number(match[3]);
+    const hasTime = Boolean(match[4]);
+    const hour = hasTime ? Number(match[4]) % 12 + (/p/i.test(match[6]) ? 12 : 0) : 0;
+    const minute = hasTime ? Number(match[5]) : 0;
+    const check = new Date(Date.UTC(year, month, day));
+    if (check.getUTCMonth() !== month || check.getUTCDate() !== day) return null;
+    const at = impactInstant(year, month, day, hour, minute);
+    return Number.isFinite(at) ? at : null;
+  }
+
+  // Lower tiers are called first. Missing activity (an older saved list) stays
+  // in the scored group instead of being treated as never called.
+  function bestLeadTier(activity, now) {
+    if (activity == null) return 2;
+    const kind = inboxActivityKind(activity);
+    const at = parseInboxActivityTime(activity);
+    if (kind === "callback") return at == null || at <= now ? 0 : 3;
+    if (kind === "none") return 1;
+    if (kind === "bad-number") return 4;
+    if (kind === "appointment") return at != null && at <= now ? 2 : 4;
+    if (kind === "refused") return 3;
+    if (kind === "no-answer" && (at == null || now - at < RECENT_ATTEMPT_MS)) return 3;
+    return 2;
+  }
+
+  function bestCallingGroup(leads, now) {
+    const tagged = (Array.isArray(leads) ? leads : []).map((lead) => ({ lead, tier: bestLeadTier(lead?.activity, now) }));
+    if (!tagged.length) return { tier: 2, leads: [] };
+    const tier = Math.min(...tagged.map((item) => item.tier));
+    return { tier, leads: tagged.filter((item) => item.tier === tier).map((item) => item.lead) };
+  }
+
+  function bestLeadScore(detail, typeScores, order) {
+    const type = String(detail?.requestType || "").trim().toLowerCase();
+    const notes = Number(detail?.historyCount) || 0;
+    const freshness = Number.isInteger(order) ? Math.max(0, 0.35 - order * 0.01) : 0;
+    return Number(typeScores?.[type] || 0) - 0.15 * notes + freshness;
+  }
+
+  function reviewingMessage(tier, count) {
+    const who = { 0: "callbacks that are due", 1: "leads you have not called", 2: "leads ready to call", 3: "leads that were just tried", 4: "remaining Inbox leads" }[tier] || "Inbox leads";
+    return `Reviewing ${count} ${who}...`;
+  }
+
+  function readBestNextSeen() {
+    try {
+      const parsed = JSON.parse(sessionStorage.getItem(BEST_NEXT_SEEN_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed.map((id) => String(id)).filter(Boolean) : [];
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  function writeBestNextSeen(ids) {
+    const unique = [...new Set((ids || []).map((id) => String(id)).filter(Boolean))].slice(-200);
+    sessionStorage.setItem(BEST_NEXT_SEEN_KEY, JSON.stringify(unique));
+  }
+
+  function readDetailCache() {
+    try {
+      const parsed = JSON.parse(sessionStorage.getItem(BEST_NEXT_CACHE_KEY) || "{}");
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (_error) {
+      return {};
+    }
+  }
+
+  function writeDetailCache(cache) {
+    const fresh = Object.entries(cache || {}).filter(([, detail]) => detail && Date.now() - Number(detail.at) < DETAIL_CACHE_MS).slice(-200);
+    sessionStorage.setItem(BEST_NEXT_CACHE_KEY, JSON.stringify(Object.fromEntries(fresh)));
+  }
+
+  function detailCacheFresh(detail, now) {
+    return Boolean(detail?.requestType != null && now - Number(detail.at) < DETAIL_CACHE_MS);
+  }
+
+  async function readInboxQueue() {
     const stored = await chrome.storage.local.get(STORAGE_KEYS.inboxQueue);
-    const queue = Array.isArray(stored[STORAGE_KEYS.inboxQueue]?.leads) ? stored[STORAGE_KEYS.inboxQueue].leads : [];
+    const leads = stored[STORAGE_KEYS.inboxQueue]?.leads;
+    return Array.isArray(leads) ? leads : [];
+  }
+
+  const REMINDER_SEEN_KEY = "impact.appointmentReminderSeen";
+
+  function reminderStamp(item) {
+    const now = new Date();
+    return `${item.leadId}:${item.kind}:${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+  }
+
+  async function readReminderSeen() {
+    const stored = await chrome.storage.session.get(REMINDER_SEEN_KEY).catch(() => ({}));
+    const list = stored[REMINDER_SEEN_KEY];
+    return new Set(Array.isArray(list) ? list : []);
+  }
+
+  async function markReminderSeen(item) {
+    if (!item?.leadId || !item.kind) return;
+    const seen = await readReminderSeen();
+    seen.add(reminderStamp(item));
+    await chrome.storage.session.set({ [REMINDER_SEEN_KEY]: [...seen].slice(-40) }).catch(() => {});
+  }
+
+  // One jump per stage (morning, about an hour, a few minutes before). Next and
+  // Best next bring that appointment to the front. Previous leaves the list alone.
+  async function openDueReminder() {
+    const stored = await chrome.storage.session.get("impact.appointmentReminders").catch(() => ({}));
+    const reminders = Array.isArray(stored["impact.appointmentReminders"]) ? stored["impact.appointmentReminders"] : [];
+    const current = getCurrentLeadId();
+    const seen = await readReminderSeen();
+    const currentDue = reminders.find((item) => item?.leadId === current && item.kind && !seen.has(reminderStamp(item)));
+    if (currentDue) await markReminderSeen(currentDue);
+    const due = reminders.find((item) => item?.leadId && item.leadId !== current && item.kind && !seen.has(reminderStamp(item)));
+    if (!due) return false;
+    await markReminderSeen(due);
+    const queue = await readInboxQueue();
+    const queued = queue.find((item) => item.leadId === due.leadId && item.url);
+    const url = queued?.url || new URL(`/Lead/InboxDetail?LeadId=${encodeURIComponent(due.leadId)}`, location.origin).href;
+    const who = due.name ? `${due.name} — ` : "";
+    const why = due.kind === "starting" ? "appointment in the next few minutes" : due.kind === "hour" ? "appointment within the hour. Text a reminder" : "appointment today. Text a reminder this morning";
+    await chrome.runtime.sendMessage({ type: "impact/commandResult", message: `${who}${why}.` }).catch(() => {});
+    location.assign(url);
+    return true;
+  }
+
+  async function openInboxNeighbor(direction) {
+    if (direction === "next" && await openDueReminder()) return;
+    const choice = neighborInQueue(await readInboxQueue(), getCurrentLeadId(), direction);
+    if (choice.status === "open") {
+      if (direction === "next") writeBestNextSeen([...readBestNextSeen(), getCurrentLeadId()]);
+      location.assign(choice.lead.url);
+      return;
+    }
+    if (choice.status === "end") {
+      await chrome.runtime.sendMessage({
+        type: "impact/commandResult",
+        message: direction === "previous" ? "This is the first lead in your Inbox." : "This is the last lead in your Inbox."
+      });
+      return;
+    }
+    await clickLeadNavigationButton(direction === "previous" ? "up" : "down");
+  }
+
+  async function openLeadAfterWorked(finishedLeadId, currentId) {
+    const choice = leadAfterWorked(await readInboxQueue(), finishedLeadId, currentId);
+    if (choice.status === "already") return;
+    if (choice.status === "open") {
+      writeBestNextSeen([...readBestNextSeen(), finishedLeadId]);
+      location.assign(choice.lead.url);
+      return;
+    }
+    if (currentId === finishedLeadId) await clickLeadNavigationButton("down");
+  }
+
+  async function openBestNextLead(command) {
+    if (await openDueReminder()) return;
+    const queue = await readInboxQueue();
     const currentLeadId = getCurrentLeadId();
-    const candidates = queue.filter((lead) => lead?.url && lead.leadId && lead.leadId !== currentLeadId);
-    if (!candidates.length) throw new Error('Open the IMPACT Inbox first so Companion can read this week\'s lead list.');
-    await chrome.runtime.sendMessage({ type: 'impact/commandResult', message: `Reviewing ${candidates.length} Inbox leads for the best next call...` });
-    const details = await mapWithLimit(candidates, 4, async (candidate) => {
-      const response = await fetch(candidate.url, { credentials: 'include', signal: AbortSignal.timeout(6000), cache: 'default' });
-      if (!response.ok) return { candidate, score: -1000 };
-      const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
-      const preview = collectLocalLeadPreview(doc, candidate.safePath);
-      const type = String(preview.requestType || '').trim().toLowerCase();
-      const score = Number(command.requestTypeScores?.[type] || 0) + (preview.callHistory?.length ? -0.15 * preview.callHistory.length : 0);
-      return { candidate, preview, score };
-    });
-    const available = details.filter((item) => item.preview?.available);
-    if (!available.length) throw new Error('Companion could not read the Inbox lead details. Refresh IMPACT and try again.');
-    available.sort((a, b) => b.score - a.score || a.candidate.order - b.candidate.order);
-    const best = available[0];
-    await chrome.runtime.sendMessage({ type: 'impact/commandResult', message: `Opening your best next lead${best.preview.requestType ? ` · ${best.preview.requestType}` : ''}.` });
-    location.assign(best.candidate.url);
+    const choice = bestNextPool(queue, currentLeadId, readBestNextSeen());
+    if (!choice.pool.length) throw new Error("Open the IMPACT Inbox on your computer so the phone can see the list, then try again.");
+    const now = Date.now();
+    const group = bestCallingGroup(choice.pool, now);
+    const cache = readDetailCache();
+    const missing = group.leads.filter((lead) => !detailCacheFresh(cache[lead.leadId], now));
+    if (missing.length) {
+      await chrome.runtime.sendMessage({ type: "impact/commandResult", message: reviewingMessage(group.tier, missing.length) });
+      const details = await mapWithLimit(missing, 4, async (candidate) => {
+        const response = await fetch(candidate.url, { credentials: "include", signal: AbortSignal.timeout(6000), cache: "default" });
+        if (!response.ok) return { candidate };
+        const doc = new DOMParser().parseFromString(await response.text(), "text/html");
+        return { candidate, preview: collectLocalLeadPreview(doc, candidate.safePath) };
+      });
+      for (const item of details) {
+        if (!item.preview?.available) continue;
+        cache[item.candidate.leadId] = {
+          requestType: String(item.preview.requestType || "").trim(),
+          historyCount: item.preview.callHistory?.length || 0,
+          at: now
+        };
+      }
+      writeDetailCache(cache);
+    }
+    const ranked = group.leads
+      .filter((lead) => detailCacheFresh(cache[lead.leadId], now))
+      .map((lead) => ({ lead, detail: cache[lead.leadId], score: bestLeadScore(cache[lead.leadId], command.requestTypeScores, lead.order) }));
+    if (!ranked.length) throw new Error("Companion could not read the Inbox lead details. Refresh IMPACT and try again.");
+    ranked.sort((a, b) => b.score - a.score || a.lead.order - b.lead.order);
+    const best = ranked[0];
+    writeBestNextSeen([...choice.seen, best.lead.leadId]);
+    const again = choice.freshPass ? " Starting over through the Inbox." : "";
+    const type = best.detail.requestType;
+    await chrome.runtime.sendMessage({ type: "impact/commandResult", message: `Opening your best next lead${type ? ` · ${type}` : ""}.${again}` });
+    location.assign(best.lead.url);
   }
 
   async function automaticallyOpenBestNextLead() {
-    const settings = await chrome.storage.local.get('impact.leadOrder');
-    if (settings['impact.leadOrder'] === 'manual') throw new Error('Manual lead order selected.');
-    const result = await chrome.runtime.sendMessage({ type: 'impact/getBestNextScores' });
+    const result = await chrome.runtime.sendMessage({ type: "impact/getBestNextScores" });
     await openBestNextLead({ requestTypeScores: result?.scores || {} });
+  }
+
+  // Only the phone's Best next lead switch may search the Inbox. Off means
+  // the next row, even if this computer used to save "best" lead order.
+  function resultAdvanceMode(pending) {
+    return pending?.advance === "best" ? "best" : "next";
   }
 
   async function mapWithLimit(items, limit, task) {
@@ -728,6 +1052,31 @@
       while (next < items.length) { const index = next++; results[index] = await task(items[index]); }
     }));
     return results;
+  }
+
+  function openWhatHappened(heading) {
+    const wanted = heading.toLowerCase();
+    const link = [...document.querySelectorAll('#collapseThree a[name="search"]')].find((anchor) => {
+      const title = (anchor.querySelector("h4")?.innerText || anchor.innerText || "").replace(/\s+/g, " ").trim().toLowerCase();
+      return title.startsWith(wanted);
+    });
+    if (!link) throw new Error(`${heading} is not on this page. Open Call - What Happened in IMPACT first.`);
+    link.click();
+  }
+
+  function openDetailAction(label) {
+    const wanted = label.toLowerCase();
+    const link = [...document.querySelectorAll("a")].find((anchor) => {
+      const text = (anchor.innerText || anchor.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+      return text === wanted || text.endsWith(` ${wanted}`);
+    });
+    if (!link) throw new Error(`${label} is not on this lead.`);
+    const href = link.getAttribute("href") || "";
+    if (href.startsWith("javascript:") || href.startsWith("#") || !href) {
+      link.click();
+      return;
+    }
+    location.assign(new URL(href, location.origin).href);
   }
 
   function clickLeadCallButton(command) {
@@ -1054,7 +1403,8 @@
     sessionStorage.setItem("impact.pendingResultAdvance", JSON.stringify({
       leadId: command.leadId,
       requestedAt: Date.now(),
-      awaitingOK: command.type === "refused-appointment"
+      awaitingOK: command.type === "refused-appointment",
+      ...(command.advance === "best" || command.advance === "next" ? { advance: command.advance } : {})
     }));
     try {
       choice.click();
@@ -1094,19 +1444,19 @@
     if (location.pathname !== "/Lead/InboxDetail" || document.visibilityState !== "visible") return;
     const currentId = getCurrentLeadId();
     if (!currentId) return;
-    if (currentId !== pending.leadId) {
-      // IMPACT already advanced. Never click Next again and skip a lead.
-      sessionStorage.removeItem(key);
-      return;
-    }
     sessionStorage.removeItem(key);
-    // After a phone-recorded result, select the strongest lead from the
-    // refreshed Inbox automatically. If there is no current Inbox cache yet,
-    // preserve the established next-lead behavior rather than stalling.
-    void automaticallyOpenBestNextLead().catch(() => {
-      const next = findLeadNavigationButton("down");
-      next?.click();
-    });
+    void (async () => {
+      if (await resultAdvanceMode(pending) === "best") {
+        if (currentId !== pending.leadId) return;
+        try {
+          await automaticallyOpenBestNextLead();
+        } catch (_error) {
+          await openInboxNeighbor("next");
+        }
+        return;
+      }
+      await openLeadAfterWorked(pending.leadId, currentId);
+    })();
   }
 
   function clickWithoutDesktopDialer(target) {

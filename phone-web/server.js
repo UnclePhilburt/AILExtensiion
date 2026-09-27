@@ -107,13 +107,18 @@ return http.createServer(async (req, res) => {
     if (url.pathname === "/api/command" && req.method === "POST") {
       requireToken(req, url);
       const body = await readJson(req);
-      if (!["next", "previous", "call", "no-answer", "refused-appointment"].includes(body?.type)) {
+      if (!["next", "previous", "best-next", "open-lead", "call", "no-answer", "refused-appointment", "virtual-appointment", "virtual-appointment-day", "virtual-appointment-slot", "pres-done", "reschedule", "no-show", "send-text", "dropped-by", "add-comments", "in-home", "call-back", "left-message", "dropby-appointment"].includes(body?.type)) {
         sendJson(res, 400, { ok: false, error: "Unsupported command." });
         return;
       }
 
       if (["no-answer", "refused-appointment"].includes(body.type) && (!body.leadId || body.leadId !== state.currentLead?.leadId)) {
         sendJson(res, 400, { ok: false, error: "The lead changed. Refresh the phone before choosing a call result." });
+        return;
+      }
+
+      if (body.type === "open-lead" && !/^[0-9]{1,20}$/.test(String(body.targetLeadId || ""))) {
+        sendJson(res, 400, { ok: false, error: "That appointment could not be opened." });
         return;
       }
 
@@ -134,6 +139,7 @@ return http.createServer(async (req, res) => {
         command.phoneNumber = body.phoneNumber;
       }
       if (["no-answer", "refused-appointment"].includes(body.type)) command.leadId = body.leadId;
+      if (body.type === "open-lead") command.targetLeadId = String(body.targetLeadId);
       state.commands.push(command);
       state.commands = state.commands.slice(-20);
       const waiting = commandWaiters.values().next().value;

@@ -132,15 +132,15 @@ test('service worker wiring: no focused-window gate, ordered writes, follow afte
   assert.match(auto, /const skip = await publishSkipReason\(senderTab\);/);
   assert.doesNotMatch(worker.slice(worker.indexOf('async function publishAppointmentOptions'), worker.indexOf('async function reportCommandResult')), /senderTab\.id !== active\?\.id/);
   assert.match(worker, /return leadWrites\.run\(\(seq\) => writeLead\(lead, seq, options\), \{ mustRun: Boolean\(options\.force\) \}\);/);
-  assert.match(worker, /if \(command\?\.type && LEAD_CHANGING_COMMANDS\.includes\(command\.type\)\) \{\n\s*void followAfterCommand\(senderTab\.id, command\.leadId \|\| latestLeadId\);/);
+  assert.match(worker, /if \(command\?\.type && LEAD_CHANGING_COMMANDS\.includes\(command\.type\)\) \{\r?\n\s*void followAfterCommand\(senderTab\.id, command\.leadId \|\| latestLeadId\);/);
   assert.match(worker, /publishLead\(message\.lead, \{ force: true, eventName: 'phoneSync\.manualSync' \}\)/);
   assert.match(worker, /void checkPhoneHasLead\(lead\.leadId\);/);
   for (const event of ['phoneSync.publishSkipped', 'phoneSync.published', 'phoneSync.publishFailed', 'phoneSync.followPublished', 'phoneSync.resync']) assert.ok(worker.includes(event), event);
   const cloud = read('extension/src/background/cloud-desktop.js');
   assert.match(cloud, /client\.rpc\('companion_desktop',\{p_device:await device\(\),p_lead:lead\}\)\.abortSignal\(AbortSignal\.timeout\(10000\)\)/);
   assert.match(cloud, /export async function cloudLeadId\(\)/);
-  assert.deepEqual([...api.LEAD_CHANGING_COMMANDS], ['no-answer', 'refused-appointment', 'virtual-appointment-slot', 'next', 'previous', 'best-next']);
-  assert.match(worker, /if \(command\?\.type === 'best-next'\) \{\n\s*\/\/[^\n]*\n\s*\/\/[^\n]*\n\s*command\.requestTypeScores = await requestTypeScores\(\)/, 'Best next carries only aggregate request-type scores');
+  assert.deepEqual([...api.LEAD_CHANGING_COMMANDS], ['no-answer', 'refused-appointment', 'virtual-appointment-slot', 'next', 'previous', 'best-next', 'open-lead', 'pres-done', 'reschedule', 'no-show', 'send-text', 'dropped-by', 'add-comments', 'in-home', 'call-back', 'left-message', 'dropby-appointment']);
+  assert.match(worker, /if \(command\?\.type === 'best-next'\) \{\r?\n\s*\/\/[^\n]*\r?\n\s*\/\/[^\n]*\r?\n\s*command\.requestTypeScores = await requestTypeScores\(\)/, 'Best next carries only aggregate request-type scores');
 });
 
 // The IMPACT page script, just the parts that decide whether a lead is published.

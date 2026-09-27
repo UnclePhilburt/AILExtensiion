@@ -24,7 +24,6 @@ const selectorConfigInput = document.querySelector("#selectorConfig");
 const bridgeUrlInput = document.querySelector("#bridgeUrl");
 const bridgeTokenInput = document.querySelector("#bridgeToken");
 const autoPublishInput = document.querySelector("#autoPublish");
-const leadOrderInput = document.querySelector("#leadOrder");
 const statusOutput = document.querySelector("#status");
 const lastPickedOutput = document.querySelector("#lastPicked");
 const saveButton = document.querySelector("#save");
@@ -94,8 +93,7 @@ async function init() {
     STORAGE_KEYS.bridgeToken,
     STORAGE_KEYS.autoPublish,
     "impact.lastPickedElement",
-    "impact.connectionMode",
-    "impact.leadOrder"
+    "impact.connectionMode"
   ]);
 
   allowedOriginsInput.value = (result[STORAGE_KEYS.allowedOrigins] || DEFAULT_ALLOWED_ORIGINS).join("\n");
@@ -105,7 +103,6 @@ async function init() {
   connectionMode.value = result['impact.connectionMode'] || 'cloud';
   document.querySelector('#localSettings').hidden = connectionMode.value !== 'local';
   autoPublishInput.checked = result[STORAGE_KEYS.autoPublish] !== false;
-  leadOrderInput.value = result["impact.leadOrder"] || "best";
   lastPickedOutput.textContent = result["impact.lastPickedElement"]
     ? JSON.stringify(result["impact.lastPickedElement"], null, 2)
     : "No element picked yet.";
@@ -123,8 +120,7 @@ async function saveOptions() {
       [STORAGE_KEYS.selectorConfig]: selectorConfig,
       [STORAGE_KEYS.bridgeUrl]: parseBridgeUrl(bridgeUrlInput.value),
       [STORAGE_KEYS.bridgeToken]: bridgeTokenInput.value.trim(),
-      [STORAGE_KEYS.autoPublish]: autoPublishInput.checked,
-      "impact.leadOrder": leadOrderInput.value
+      [STORAGE_KEYS.autoPublish]: autoPublishInput.checked
     });
 
     setStatus("Saved. Refresh your IMPACT tab to apply the connection change.");
@@ -140,7 +136,6 @@ async function resetDefaults() {
   selectorConfigInput.value = JSON.stringify(DEFAULT_SELECTOR_CONFIG, null, 2);
   bridgeUrlInput.value = "http://127.0.0.1:8787";
   autoPublishInput.checked = true;
-  leadOrderInput.value = "best";
   setStatus("Defaults restored in the editor. Click Save to apply.");
 }
 

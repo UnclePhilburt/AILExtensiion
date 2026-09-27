@@ -12,6 +12,10 @@ test('scrolls, diagonal drags, taps and long holds never turn a page',()=>{
   for(const args of [[20,0,200],[120,70,300],[86,40,300],[100,0,6000],[100,0,30]]) assert.equal(context.swipeDirection(...args),'');
 });
 
+test('a committed left or right swipe throws the card off that side', () => {
+  assert.match(context.throwTransform('next', 20, 390), /translate\(-550px, 7px\) rotate\(-18deg\)/);
+  assert.match(context.throwTransform('previous', -40, 390), /translate\(550px, -14px\) rotate\(18deg\)/);
+});
 test('vertical swipes distinguish refused and callback, while diagonals cancel',()=>{
   assert.equal(context.swipeDirection(12,130,500),'refused');
   assert.equal(context.swipeDirection(12,-130,500),'callback');

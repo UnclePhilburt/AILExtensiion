@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import { cleanFirstName, loadPhoneSettings, savePhoneSettings } from '../phone-web/public/settings-store.js';
+import { CLOSED_MESSAGE, callingHoursOpen } from '../phone-web/public/work-hours.js';
 
 // Public client configuration only. Never put secret/service-role keys here.
 const projectUrl = 'https://uawladqdbbbgddqtdjoi.supabase.co';
@@ -39,7 +41,12 @@ function render(session) {
   document.querySelector('#signedInEmail').textContent = session?.user?.email || '';
   document.querySelector('#teamAdmin').hidden = session?.user?.email?.toLowerCase() !== 'cody2931@gmail.com';
   document.querySelector('#passwordTitle').textContent = completingInvite ? 'Set your password' : 'Change password';
-  if (signedIn && completingInvite) say('Choose a password to finish setting up your account.');
+  const nameField = document.querySelector('#accountFirstName');
+  if (nameField && !nameField.value) {
+    nameField.value = loadPhoneSettings(localStorage).firstName || session?.user?.user_metadata?.first_name || '';
+  }
+  if (nameField) nameField.required = completingInvite;
+  if (signedIn && completingInvite) say('Choose a password and enter your first name to finish setting up your account.');
 }
 async function run(work) {
   if (busy) return;
@@ -52,11 +59,13 @@ async function run(work) {
 form.addEventListener('submit', event => {
   event.preventDefault();
   void run(async () => {
+    if (!callingHoursOpen()) throw new Error(CLOSED_MESSAGE);
     const { data, error } = await client.auth.signInWithPassword({ email: email.value.trim(), password: password.value });
     password.value = '';
     if (error) throw error;
     render(data.session);
     say('Signed in. Your account is ready.');
+    if (!completingInvite) location.assign(isExtension ? '../options/options.html' : new URLSearchParams(location.search).get('mode') === 'local' ? './?mode=local' : './');
   });
 });
 document.querySelector('#resetPassword').addEventListener('click', () => {
@@ -72,10 +81,19 @@ passwordForm.addEventListener('submit', event => {
   const nextPassword = document.querySelector('#newPassword');
   const confirmation = document.querySelector('#confirmPassword');
   if (nextPassword.value !== confirmation.value) { say('The passwords do not match.', true); return; }
+  const given = cleanFirstName(document.querySelector('#accountFirstName').value);
+  if (completingInvite && !given) { say('Enter your first name. Use letters, not numbers.', true); return; }
   void run(async () => {
-    const { error } = await client.auth.updateUser({ password: nextPassword.value });
+    const update = { password: nextPassword.value };
+    if (given) update.data = { first_name: given };
+    const { error } = await client.auth.updateUser(update);
     nextPassword.value = confirmation.value = '';
     if (error) throw error;
+    if (given) {
+      savePhoneSettings(localStorage, { firstName: given });
+      try { await client.rpc('alongside_set_profile', { p_name: given, p_share: loadPhoneSettings(localStorage).shareAlongside !== false }); }
+      catch { /* Alongside storage may not be set up yet. The name is still saved on this phone. */ }
+    }
     completingInvite = false;
     say('Password saved. Use this email and password on your phone and in the extension.');
   });
@@ -106,8 +124,18 @@ client.auth.onAuthStateChange((event, session) => {
   if (event === 'PASSWORD_RECOVERY') completingInvite = true;
   render(session);
 });
-void client.auth.getSession().then(({ data, error }) => {
+async function closeForTheNight() {
+  if (callingHoursOpen()) return;
+  const { data } = await client.auth.getSession();
+  if (data?.session) await client.auth.signOut({ scope: 'local' });
+  render(null);
+  say(CLOSED_MESSAGE, true);
+}
+void client.auth.getSession().then(async ({ data, error }) => {
   if (error) throw error;
+  if (!callingHoursOpen()) { await closeForTheNight(); return; }
   render(data.session);
   if (originalHash.get('error_description')) say(originalHash.get('error_description'), true);
+  else if (new URLSearchParams(location.search).get('closed')) say(CLOSED_MESSAGE, true);
 }).catch(error => say(error.message, true));
+setInterval(() => void closeForTheNight().catch(() => {}), 30000);

@@ -8,6 +8,8 @@ import { SALEBASE_SCRIPTS_URL, scriptChoiceForLead, matchScriptOption, readScrip
 import { createObjectionDetector, REBUTTAL_LABELS } from './objection-matcher.js';
 import { findSalebaseTabs, findSalebaseScriptTabs, isSalebaseScriptUrl, revealRebuttalInScriptTab, messageRebuttalScript } from './salebase-rebuttal.js';
 import { scriptFieldsFromLead } from './script-fields.js';
+import { callingHoursOpen } from '../shared/work-hours.js';
+import { dueReminders } from '../shared/appointment-reminders.js';
 
 const SCRIPT_LEAD_KEY = 'impact.scriptLead';
 const SCRIPT_FILL_CONTENT_SCRIPT = 'src/content/salebase-personalize.js';
@@ -306,24 +308,78 @@ async function getPhoneCommand(senderTab) {
   return taken;
 }
 
-async function requestTypeScores() {
-  const { data, error } = await client.from('companion_call_outcomes')
-    .select('outcome,request_type,local_hour,created_at')
-    .gte('created_at', new Date(Date.now() - 180 * 86400000).toISOString())
-    .limit(10000);
-  if (error || !Array.isArray(data)) return {};
-  const hour = new Date().getHours();
+function centralHour(now = new Date()) {
+  const value = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: 'numeric', hourCycle: 'h23' }).formatToParts(now).find((part) => part.type === 'hour')?.value;
+  return Number(value) % 24;
+}
+
+function outcomePoints(outcome) {
+  if (outcome === 'held') return 4;
+  if (outcome === 'virtual-appointment') return 3;
+  if (outcome === 'refused-appointment') return -2;
+  if (outcome === 'no-show') return -3;
+  if (outcome === 'rescheduled' || outcome === 'no-answer') return -1;
+  return 0;
+}
+
+function chicagoWeekday(now = new Date()) {
+  const name = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', weekday: 'short' }).format(now);
+  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(name);
+}
+
+// A slice of results only moves the score once it has at least four calls,
+// and only by how much it beats or trails that type's usual result.
+function sliceLift(rows, overall) {
+  if (!rows || rows.length < 4) return 0;
+  const rate = rows.reduce((sum, row) => sum + outcomePoints(row.outcome), 0) / rows.length;
+  return Math.max(-0.6, Math.min(0.6, rate - overall));
+}
+
+function scoreRequestTypes(rows, hour, options = {}) {
+  const grouped = new Map();
+  const add = (row) => {
+    const type = String(row?.request_type || '').trim().toLowerCase();
+    if (!type) return;
+    const list = grouped.get(type) || [];
+    list.push(row);
+    grouped.set(type, list);
+  };
+  for (const row of rows || []) add(row);
+  for (const show of options.showUps || []) add({ request_type: show.request_type, outcome: show.status, created_at: show.created_at, showUp: true });
   const scores = {};
-  for (const row of data) {
-    const type = String(row.request_type || '').trim().toLowerCase();
-    if (!type) continue;
-    const bucket = scores[type] || (scores[type] = { good: 0, attempts: 0 });
-    const weight = Number(row.local_hour) === hour ? 2 : 1;
-    bucket.attempts += weight;
-    if (row.outcome === 'virtual-appointment') bucket.good += weight * 3;
-    else if (row.outcome === 'no-answer') bucket.good -= weight;
+  for (const [type, list] of grouped) {
+    let good = 0;
+    let attempts = 0;
+    for (const row of list) {
+      const weight = !row.showUp && Number(row.local_hour) === hour ? 2 : 1;
+      attempts += weight;
+      good += outcomePoints(row.outcome) * weight;
+    }
+    const overall = good / Math.max(1, attempts);
+    const hourRows = list.filter((row) => !row.showUp && Math.abs(Number(row.local_hour) - hour) <= 1);
+    const dayRows = Number.isInteger(options.weekday) ? list.filter((row) => row.created_at && chicagoWeekday(new Date(row.created_at)) === options.weekday) : [];
+    scores[type] = Math.round((overall + sliceLift(hourRows, overall) + sliceLift(dayRows, overall)) * 100) / 100;
   }
-  return Object.fromEntries(Object.entries(scores).map(([type, value]) => [type, Math.round((value.good / Math.max(1, value.attempts)) * 100) / 100]));
+  return scores;
+}
+
+async function requestTypeScores() {
+  const since = new Date(Date.now() - 180 * 86400000).toISOString();
+  const calls = await client.from('companion_call_outcomes')
+    .select('outcome,request_type,local_hour,created_at')
+    .gte('created_at', since)
+    .limit(10000);
+  if (calls.error || !Array.isArray(calls.data)) return {};
+  let showUps = [];
+  const [outcomes, events] = await Promise.all([
+    client.from('appointment_outcomes').select('status,scheduled_event_id,created_at').gte('created_at', since).limit(5000),
+    client.from('scheduled_events').select('id,request_type').limit(5000)
+  ]);
+  if (!outcomes.error && !events.error) {
+    const types = new Map((events.data || []).map((row) => [row.id, row.request_type]));
+    showUps = (outcomes.data || []).map((row) => ({ status: row.status, request_type: types.get(row.scheduled_event_id) || '', created_at: row.created_at }));
+  }
+  return scoreRequestTypes(calls.data, centralHour(), { showUps, weekday: chicagoWeekday() });
 }
 
 async function takePhoneCommand() {
@@ -413,6 +469,10 @@ async function autoPublishLead(incoming, senderTab) {
 // Every lead write goes through here, in order (see createLatestWinsQueue).
 // force: skip nothing (Sync phone, follow-after-command and resync).
 function publishLead(lead, options = {}) {
+  if (!callingHoursOpen()) {
+    void client.auth.signOut({ scope: 'local' });
+    return Promise.reject(new Error('Companion is closed until 9:00 AM in your time zone.'));
+  }
   if (!lead?.available) {
     return Promise.reject(new Error("No lead payload available to send."));
   }
@@ -790,3 +850,22 @@ function scrubText(value) {
     .replace(/\bLeadId=\d+\b/g, "LeadId=[redacted]")
     .replace(/\bCheckIn[A-Za-z]+\(\d+/g, "CheckInAction([redacted]");
 }
+
+async function refreshAppointmentReminders() {
+  if (!callingHoursOpen()) {
+    await chrome.storage.session.set({ 'impact.appointmentReminders': [] }).catch(() => {});
+    return;
+  }
+  const from = new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString();
+  const to = new Date(Date.now() + 16 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await client.from('scheduled_events').select('impact_lead_id,lead_name,starts_at,all_day,kind').gte('starts_at', from).lte('starts_at', to).limit(100);
+  const reminders = error ? [] : dueReminders(data || []);
+  await chrome.storage.session.set({ 'impact.appointmentReminders': reminders.slice(0, 8) }).catch(() => {});
+}
+
+if (!callingHoursOpen()) void client.auth.signOut({ scope: 'local' });
+void refreshAppointmentReminders();
+setInterval(() => {
+  if (!callingHoursOpen()) void client.auth.signOut({ scope: 'local' });
+  else void refreshAppointmentReminders();
+}, 60000);

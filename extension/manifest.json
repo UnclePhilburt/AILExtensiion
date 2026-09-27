@@ -25,6 +25,12 @@
       "run_at": "document_idle"
     },
     {
+      "matches": ["https://mobile.impact.ailife.com/Lead/Inbox", "https://mobile.impact.ailife.com/Lead/Inbox/"],
+      "js": ["src/content/inbox-page-size.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
       "matches": [
         "https://salebase.ai/phone_scripts/*"
       ],

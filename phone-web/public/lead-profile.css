@@ -22,7 +22,8 @@ html body .workspace .profileCard > .controls { margin:0; border:0; border-top:1
 html body .workspace .profileResultMenu .controls { border:0; border-radius:0; box-shadow:none; margin:0; }
 html:not([data-no-swipe]) .workspace .profileAfterCall:not(:has(.profileBio[open])) { touch-action:none; }
 .profileCard :is(a,button,summary,details) { touch-action:pan-y pinch-zoom; }
-html body .workspace .profileCard[data-dragging] { transition:none; user-select:none; }
+html body .workspace .profileCard[data-dragging] { transition:none; user-select:none; z-index:6; }
+html body .workspace .profileCard[data-thrown] { z-index:6; }
 .profileSwipeStamp { pointer-events:none; position:absolute; top:24px; left:16px; right:16px; text-align:center; z-index:2; padding:12px; border:2px solid currentColor; border-radius:12px; background:var(--journal-paper); color:var(--journal-ink); font-weight:700; box-shadow:0 4px 18px #0002; }
 .profileSwipeStamp:empty { display:none; }
 .profileCard[data-swipe="next"] .profileSwipeStamp { color:#ab5139; }

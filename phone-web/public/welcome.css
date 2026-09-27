@@ -1,0 +1,17 @@
+* { box-sizing: border-box; margin: 0; }
+body { min-height: 100vh; background: #ede5d7; color: #24312c; font-family: system-ui, sans-serif; }
+.band { padding: 48px 28px 72px; color: #f4faf6; background: #123b3a; background-image: radial-gradient(70% 90% at 10% 0%, #1f5d54 0%, #1f5d5400 70%); }
+.brand { font-size: 13px; font-weight: 750; letter-spacing: 1.6px; }
+.mark { display: inline-grid; place-items: center; width: 26px; height: 26px; margin-right: 8px; border: 1px solid #8aa894; border-radius: 8px; font: italic 700 16px Georgia, serif; color: #c8eddb; vertical-align: -6px; }
+.eyebrow { margin-top: 36px; color: #a9cfc2; font-size: 12px; font-weight: 700; letter-spacing: .16em; }
+h1 { max-width: 16ch; margin-top: 10px; font-family: Georgia, serif; font-weight: 400; font-size: clamp(40px, 7vw, 64px); line-height: 1; letter-spacing: -.5px; }
+.lede { max-width: 38rem; margin-top: 16px; color: #d3e7df; font: italic 18px/1.45 Georgia, serif; }
+main { max-width: 980px; margin: -36px auto 48px; padding: 0 18px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+article, .note { background: #fffaf0; border: 1px solid #e4d7c2; border-radius: 22px; padding: 22px; box-shadow: 0 12px 28px #30251512; }
+.kicker { color: #6d5b3e; font-size: 12px; font-weight: 700; letter-spacing: .14em; }
+h2 { margin: 8px 0; font-family: Georgia, serif; font-weight: 400; font-size: 28px; }
+p { color: #4d5c54; line-height: 1.45; }
+.note { margin-top: 14px; }
+.note a { color: #1c7658; font-weight: 700; }
+@media (max-width: 720px) { .grid { grid-template-columns: 1fr; } .band { padding: 32px 20px 64px; } }

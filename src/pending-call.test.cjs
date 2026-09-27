@@ -30,7 +30,7 @@ async function loadPage({storage,shared,userId='user-1'}){
   const el=selector=>{if(!elements.has(selector))elements.set(selector,make());return elements.get(selector);};
   let authChanged;
   const context=vm.createContext({
-    installLeadSwipe(){}, buildLeadProfile(){},
+    installLeadSwipe(){}, buildLeadProfile(){}, createScriptOverlay:()=>({open(){},close(){},sync(){}}),
     client:{auth:{onAuthStateChange:fn=>{authChanged=fn;}}}, saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, encourageLead:()=>{}, encourageResult:()=>{}, cloudEnabled:async()=>true,
     cloudState:async()=>shared.state,cloudTouchPhone:async()=>{}, cloudSend:async(_s,c)=>{shared.sent.push(c);},
     watchCloud:async()=>()=>{},visibleLead:s=>s?.lead,isOnline:()=>true,
@@ -82,6 +82,8 @@ test('call result controls come back after the phone page reloads', async()=>{
   first.callLink().listeners.click(); await new Promise(setImmediate);
   assert.equal(first.el('#callResults').hidden,false);
   assert.equal(savedCalls(storage),1);
+  const healthCallId=shared.sent.at(-1).healthCallId;
+  assert.match(healthCallId,/^[0-9a-f-]{36}$/);
 
   // The phone browser reloads the tab while the rep is in the dialer.
   const page=await loadPage({storage,shared});
@@ -93,6 +95,7 @@ test('call result controls come back after the phone page reloads', async()=>{
 
   await page.el('#noAnswer').listeners.click();
   assert.deepEqual([shared.sent.at(-1).type,shared.sent.at(-1).leadId],['no-answer','test-a']);
+  assert.equal(shared.sent.at(-1).healthCallId,healthCallId,'number attribution survives a reload');
   assert.equal(page.el('#callResults').hidden,false,'still available on the same lead in case IMPACT reports a problem');
 
   // IMPACT logs the result and advances; the saved call is forgotten quietly.

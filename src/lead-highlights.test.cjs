@@ -13,6 +13,13 @@ const ct=(day,hour=10,minute=0)=>Date.UTC(2026,8,day,hour+5,minute);
 const now=ct(24); // Sep 24 2026 10:00 AM Central
 const central={phoneTimeZone:'America/Chicago'};
 const heads=(history,at,options=central)=>plain(highlights().buildHeadsUp(history,at,options));
+const scheduled=(history,at=now)=>highlights().hasScheduledAppointment(history,at,central);
+test('a future appointment or callback is scheduled, a past one is not', () => {
+  assert.equal(scheduled(['Schedule Virtual Appointment on Sep 26 2026 03:00 PM by Me']), true);
+  assert.equal(scheduled(['Schedule Call Back appointment on Sep 24 2026 - No Time Preference by Me']), true);
+  assert.equal(scheduled(['Schedule Virtual Appointment on Sep 20 2026 03:00 PM by Me']), false);
+  assert.equal(scheduled(['No Answer on Sep 23 2026 09:38 PM by Me']), false);
+});
 // Real IMPACT Status lines for one lead, newest first as IMPACT lists them.
 const realLead=[
   'No Answer on Sep 23 2026 09:38 PM by Me',
@@ -202,6 +209,8 @@ test('the phone lead card shows heads-up chips above the details and hides them 
   class FakeDate extends Date{constructor(...a){super(...(a.length?a:[now]));} static now(){return now;}}
   const context=vm.createContext({
     buildLeadProfile(){},
+    createScriptOverlay(){ return { open(){}, hide(){}, sync(){} }; },
+    installLeadSwipe(){},
     client:{auth:{onAuthStateChange:fn=>{authChanged=fn;}}}, saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, encourageLead:()=>{}, encourageResult:()=>{}, cloudEnabled:async()=>true,
     cloudState:async()=>state,cloudTouchPhone:async()=>{}, cloudSend:async()=>{},
     watchCloud:async()=>()=>{},visibleLead:s=>s?.lead,isOnline:()=>true,

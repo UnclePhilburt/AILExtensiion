@@ -82,7 +82,7 @@ test('the boot script applies a saved background before paint and ignores junk',
 
 test('the old slide-up panel is gone; pages load the boot script first and link to settings.html', () => {
   for (const page of ['index.html', 'workspace.html', 'statistics.html', 'settings.html', 'calendar.html']) {
-    assert.match(read(page), /<script src="settings-boot\.js"><\/script><link rel="stylesheet" href="styles\.css">/, page);
+    assert.match(read(page), /<script src="settings-boot\.js"><\/script><link rel="stylesheet" href="styles\.css(?:\?v=\d+)?">/, page);
     assert.doesNotMatch(read(page), /data-open-settings|background-boot|phone-settings/, page);
   }
   assert.match(read('index.html'), /<a class="settingsButton" href="settings\.html\?from=home" aria-label="Settings"/);
@@ -103,9 +103,9 @@ test('calm Workspace: band + body layout, same controls in the same order, and e
   const html = read('workspace.html');
   assert.match(html, /<body class="wsPage"><main class="app workspace" hidden>\s*<div class="wsBand"><header class="wsHeader">/);
   const ids = [...html.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]);
-  for (const id of ['connectionModeLabel', 'status', 'bridgeSetup', 'bridgeUrl', 'bridgeToken', 'saveBridge', 'leadCard', 'previousLead', 'nextLead', 'pendingCallNotice', 'pendingCallText', 'dismissPendingCall', 'callResults', 'noAnswer', 'virtualAppointment', 'refusedAppointment', 'appointmentPicker', 'appointmentHint', 'appointmentDays', 'appointmentTimes', 'callHistory', 'historyCount', 'historyEntries', 'actionFeedback']) assert.ok(ids.includes(id), id);
+  for (const id of ['connectionModeLabel', 'status', 'bridgeSetup', 'bridgeUrl', 'bridgeToken', 'saveBridge', 'appointmentReminder', 'appointmentReminderText', 'showReminderLead', 'leadCard', 'previousLead', 'nextLead', 'pendingCallNotice', 'pendingCallText', 'dismissPendingCall', 'callResults', 'noAnswer', 'virtualAppointment', 'refusedAppointment', 'appointmentPicker', 'appointmentHint', 'appointmentDays', 'appointmentTimes', 'callHistory', 'historyCount', 'historyEntries', 'actionFeedback']) assert.ok(ids.includes(id), id);
   const results = html.slice(html.indexOf('id="callResults"'), html.indexOf('id="appointmentPicker"'));
-  assert.deepEqual([...results.matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1]), ['No Answer', 'Voicemail', 'Contacted', 'Callback', 'Set Virtual Appointment', 'Refused Appointment', 'Bad Number', 'Notes']);
+  assert.deepEqual([...results.matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1]), ['No Answer', 'Set Virtual Appointment', 'Refused Appointment', 'Pres Done', 'Reschedule', 'No Show', 'Send Text', 'Dropped By', 'Add Comments', 'In-Home Appointment', 'Call Back', 'Left Message', 'Drop-by Appointment']);
   assert.ok(html.indexOf('id="previousLead"') < html.indexOf('id="nextLead"'));
   assert.ok(html.indexOf('id="leadCard"') < html.indexOf('id="previousLead"') && html.indexOf('id="nextLead"') < html.indexOf('id="callResults"'));
   const css = read('styles.css');

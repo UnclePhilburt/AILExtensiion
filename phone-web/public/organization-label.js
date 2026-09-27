@@ -1,4 +1,5 @@
 import { loadPhoneSettings, ORGANIZATIONS } from './settings-store.js';
+import { applyUserName } from './user-name.js';
 
 function render() {
   const organization = loadPhoneSettings(localStorage).organization;
@@ -7,6 +8,7 @@ function render() {
     element.hidden = !label || organization === 'hidden';
     element.textContent = label?.label || '';
   }
+  applyUserName();
 }
 
 window.addEventListener('storage', (event) => {

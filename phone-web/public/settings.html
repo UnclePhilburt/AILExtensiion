@@ -1,12 +1,30 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Settings · IMPACT Companion</title><script src="settings-boot.js"></script><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="settings.css"><link rel="stylesheet" href="journal.css?v=1"></head>
 <body><main class="app settingsPage">
-<header><a id="settingsBack" class="backLink" href="workspace.html">← Workspace</a><p class="eyebrow">YOUR PHONE</p><h1>Settings</h1><p class="settingsIntro">Changes save automatically on this phone.</p><p class="encLine" data-encourage="settings" aria-live="off"></p></header>
+<header><a id="settingsBack" class="backLink" href="workspace.html">← Workspace</a><p class="eyebrow" data-with-name="{name}'s phone">YOUR PHONE</p><h1>Settings</h1><p class="settingsIntro" data-with-name="Changes save on {name}'s phone.">Changes save automatically on this phone.</p><p class="encLine" data-encourage="settings" aria-live="off"></p></header>
+<section class="settingsCard" aria-labelledby="nameHeading"><div class="settingsCardHead"><p class="eyebrow">YOU</p><h2 id="nameHeading">Your name</h2></div><label class="settingRow settingColumn" for="firstName"><span class="settingText"><strong>First name</strong><small>Shown on the pages and spoken in the calling script, instead of “you”.</small></span><input id="firstName" class="settingSelect" type="text" maxlength="24" autocomplete="given-name" placeholder="Your first name"></label>
+<label class="settingRow"><span class="settingText"><strong>Appear on Alongside</strong><small>Your totals can sit beside your team. Customer names stay off that page.</small></span><input id="shareAlongside" type="checkbox" role="switch" class="switch"></label></section>
+<section id="callingNumbers" class="settingsCard" aria-labelledby="numbersHeading">
+<div class="settingsCardHead"><p class="eyebrow">YOUR CALLING NUMBERS</p><h2 id="numbersHeading">Phone number health</h2></div>
+<p>Save the numbers you call from and choose one active number. This tracks your selection; it does not change the number your phone or dialer uses.</p>
+<form id="callingNumberForm" class="callingNumberForm">
+<label for="callingNumberPhone">Calling phone number<input id="callingNumberPhone" class="settingSelect" name="phone" type="tel" autocomplete="tel" maxlength="24" placeholder="(555) 123-4567" required disabled></label>
+<label for="callingNumberLabel">Label (optional)<input id="callingNumberLabel" class="settingSelect" name="label" type="text" maxlength="40" placeholder="Work mobile" disabled></label>
+<button type="submit" disabled>Save number</button>
+</form>
+<p class="numberHelp">Saving an existing number updates its label or restores it from the archive. Archiving keeps its history.</p>
+<div class="numberHealthNote"><strong>Carrier spam status: not checked</strong><p>Call results help you watch changes in performance. They cannot tell whether a carrier labels your number as spam. Spam checks and removal links are not connected yet.</p></div>
+<p class="numberHelp">Counts start when tracking is enabled and include calls registered through Companion. An appointment counts after its time is selected. These are recorded actions, not verified call connections or completed appointments. Earlier calls cannot be assigned retroactively.</p>
+<div id="callingNumberList" class="callingNumberList"></div>
+<p id="callingNumberStatus" role="status" aria-live="polite">Loading calling numbers…</p>
+<button id="refreshCallingNumbers" class="secondary" type="button">Refresh numbers &amp; stats</button>
+</section>
 <section class="settingsCard" aria-labelledby="bgHeading"><div class="settingsCardHead"><p class="eyebrow">LOOK</p><h2 id="bgHeading">Background</h2></div><div id="bgGrid" class="bgGrid" role="radiogroup" aria-labelledby="bgHeading"></div></section>
 <section class="settingsCard" aria-labelledby="appearanceHeading"><div class="settingsCardHead"><p class="eyebrow">LOOK</p><h2 id="appearanceHeading">Appearance</h2></div><label class="settingRow"><span class="settingText"><strong>Dark mode</strong><small>Use a lower-light version of the phone workspace.</small></span><input id="darkMode" type="checkbox" role="switch" class="switch"></label><label class="settingRow"><span class="settingText"><strong>Beige lead card</strong><small>Replace the white lead background with soft parchment beige.</small></span><input id="beigeLeadCard" type="checkbox" role="switch" class="switch"></label></section>
 <section class="settingsCard" aria-labelledby="callingHeading"><div class="settingsCardHead"><p class="eyebrow">WHILE CALLING</p><h2 id="callingHeading">Calling</h2></div>
 <label class="settingRow"><span class="settingText"><strong>Best next lead</strong><small>One Next button that picks the best lead to call from your Inbox. Off shows Previous and Next.</small></span><input id="bestNextLead" type="checkbox" role="switch" class="switch"></label>
 <label class="settingRow"><span class="settingText"><strong>Swipe call results</strong><small>After calling: left for No Answer, right for Appointment, down for Refused. Open details to scroll normally.</small></span><input id="swipeLeads" type="checkbox" role="switch" class="switch"></label>
+<label class="settingRow"><span class="settingText"><strong>Script during calls</strong><small>After you tap Call, the matching phone script opens over the lead. Close it when you are ready to mark the result.</small></span><input id="scriptOverlay" type="checkbox" role="switch" class="switch"></label>
 <label class="settingRow"><span class="settingText"><strong>Keep screen awake</strong><small id="keepAwakeNote">Stops the screen from turning off while the Workspace is open.</small></span><input id="keepAwake" type="checkbox" role="switch" class="switch"></label>
 <label class="settingRow"><span class="settingText"><strong>Vibrate when a tap is sent</strong><small id="vibrateNote">A short buzz when a call result, Previous or Next reaches IMPACT. iPhone browsers don't support vibration.</small></span><input id="vibrate" type="checkbox" role="switch" class="switch"></label>
 <label class="settingRow"><span class="settingText"><strong>Confirm before Refused Appointment</strong><small>Asks before sending it, so a stray tap can't close the lead.</small></span><input id="confirmResults" type="checkbox" role="switch" class="switch"></label>
@@ -22,6 +40,6 @@
 <label class="settingRow"><span class="settingText"><strong>Show encouraging messages</strong><small>A calm, different line at the top of each page.</small></span><input id="showEncouragement" type="checkbox" role="switch" class="switch"></label>
 <label class="settingRow"><span class="settingText"><strong>Messages after results</strong><small id="encourageAfterResultsNote">A short, gentle note for a few seconds after No Answer, Refused or a set appointment.</small></span><input id="encourageAfterResults" type="checkbox" role="switch" class="switch"></label>
 </section>
-<section class="settingsReset"><button id="resetSettings" type="button">Reset to defaults</button><p>Restores the default background and every setting on this page.</p></section>
+<section class="settingsReset"><button id="resetSettings" type="button">Reset to defaults</button><p>Restores this phone’s display and calling preferences. Saved calling numbers and their history stay in your account.</p></section>
 <p id="savedHint" class="savedHint" role="status" aria-live="polite" hidden>Saved</p>
-</main><script type="module" src="settings.js"></script></body></html>
+</main><script type="module" src="work-hours-guard.js?v=2"></script><script type="module" src="settings.js?v=6"></script><script type="module" src="calling-numbers.js"></script></body></html>
