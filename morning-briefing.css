@@ -1,0 +1,20 @@
+.morningBriefing { box-sizing:border-box; width:min(92vw,560px); max-height:88dvh; padding:28px; border:1px solid #d9cdb9; border-radius:22px; background:#fffaf0; color:#343d33; box-shadow:0 24px 90px #0004; overflow:auto; font:15px/1.65 system-ui,sans-serif; }
+.morningBriefing::backdrop { background:#17251ccc; backdrop-filter:blur(5px); }
+.morningBriefing h2 { clear:both; font:normal 30px/1.22 Georgia,serif; margin:8px 0 18px; color:inherit; }
+.morningDismiss { float:right; width:44px; height:44px; margin:-10px -10px 0 8px; padding:0; background:transparent; border:0; color:inherit; font-size:26px; cursor:pointer; }
+.morningBriefing h3 { font:normal 21px/1.3 Georgia,serif; margin:24px 0 10px; color:inherit; }
+.morningBriefing p { margin:10px 0; color:inherit; }
+.morningDate,.morningNote { font-size:12px; opacity:.8; }
+.morningStory { font:17px/1.8 Georgia,serif; }
+.morningSchedule { padding:0; list-style:none; }
+.morningSchedule li { padding:12px 0; border-bottom:1px solid #c3b79866; }
+.morningSchedule :is(strong,span,small) { display:block; overflow-wrap:anywhere; }
+.morningSchedule small { opacity:.8; }
+.morningBriefing a { color:inherit; text-underline-offset:3px; }
+.morningStart,.morningBriefingLink { cursor:pointer; border-radius:12px; padding:14px 18px; font:inherit; }
+.morningStart { margin-top:18px; width:100%; border:0; background:#395d49; color:#fff; }
+.morningBriefingLink { margin:16px 0 0; width:100%; background:transparent; color:inherit; border:1px solid #ae9c7e88; }
+.morningBriefingLink[hidden] { display:none; }
+.morningBriefing :focus-visible { outline:3px solid #a98647; outline-offset:3px; }
+html[data-theme="dark"] .morningBriefing { background:#222c26; color:#eee7db; border-color:#586454; }
+@media(max-width:360px) { .morningBriefing { padding:20px; } .morningBriefing h2 { font-size:26px; } }
