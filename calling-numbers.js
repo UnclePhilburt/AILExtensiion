@@ -1,6 +1,19 @@
 import { client } from './auth-runtime.js';
 import { normalizeCallingNumber, formatCallingNumber, numberHealth } from './calling-numbers-model.js';
 
+// Carrier forms open in the browser. Companion does not send the number.
+const SPAM_REMOVAL = [
+  ['Verizon', 'https://www.voicespamfeedback.com/vsf/'],
+  ['T-Mobile', 'https://callreporting.t-mobile.com/'],
+  ['AT&T', 'https://hiyahelp.zendesk.com/hc/en-us/requests/new?ticket_form_id=824667'],
+  ['Sprint', 'https://reportarobocall.com/trf/'],
+  ['Register as a real number', 'https://www.freecallerregistry.com/fcr/']
+];
+const SPAM_HELP = [
+  ['My number is showing as spam', 'https://www.youtube.com/results?search_query=my+number+is+showing+as+spam'],
+  ['Twilio video', 'https://www.youtube.com/watch?v=TatXBxVXPzs']
+];
+
 const section = document.querySelector('#callingNumbers');
 const form = document.querySelector('#callingNumberForm');
 const list = document.querySelector('#callingNumberList');
@@ -37,9 +50,49 @@ function render(numbers, stats) {
       archive.addEventListener('click',()=>void run(()=>manage(number.id,'archive')));
       actions.append(active,archive); card.append(actions);
     }
+    card.append(spamRemoval(formatCallingNumber(number.phone)));
     list.append(card);
   }
 }
+function spamRemoval(phone) {
+  const box = document.createElement('details');
+  box.className = 'spamRemoval';
+  box.append(node('summary', 'Remove from spam lists'));
+  box.append(node('p', 'Do this about once a month. Copy this number, then open each form and paste it.', 'numberHelp'));
+  const copy = node('button', 'Copy this number');
+  copy.type = 'button';
+  copy.addEventListener('click', () => { void copyNumber(copy, phone); });
+  box.append(copy);
+  box.append(linkRow(SPAM_REMOVAL, 'spamLinks'));
+  box.append(node('p', 'Short videos on the same problem:', 'numberHelp'));
+  box.append(linkRow(SPAM_HELP, 'spamLinks spamHelp'));
+  return box;
+}
+
+function linkRow(items, className) {
+  const row = document.createElement('div');
+  row.className = className;
+  for (const [label, href] of items) {
+    const link = document.createElement('a');
+    link.href = href;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = label;
+    row.append(link);
+  }
+  return row;
+}
+
+async function copyNumber(button, phone) {
+  try {
+    await navigator.clipboard.writeText(phone);
+    button.textContent = 'Copied';
+    setTimeout(() => { if (button.textContent === 'Copied') button.textContent = 'Copy this number'; }, 1600);
+  } catch (_error) {
+    status.textContent = `Copy didn't work. Select this number and copy it: ${phone}`;
+  }
+}
+
 async function manage(id,action) {
   const {error} = await client.rpc('calling_number_manage',{p_id:id,p_action:action});
   if(error) throw error;

@@ -46,8 +46,17 @@
 .numberMetrics dd { margin:4px 0 0; font-size:24px; font-weight:750; }
 .numberActions { display:flex; flex-wrap:wrap; gap:8px; }
 .numberActions button { flex:1 1 140px; min-height:44px; }
+.spamRemoval { display:grid; gap:10px; margin-top:4px; padding-top:8px; border-top:1px solid #e4eee8; }
+.spamRemoval summary { min-height:44px; display:flex; align-items:center; font-weight:750; color:#17684e; cursor:pointer; }
+.spamRemoval button { justify-self:start; min-height:44px; padding:0 14px; }
+.spamLinks { display:flex; flex-wrap:wrap; gap:8px; }
+.spamLinks a { display:inline-flex; align-items:center; min-height:44px; padding:8px 12px; border-radius:12px; background:#edf3ef; color:#17684e; font-size:14px; font-weight:750; text-decoration:none; }
+.spamHelp a { background:#f4f7f5; color:#304d43; }
 #callingNumberStatus { overflow-wrap:anywhere; }
 html[data-theme="dark"] #callingNumbers { color:#d8e7df; }
 html[data-theme="dark"] .numberHealthNote { background:#213e35; }
 html[data-theme="dark"] .callingNumberCard { border-color:#466357; }
+html[data-theme="dark"] .spamRemoval { border-top-color:#466357; }
+html[data-theme="dark"] .spamRemoval summary, html[data-theme="dark"] .spamLinks a { color:#d8f2e1; }
+html[data-theme="dark"] .spamLinks a { background:#213e35; }
 html[data-theme="dark"] .numberHelp, html[data-theme="dark"] .numberPeriod, html[data-theme="dark"] .numberMetrics dt { color:#a9c2b5; }
