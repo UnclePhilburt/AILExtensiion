@@ -8,7 +8,7 @@ import { buildHeadsUp, splitHistory, localTimeNote, hasScheduledAppointment } fr
 import { doNotKnockWarning, requestTypeLabel } from './lead-rules.js';
 import { loadPhoneSettings } from './settings-store.js';
 import { saveLeadSchedule, saveAppointmentChoice } from './calendar-sync.js';
-import { encourageLead, encourageResult } from './encouragement-ui.js';
+import { encourageLead, encourageResult } from './encouragement-ui.js?v=2';
 import { leadTransitionKind, snapshotLeadCard, playLeadTransition } from './lead-transition.js';
 import { createPendingCall, readPendingCall, writePendingCall, pendingCallDecision, markPendingCallResult, isCallResultCommand } from './pending-call.js';
 import { findBestCallingTime } from './timing-insights.js';
@@ -484,6 +484,7 @@ async function sendCallResult(type, details = {}) {
   const sent = await sendComputerCommand(type, {
     ...details,
     leadId: call.leadId,
+    healthCallId: call.healthCallId,
     advance: loadPhoneSettings(localStorage).bestNextLead ? "best" : "next"
   });
   if (sent) { tapAccepted(); navIntent = null; }
@@ -693,6 +694,19 @@ async function sendComputerCommand(type, details = {}) {
       throw new Error(payload.error || `HTTP ${response.status}`);
     }
 
+    // Local bridge actions bypass companion_send, which records cloud calls atomically.
+    if (details.healthCallId && ['call', 'no-answer', 'refused-appointment', 'virtual-appointment-slot'].includes(type)) {
+      try {
+        const { error } = await client.rpc('calling_number_record', { p_call: details.healthCallId, p_type: type });
+        if (error) throw error;
+      } catch {
+        showFeedback('Action sent, but calling-number stats could not be saved. Check your connection.', 'error');
+        if (eventsConnected) expectComputerResult(type);
+        followLeadAfterResult(type);
+        return true;
+      }
+    }
+
     showFeedback(type === "open-lead" ? "Bringing that appointment up on your computer..." : type === "virtual-appointment" ? "Opening Virtual Appointment in IMPACT..." : type === "virtual-appointment-day" ? "Selecting that day in IMPACT..." : type === "virtual-appointment-slot" ? "Setting that appointment in IMPACT..." : type === "refused-appointment" ? "Opening Refused Appointment in IMPACT..." : type === "no-answer" ? "Sending No Answer to IMPACT..." : type === "call" ? `Call ${details.phoneType} sent to IMPACT.` : type === "next"
       ? "Advancing IMPACT on computer..."
       : "Moving IMPACT back on computer...", "loading", 4000);
@@ -824,7 +838,8 @@ function renderLead(lead, updatedAt, source, transition = "") {
     link.append(icon, content);
     link.addEventListener("click", () => {
       calledLeadKey = getLeadKey(lead);
-      setPendingCall(createPendingCall({ leadKey: calledLeadKey, leadId: lead.leadId, leadName: lead.leadName, phoneLabel: phone.label, now: Date.now() }));
+      const healthCallId = crypto.randomUUID();
+      setPendingCall(createPendingCall({ leadKey: calledLeadKey, leadId: lead.leadId, leadName: lead.leadName, phoneLabel: phone.label, now: Date.now(), healthCallId }));
       renderPendingCallReminder(null);
       document.querySelector("#callHistory").open = false;
       const bio = leadCard.querySelector(".profileBio");
@@ -835,7 +850,7 @@ function renderLead(lead, updatedAt, source, transition = "") {
       // Keep native tel: navigation in the user's tap, while the small command
       // continues sending if the phone browser moves into the dialer.
       if (lead.leadId && ["Home", "Mobile"].includes(phone.label)) {
-        void sendComputerCommand("call", { leadId: lead.leadId, phoneType: phone.label, phoneNumber: phone.number });
+        void sendComputerCommand("call", { leadId: lead.leadId, phoneType: phone.label, phoneNumber: phone.number, healthCallId });
       } else {
         statusEl.textContent = "Dialing only: refresh the IMPACT lead to enable call registration.";
       }

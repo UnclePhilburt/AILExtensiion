@@ -1,6 +1,7 @@
 import { client } from './auth-runtime.js';
 import { nextBriefingDelay, briefingKey, briefingDue, briefingDates, localDay, scheduleToday, callingRecap, morningMessage } from './morning-briefing-model.js';
 import { appointmentTotals, formatApl } from './appointment-outcomes.js';
+import { formatCallingNumber, numberHealth } from './calling-numbers-model.js?v=1';
 import { readPendingCall } from './pending-call.js';
 
 const route = location.pathname.split('/').pop() || 'index.html';
@@ -119,6 +120,8 @@ function start() {
       else dialog.append(text('p', 'Calling history is unavailable right now. Your progress has not been counted as zero.'));
       if (ok(2)) dialog.append(text('p', `${totals.held} appointments recorded as held · ${formatApl(totals.apl)} APL · ${totals.referrals} referrals recorded${activeDay ? ' that day' : ''}.`));
       else dialog.append(text('p', 'Appointment results could not be loaded.'));
+      const worn = await wornCallingNumbers(id);
+      if (worn.length) dialog.append(wornNotice(worn));
       dialog.append(text('p', 'Times use your phone’s time zone. This briefing uses saved Companion activity; unsynced activity may be missing.', 'morningNote'));
       const done = document.createElement('button'); done.type = 'button'; done.className = 'morningStart';
       done.textContent = now.getHours() < 12 ? 'Start my day' : 'Continue my day';
@@ -132,6 +135,47 @@ function start() {
       if (generation !== token && user) setTimeout(() => void open(false), 0);
     }
   }
+}
+
+async function wornCallingNumbers(userId) {
+  if (typeof client.rpc !== 'function' || typeof numberHealth !== 'function') return [];
+  try {
+    const listed = client.from('calling_numbers').select('id,phone,label,active,archived').eq('user_id', userId);
+    const numbers = await (typeof listed.order === 'function' ? listed.order('created_at', { ascending: true }) : listed);
+    const stats = await client.rpc('calling_number_stats');
+    if (numbers?.error || stats?.error) return [];
+    return (numbers.data || []).filter((row) => row && !row.archived).flatMap((row) => {
+      const health = numberHealth(stats.data || [], row.id);
+      if (health.estimate !== 'wearing') return [];
+      return [{
+        phone: typeof formatCallingNumber === 'function' ? formatCallingNumber(row.phone) : row.phone,
+        label: row.label || 'Calling number',
+        active: Boolean(row.active),
+        line: `${health.no_answer} no answer · ${health.answered} answered in the last 30 days.`
+      }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function wornNotice(worn) {
+  const box = document.createElement('section');
+  box.className = 'morningWorn';
+  box.append(text('h3', worn.length === 1 ? 'One number needs the spam lists' : `${worn.length} numbers need the spam lists`));
+  box.append(text('p', 'This comes from your own calls, not the phone company. Clear these before you lean on them today.'));
+  const list = document.createElement('ul');
+  list.className = 'morningSchedule';
+  for (const item of worn) {
+    const row = document.createElement('li');
+    row.append(text('strong', item.active ? `${item.phone} · set for new calls` : item.phone), text('span', item.label), text('small', item.line));
+    list.append(row);
+  }
+  const open = document.createElement('a');
+  open.href = 'numbers.html';
+  open.textContent = 'Open the spam lists';
+  box.append(list, open);
+  return box;
 }
 
 function text(tag, value, className = '') {

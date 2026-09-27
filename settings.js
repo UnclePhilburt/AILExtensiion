@@ -4,7 +4,7 @@ import { BACKGROUNDS, readBackground, saveBackground } from './backgrounds.js';
 import { TEXT_SIZES, ORGANIZATIONS, loadPhoneSettings, savePhoneSettings, resetPhoneSettings } from './settings-store.js';
 import { applyUserName } from './user-name.js';
 import { publishAlongsideProfile } from './alongside-profile.js';
-import { refreshEncouragement } from './encouragement-ui.js';
+import { refreshEncouragement } from './encouragement-ui.js?v=2';
 
 // Back link: only known pages (never an arbitrary URL from the query string).
 const BACK = {
