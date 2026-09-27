@@ -244,7 +244,7 @@ async function connectLiveUpdates() {
         if (!data || !signedIn || stream !== leadEvents) continue;
         if (frame.includes('event: auth-required')) throw new Error('Your account session expired. Sign in again.');
         const payload = JSON.parse(data.slice(6));
-        if (frame.includes('event: command-result')) receiveComputerResult(payload.message);
+        if (frame.includes('event: command-result')) { if (!payload.slot || payload.slot === thisPhoneSlot()) receiveComputerResult(payload.message); }
         else { eventsConnected = true; const shown = leadFromBridge(payload); receiveBridgeLead(shown.lead, shown.updatedAt); }
       }
     }
@@ -372,7 +372,8 @@ function applyCloudState(state, startedAt) {
       (pendingCall ? ` Your call to ${pendingCall.leadName || "your last lead"} is saved.` : "");
   }
   const result = state?.result;
-  if (result?.at && result.at !== lastCloudResult) {
+  const resultSlot = result?.slot === "2" ? "2" : result?.slot === "1" ? "1" : "";
+  if (result?.at && result.at !== lastCloudResult && (!resultSlot || resultSlot === slot)) {
     lastCloudResult = result.at;
     // result.at comes from the computer's clock, so also accept a result that
     // shows up while the phone is waiting for one.
