@@ -1,10 +1,10 @@
 import { client } from './auth-runtime.js';
-import { briefingKey, briefingDue, briefingDates, localDay, scheduleToday, callingRecap, morningMessage } from './morning-briefing-model.js';
+import { nextBriefingDelay, briefingKey, briefingDue, briefingDates, localDay, scheduleToday, callingRecap, morningMessage } from './morning-briefing-model.js';
 import { appointmentTotals, formatApl } from './appointment-outcomes.js';
 import { readPendingCall } from './pending-call.js';
 
 const route = location.pathname.split('/').pop() || 'index.html';
-const supported = ['index.html','workspace.html','calendar.html','daily.html','statistics.html','settings.html','alongside.html'];
+const supported = ['index.html','workspace.html','calendar.html','daily.html','statistics.html','settings.html','alongside.html','numbers.html'];
 if (supported.includes(route)) start();
 
 function start() {
@@ -40,7 +40,13 @@ function start() {
     if (generation === initialGeneration) sessionChanged(data?.session);
   }).catch(() => {});
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void open(false); });
-  window.addEventListener('pageshow', () => void open(false));
+  let morningTimer;
+  function armMorning() {
+    clearTimeout(morningTimer);
+    morningTimer = setTimeout(() => { void open(false); armMorning(); }, nextBriefingDelay());
+  }
+  armMorning();
+  window.addEventListener('pageshow', () => { armMorning(); void open(false); });
   window.addEventListener('focus', () => void open(false));
   window.addEventListener('storage', event => {
     if (user && event.key === briefingKey(user.id) && dialog?.dataset.automatic === 'true') close();
@@ -58,21 +64,25 @@ function start() {
     if (!manual && (!briefingDue(user.id, seen(user.id), now) || activeCall() || document.querySelector('dialog[open]'))) return;
     busy = true;
     const id = user.id, token = generation;
-    const { today, yesterday, since, tomorrow } = briefingDates(now);
+    const { today, tomorrow } = briefingDates(now);
     try {
       const from = new Date(today); from.setDate(from.getDate() - 1);
       const to = new Date(tomorrow); to.setDate(to.getDate() + 1);
+      const activeDay = await lastActiveDay(id, today);
+      const end = new Date(activeDay || today);
+      if (activeDay) end.setDate(end.getDate() + 1);
+      const since = new Date(end); since.setDate(since.getDate() - 8);
       const responses = await Promise.allSettled([
         rows('scheduled_events', 'id,kind,starts_at,all_day,lead_name', id, 'starts_at', from, to),
-        rows('companion_events', 'id,event_type,created_at', id, 'created_at', since, today),
-        rows('appointment_outcomes', 'id,status,apl,referrals,created_at', id, 'created_at', yesterday, today)
+        rows('companion_events', 'id,event_type,created_at', id, 'created_at', since, end),
+        rows('appointment_outcomes', 'id,status,apl,referrals,created_at', id, 'created_at', activeDay || today, end)
       ]);
       if (generation !== token || user?.id !== id || document.hidden || localDay(now) !== localDay(new Date())) return;
       if (!manual && (!briefingDue(id, seen(id), new Date()) || activeCall() || document.querySelector('dialog[open]'))) return;
       const ok = n => responses[n].status === 'fulfilled';
       const data = n => ok(n) ? responses[n].value : [];
-      const scheduled = scheduleToday(data(0), now), recap = callingRecap(data(1), now);
-      const totals = appointmentTotals(data(2), yesterday);
+      const scheduled = scheduleToday(data(0), now), recap = callingRecap(data(1), now, activeDay);
+      const totals = appointmentTotals(data(2), activeDay || today);
       dialog = document.createElement('dialog'); dialog.className = 'morningBriefing';
       dialog.dataset.automatic = String(!manual); dialog.setAttribute('aria-labelledby', 'morningHeading');
       const dismiss = document.createElement('button'); dismiss.type = 'button'; dismiss.className = 'morningDismiss';
@@ -104,10 +114,10 @@ function start() {
         dialog.append(list);
       }
       const calendar = document.createElement('a'); calendar.href = 'calendar.html?from=home'; calendar.textContent = 'Open Calendar'; dialog.append(calendar);
-      dialog.append(text('h3', 'Yesterday’s progress'));
+      dialog.append(text('h3', activeDay ? `Last active day · ${activeDay.toLocaleDateString([], {weekday:'long', month:'long', day:'numeric', year:'numeric'})}` : 'No previous activity recorded'));
       if (ok(1)) dialog.append(text('p', `${recap.yesterdayCalls} calls started in Companion. ${recap.insight}`));
       else dialog.append(text('p', 'Calling history is unavailable right now. Your progress has not been counted as zero.'));
-      if (ok(2)) dialog.append(text('p', `${totals.held} appointments recorded as held · ${formatApl(totals.apl)} APL · ${totals.referrals} referrals recorded yesterday.`));
+      if (ok(2)) dialog.append(text('p', `${totals.held} appointments recorded as held · ${formatApl(totals.apl)} APL · ${totals.referrals} referrals recorded${activeDay ? ' that day' : ''}.`));
       else dialog.append(text('p', 'Appointment results could not be loaded.'));
       dialog.append(text('p', 'Times use your phone’s time zone. This briefing uses saved Companion activity; unsynced activity may be missing.', 'morningNote'));
       const done = document.createElement('button'); done.type = 'button'; done.className = 'morningStart';
@@ -126,6 +136,19 @@ function start() {
 
 function text(tag, value, className = '') {
   const element = document.createElement(tag); element.textContent = value; element.className = className; return element;
+}
+async function lastActiveDay(id, before) {
+  const latest = await Promise.all(['companion_events', 'appointment_outcomes'].map(async table => {
+    let query = client.from(table).select('created_at').eq('user_id', id).lt('created_at', before.toISOString());
+    if (table === 'companion_events') query = query.in('event_type', ['call', 'no-answer', 'virtual-appointment', 'refused-appointment']);
+    const {data, error} = await query.order('created_at', {ascending:false}).limit(1).abortSignal(AbortSignal.timeout(12000));
+    if (error) throw error;
+    return data?.[0]?.created_at;
+  }));
+  const times = latest.map(value => Date.parse(value)).filter(Number.isFinite);
+  if (!times.length) return null;
+  const day = new Date(Math.max(...times)); day.setHours(0, 0, 0, 0);
+  return day;
 }
 async function rows(table, fields, id, dateColumn, from, to) {
   const result = [];

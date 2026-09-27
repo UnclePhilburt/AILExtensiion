@@ -1,5 +1,6 @@
 import { client } from './auth-runtime.js';
 import { normalizeCallingNumber, formatCallingNumber, numberHealth } from './calling-numbers-model.js';
+import { applyUserName } from './user-name.js';
 
 // Carrier forms open in the browser. Companion does not send the number.
 const SPAM_REMOVAL = [
@@ -13,6 +14,8 @@ const SPAM_HELP = [
   ['My number is showing as spam', 'https://www.youtube.com/results?search_query=my+number+is+showing+as+spam'],
   ['Twilio video', 'https://www.youtube.com/watch?v=TatXBxVXPzs']
 ];
+
+if (typeof applyUserName === 'function') applyUserName();
 
 const section = document.querySelector('#callingNumbers');
 const form = document.querySelector('#callingNumberForm');
