@@ -1,5 +1,5 @@
 import { client } from './auth-runtime.js';
-import { normalizeCallingNumber, formatCallingNumber, numberHealth } from './calling-numbers-model.js';
+import { normalizeCallingNumber, formatCallingNumber, numberHealth } from './calling-numbers-model.js?v=1';
 import { applyUserName } from './user-name.js';
 
 // Carrier forms open in the browser. Companion does not send the number.
@@ -38,11 +38,13 @@ function render(numbers, stats) {
     card.append(node('h3', formatCallingNumber(number.phone)), node('p', `${number.label || 'Calling number'} · ${number.active ? 'Active for new calls' : number.archived ? 'Archived · history saved' : 'Not active'}`, 'numberState'));
     if (stats) {
       const health = numberHealth(stats, number.id);
+      const badge = node('p', `Estimated health: ${health.estimateLabel}`, `healthEstimate ${health.estimate}`);
       const grid = node('dl', '', 'numberMetrics');
-      for (const [label,value] of [['Calls started',health.calls],['Results recorded',health.recorded],['No-answer rate',health.noAnswerRate],['Appointment rate',health.appointmentRate],['Appointments',health.appointments],['Refused',health.refused]]) {
+      for (const [label,value] of [['Calls started',health.calls],['Answered',health.answered],['No answer',health.no_answer],['No-answer rate',health.noAnswerRate],['Appointment rate',health.appointmentRate],['Appointments',health.appointments],['Refused',health.refused]]) {
         const item = node('div',''); item.append(node('dt',label),node('dd',String(value))); grid.append(item);
       }
-      card.append(node('p','Last 30 days','numberPeriod'),grid,
+      card.append(badge, node('p','Last 30 days','numberPeriod'), grid,
+        node('p', health.estimateDetail),
         node('p',`${health.missing} calls without a recorded result. Rates use recorded results only.`),node('p',health.trend));
     } else card.append(node('p','Statistics are unavailable. Refresh to try again.'));
     if (!number.archived) {
