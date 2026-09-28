@@ -24,21 +24,38 @@ chrome.storage.onChanged.addListener(changes => {
     stopWatch?.(); stopWatch = null; owner = ''; lastHeartbeat = 0; nextPoll = 0;
   }
 });
-export async function publishCloud(lead) {
+function missingSlotRpc(error) {
+  return /PGRST202|schema cache|Could not find the function/i.test(error?.message || error?.code || '');
+}
+export async function publishCloud(lead, slot = '1') {
   await ready();
+  const phone = slot === '2' ? '2' : '1';
   // Bounded, so a hung request cannot hold up the (ordered) lead writes forever.
-  const {error} = await client.rpc('companion_desktop',{p_device:await device(),p_lead:lead}).abortSignal(AbortSignal.timeout(10000));
+  let {error} = await client.rpc('companion_desktop',{p_device:await device(),p_lead:lead,p_slot:phone}).abortSignal(AbortSignal.timeout(10000));
+  if (error && phone === '1' && missingSlotRpc(error)) {
+    ({error} = await client.rpc('companion_desktop',{p_device:await device(),p_lead:lead}).abortSignal(AbortSignal.timeout(10000)));
+  }
   checkCloud(error); lastHeartbeat = Date.now();
   return {ok:true};
 }
+export async function clearCloudSlot(slot) {
+  await ready();
+  const phone = slot === '2' ? '2' : '1';
+  const {error} = await client.rpc('companion_desktop',{p_device:await device(),p_slot:phone,p_clear:true}).abortSignal(AbortSignal.timeout(10000));
+  if (error && missingSlotRpc(error)) return {ok:false};
+  checkCloud(error);
+  return {ok:true};
+}
 // The lead id the phone will read from the cloud right now ('' if none).
-export async function cloudLeadId() {
-  const {data,error} = await client.from('companion_sync').select('lead_id:lead->>leadId')
+export async function cloudLeadId(slot = '1') {
+  const phone = slot === '2' ? '2' : '1';
+  const {data,error} = await client.from('companion_sync').select('lead,slot_leads')
     .eq('user_id',await cloudUser()).eq('device_id',await device()).abortSignal(AbortSignal.timeout(8000)).maybeSingle();
   checkCloud(error);
-  return data?.lead_id || '';
+  const slotted = data?.slot_leads?.[phone];
+  return slotted?.leadId || (phone === '1' ? data?.lead?.leadId : '') || '';
 }
-export async function takeCloudCommand() {
+export async function takeCloudCommand(slot = '1') {
   if (busy || Date.now() < nextPoll) return {command:null};
   // Phone controls should feel immediate; the cloud command queue is still
   // bounded and command IDs make repeated taps safe.
@@ -49,14 +66,20 @@ export async function takeCloudCommand() {
       const {error} = await client.rpc('companion_desktop',{p_device:await device()});
       checkCloud(error); lastHeartbeat = Date.now();
     }
-    const {data,error} = await client.rpc('companion_take',{p_device:await device()});
+    const phone = slot === '2' ? '2' : '1';
+    let {data,error} = await client.rpc('companion_take',{p_device:await device(),p_slot:phone});
+    if (error && missingSlotRpc(error)) {
+      if (phone === '2') return {command:null};
+      ({data,error} = await client.rpc('companion_take',{p_device:await device()}));
+    }
     checkCloud(error);
     if (data) nextPoll = 0;
     return {command:data};
   } finally { busy = false; }
 }
-export async function reportCloudResult(message) {
-  const {error} = await client.from('companion_sync').update({result:{message,at:new Date().toISOString()}})
+export async function reportCloudResult(message, slot = '1') {
+  const phone = slot === '2' ? '2' : '1';
+  const {error} = await client.from('companion_sync').update({result:{message,at:new Date().toISOString(),slot:phone}})
     .eq('user_id',await cloudUser()).eq('device_id',await device());
   checkCloud(error);
 }

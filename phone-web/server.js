@@ -34,7 +34,7 @@ return http.createServer(async (req, res) => {
       let user;
       try { user = await verifyUser(authToken); }
       catch (error) { sendJson(res, error.statusCode || 401, { ok: false, error: error.statusCode ? error.message : "Account session is invalid. Sign in again." }); return; }
-      if (!users.has(user.id)) users.set(user.id, { currentLead: null, updatedAt: null, commands: [], leadSubscribers: new Set(), commandWaiters: new Set() });
+      if (!users.has(user.id)) users.set(user.id, { currentLead: null, updatedAt: null, slots: {}, commands: [], leadSubscribers: new Set(), commandWaiters: new Set() });
       state = users.get(user.id);
       res.bridgeState = state;
       if (url.pathname === '/api/logout' && req.method === 'POST') {
@@ -61,8 +61,13 @@ return http.createServer(async (req, res) => {
         return;
       }
 
-      state.currentLead = body.lead;
-      state.updatedAt = new Date().toISOString();
+      const slot = body.slot === '2' ? '2' : '1';
+      state.slots = state.slots || {};
+      state.slots[slot] = { lead: body.lead, updatedAt: new Date().toISOString() };
+      if (slot === '1') {
+        state.currentLead = body.lead;
+        state.updatedAt = state.slots[slot].updatedAt;
+      }
       for (const client of leadSubscribers) sendLeadEvent(client);
       sendJson(res, 200, { ok: true, updatedAt: state.updatedAt });
       return;
@@ -87,10 +92,13 @@ return http.createServer(async (req, res) => {
 
     if (url.pathname === "/api/current-lead" && req.method === "GET") {
       requireToken(req, url);
+      const asked = url.searchParams.get('slot') === '2' ? '2' : '1';
+      const packed = state.slots?.[asked];
       sendJson(res, 200, {
         ok: true,
-        lead: state.currentLead,
-        updatedAt: state.updatedAt
+        lead: packed?.lead || (asked === '1' ? state.currentLead : null),
+        updatedAt: packed?.updatedAt || state.updatedAt,
+        slots: state.slots || {}
       });
       return;
     }
@@ -98,7 +106,7 @@ return http.createServer(async (req, res) => {
     if (url.pathname === "/api/command/result" && req.method === "POST") {
       requireToken(req, url);
       const body = await readJson(req);
-      const result = { message: String(body.message || "Command completed.").slice(0, 300) };
+      const result = { message: String(body.message || "Command completed.").slice(0, 300), slot: body.slot === "2" ? "2" : "1" };
       for (const client of leadSubscribers) client.write(`event: command-result\ndata: ${JSON.stringify(result)}\n\n`);
       sendJson(res, 200, { ok: true });
       return;
@@ -112,7 +120,9 @@ return http.createServer(async (req, res) => {
         return;
       }
 
-      if (["no-answer", "refused-appointment"].includes(body.type) && (!body.leadId || body.leadId !== state.currentLead?.leadId)) {
+      const commandSlot = body.slot === '2' ? '2' : '1';
+      const slotLead = state.slots?.[commandSlot]?.lead || (commandSlot === '1' ? state.currentLead : null);
+      if (["no-answer", "refused-appointment"].includes(body.type) && (!body.leadId || body.leadId !== slotLead?.leadId)) {
         sendJson(res, 400, { ok: false, error: "The lead changed. Refresh the phone before choosing a call result." });
         return;
       }
@@ -122,7 +132,7 @@ return http.createServer(async (req, res) => {
         return;
       }
 
-      if (body.type === "call" && (!body.leadId || body.leadId !== state.currentLead?.leadId ||
+      if (body.type === "call" && (!body.leadId || body.leadId !== slotLead?.leadId ||
           !["Mobile", "Home"].includes(body.phoneType) || typeof body.phoneNumber !== "string")) {
         sendJson(res, 400, { ok: false, error: "Refresh the lead before calling; a matching Home or Mobile number is required." });
         return;
@@ -131,6 +141,7 @@ return http.createServer(async (req, res) => {
       const command = {
         id: crypto.randomUUID(),
         type: body.type,
+        slot: commandSlot,
         requestedAt: new Date().toISOString()
       };
       if (body.type === "call") {
@@ -143,7 +154,7 @@ return http.createServer(async (req, res) => {
       state.commands.push(command);
       state.commands = state.commands.slice(-20);
       const waiting = commandWaiters.values().next().value;
-      if (waiting) waiting(state.commands.shift());
+      if (waiting) waiting(takeQueuedCommand(state, null));
       sendJson(res, 200, { ok: true, command });
       return;
     }
@@ -165,9 +176,10 @@ return http.createServer(async (req, res) => {
         });
         return;
       }
+      const nextSlot = url.searchParams.get('slot') === '2' ? '2' : url.searchParams.has('slot') ? '1' : null;
       sendJson(res, 200, {
         ok: true,
-        command: state.commands.shift() || null
+        command: takeQueuedCommand(state, nextSlot)
       });
       return;
     }
@@ -214,8 +226,15 @@ function getSavedToken() {
   return token;
 }
 
+function takeQueuedCommand(state, slot) {
+  const index = slot
+    ? state.commands.findIndex((command) => (command.slot || '1') === slot)
+    : 0;
+  if (index < 0 || !state.commands.length) return null;
+  return state.commands.splice(index, 1)[0] || null;
+}
 function sendLeadEvent(res) {
-  res.write(`data: ${JSON.stringify({ ok: true, lead: res.bridgeState.currentLead, updatedAt: res.bridgeState.updatedAt })}\n\n`);
+  res.write(`data: ${JSON.stringify({ ok: true, lead: res.bridgeState.currentLead, updatedAt: res.bridgeState.updatedAt, slots: res.bridgeState.slots || {} })}\n\n`);
 }
 
 function requireToken(req, url) {

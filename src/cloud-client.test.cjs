@@ -31,6 +31,9 @@ test('cloud is the default even with an old bridge token and refuses offline pho
   assert.equal(context.visibleLead(state).leadId,'123');
   assert.equal(context.visibleLead({...state,desktop_seen:'2000-01-01T00:00:00Z'}),null);
   assert.equal(context.visibleLead({...state,lead_updated_at:'2000-01-01T00:00:00Z'}),null);
+  const both={...state,slot_leads:{'1':{leadId:'1'},'2':{leadId:'2'}},slot_seen:{'1':now,'2':now}};
+  assert.equal(context.visibleLead(both,'1').leadId,'1');
+  assert.equal(context.visibleLead(both,'2').leadId,'2');
   await context.cloudSend(state,{type:'next',leadId:'123'},'one-action');
   assert.equal(sent.name,'companion_send');
   assert.equal(sent.args.p_device,'computer-a');

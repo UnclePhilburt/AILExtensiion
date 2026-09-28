@@ -29,8 +29,17 @@ export async function cloudState() {
   return data;
 }
 export function isOnline(timestamp) { return Boolean(timestamp && Date.now() - Date.parse(timestamp) < 45000); }
-export function visibleLead(state) {
-  return isOnline(state?.desktop_seen) && Date.now() - Date.parse(state?.lead_updated_at) < 1800000 ? state?.lead : null;
+export function slotView(state, slot = '1') {
+  if (!state) return state;
+  const key = slot === '2' ? '2' : '1';
+  const slotted = state.slot_leads?.[key];
+  const seen = state.slot_seen?.[key];
+  if (key === '2') return { ...state, lead: slotted || null, lead_updated_at: seen || null };
+  return { ...state, lead: slotted || state.lead, lead_updated_at: seen || state.lead_updated_at };
+}
+export function visibleLead(state, slot = '1') {
+  const view = slotView(state, slot);
+  return isOnline(view?.desktop_seen) && Date.now() - Date.parse(view?.lead_updated_at) < 1800000 ? view?.lead : null;
 }
 export async function cloudTouchPhone() {
   const { error } = await client.from('companion_sync').update({phone_seen:new Date().toISOString()}).eq('user_id',await cloudUser());

@@ -125,5 +125,5 @@ else mountEncouragement();
 // Shared phone pages also offer the account-scoped daily briefing. Loading it
 // independently keeps a schedule/network problem from blocking the workspace.
 if (typeof location !== 'undefined' && /^https?:$/.test(location.protocol)) {
-  void import('./morning-briefing.js').catch(() => {});
+  void import('./morning-briefing.js?v=2').catch(() => {});
 }

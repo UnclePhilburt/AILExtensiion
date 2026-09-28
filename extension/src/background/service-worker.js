@@ -2,8 +2,8 @@ import { LOG_LIMIT, STORAGE_KEYS } from "../shared/storage-keys.js";
 import { parseBridgeUrl } from "../shared/bridge-config.js";
 import { accessToken, client } from "../shared/auth-runtime.js";
 import { cloudEnabled } from '../shared/cloud-sync.js';
-import { publishCloud, takeCloudCommand, reportCloudResult, cloudLeadId } from './cloud-desktop.js';
-import { publisherDecision, createLatestWinsQueue, followLeadChange, verifyPhoneLead, LEAD_CHANGING_COMMANDS } from './phone-sync.js';
+import { publishCloud, takeCloudCommand, reportCloudResult, cloudLeadId, clearCloudSlot } from './cloud-desktop.js';
+import { publisherDecision, claimWindowSlot, assignWindowSlot, createLatestWinsQueue, followLeadChange, verifyPhoneLead, LEAD_CHANGING_COMMANDS } from './phone-sync.js';
 import { SALEBASE_SCRIPTS_URL, scriptChoiceForLead, matchScriptOption, readScriptDropdown, applyScriptOption } from './salebase-scripts.js';
 import { createObjectionDetector, REBUTTAL_LABELS } from './objection-matcher.js';
 import { findSalebaseTabs, findSalebaseScriptTabs, isSalebaseScriptUrl, revealRebuttalInScriptTab, messageRebuttalScript } from './salebase-rebuttal.js';
@@ -25,10 +25,16 @@ let lastScriptSelectKey = '';
 let lastSalebaseOpenKey = '';
 let objectionListening = false;
 // Lead writes to the phone run one at a time; an older lead never lands last.
-const leadWrites = createLatestWinsQueue();
+const slotQueues = new Map();
+const slotMemory = new Map();
+function queueFor(slot) {
+  const key = slot === '2' ? '2' : '1';
+  if (!slotQueues.has(key)) slotQueues.set(key, createLatestWinsQueue());
+  return slotQueues.get(key);
+}
 let latestLeadId = '';      // the newest lead IMPACT has shown (what the phone should have)
 let lastWrittenLeadId = '';
-let followGeneration = 0;
+const followGenerations = new Map();
 let lastPublishSkip = '';
 // One detected objection opens its rebuttal once, not on every repeat.
 const objectionDetector = createObjectionDetector();
@@ -117,9 +123,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === 'impact/windowSlot') {
+    slotForTab(sender.tab).then((slot) => sendResponse({ ok: true, slot })).catch(() => sendResponse({ ok: false, slot: '' }));
+    return true;
+  }
+  if (message?.type === 'impact/setWindowSlot') {
+    setTabSlot(sender.tab, message.slot).then((slot) => sendResponse({ ok: true, slot })).catch(() => sendResponse({ ok: false, slot: '' }));
+    return true;
+  }
+
   if (message?.type === "impact/publishLead") {
     // "Sync phone": always writes, whatever was sent before.
-    publishLead(message.lead, { force: true, eventName: 'phoneSync.manualSync' })
+    slotForTab(sender.tab).then((slot) => publishLead(message.lead, { force: true, eventName: 'phoneSync.manualSync', slot }))
       .then((result) => sendResponse({ ok: true, result }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
@@ -152,7 +167,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === "impact/commandResult") {
-    reportCommandResult(message.message)
+    slotForTab(sender.tab).then((slot) => reportCommandResult(message.message, slot || "1"))
       .then(() => sendResponse({ ok: true }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
@@ -292,9 +307,11 @@ async function getPhoneCommand(senderTab) {
   // opened again. Validate the requesting IMPACT page instead.
   if (!senderTab?.id ||
       !/^https:\/\/mobile\.impact\.ailife\.com\/Lead\/(InboxDetail|WhatHappend|SetAppointment)(?:[?#]|$)/.test(senderTab.url || "")) {
-    return { command: null };
+    return { command: null, slot: '' };
   }
-  const taken = await takePhoneCommand();
+  const slot = await slotForTab(senderTab);
+  if (!slot) return { command: null, slot: '' };
+  const taken = await takePhoneCommand(slot);
   const command = taken?.command;
   if (command?.type === 'best-next') {
     // Only aggregate outcome counts leave Supabase here. The browser matches
@@ -303,9 +320,9 @@ async function getPhoneCommand(senderTab) {
   }
   // After a result or Previous/Next, follow IMPACT to the lead it moves to.
   if (command?.type && LEAD_CHANGING_COMMANDS.includes(command.type)) {
-    void followAfterCommand(senderTab.id, command.leadId || latestLeadId);
+    void followAfterCommand(senderTab.id, command.leadId || slotMemory.get(slot)?.leadId || latestLeadId, slot);
   }
-  return taken;
+  return { ...taken, slot };
 }
 
 function centralHour(now = new Date()) {
@@ -382,8 +399,8 @@ async function requestTypeScores() {
   return scoreRequestTypes(calls.data, centralHour(), { showUps, weekday: chicagoWeekday() });
 }
 
-async function takePhoneCommand() {
-  if (await cloudEnabled()) return takeCloudCommand();
+async function takePhoneCommand(slot = '1') {
+  if (await cloudEnabled()) return takeCloudCommand(slot);
   const result = await chrome.storage.local.get([
     STORAGE_KEYS.bridgeUrl,
     STORAGE_KEYS.bridgeToken
@@ -397,7 +414,7 @@ async function takePhoneCommand() {
 
   // A short request avoids leaving a waiting consumer behind when the tab
   // navigates or loses focus. The content script repeats it every 100 ms.
-  const response = await fetch(`${bridgeUrl.replace(/\/$/, "")}/api/command/next?token=${encodeURIComponent(bridgeToken)}`, {
+  const response = await fetch(`${bridgeUrl.replace(/\/$/, "")}/api/command/next?token=${encodeURIComponent(bridgeToken)}&slot=${encodeURIComponent(slot)}`, {
     headers: { Authorization: `Bearer ${await accessToken()}` },
     signal: AbortSignal.timeout(8000),
     cache: "no-store"
@@ -410,23 +427,26 @@ async function takePhoneCommand() {
 }
 
 async function publishAppointmentOptions(appointmentOptions, senderTab) {
+  const slot = await slotForTab(senderTab);
   const skip = await publishSkipReason(senderTab);
-  if (skip || !/^https:\/\/mobile\.impact\.ailife\.com\/Lead\/SetAppointment(?:[?#]|$)/.test(senderTab?.url || "")) {
-    return { skipped: true, reason: skip || "not the appointment page" };
+  if (skip || !slot || !/^https:\/\/mobile\.impact\.ailife\.com\/Lead\/SetAppointment(?:[?#]|$)/.test(senderTab?.url || "")) {
+    return { skipped: true, reason: skip || !slot ? "only two phone windows" : "not the appointment page" };
   }
-  if (!lastPublishedLead?.available || !appointmentOptions?.leadId || appointmentOptions.leadId !== lastPublishedLead.leadId) {
+  const current = slotMemory.get(slot)?.lead || lastPublishedLead;
+  if (!current?.available || !appointmentOptions?.leadId || appointmentOptions.leadId !== current.leadId) {
     throw new Error("Appointment options do not match the current lead.");
   }
-  return publishLead({ ...lastPublishedLead, appointmentOptions }, { eventName: "cloud.appointmentOptionsPublished" });
+  return publishLead({ ...current, appointmentOptions }, { eventName: "cloud.appointmentOptionsPublished", slot });
 }
 
-async function reportCommandResult(message) {
-  if (await cloudEnabled()) return reportCloudResult(message);
+async function reportCommandResult(message, slot = "1") {
+  const phone = slot === "2" ? "2" : "1";
+  if (await cloudEnabled()) return reportCloudResult(message, phone);
   const settings = await chrome.storage.local.get([STORAGE_KEYS.bridgeUrl, STORAGE_KEYS.bridgeToken]);
   const response = await fetch(`${parseBridgeUrl(settings[STORAGE_KEYS.bridgeUrl])}/api/command/result`, {
     method: "POST", signal: AbortSignal.timeout(8000),
     headers: { "content-type": "application/json", "x-bridge-token": settings[STORAGE_KEYS.bridgeToken] || "", Authorization: `Bearer ${await accessToken()}` },
-    body: JSON.stringify({ message })
+    body: JSON.stringify({ message, slot: phone })
   });
   if (!response.ok) throw new Error("Could not report command result.");
 }
@@ -435,6 +455,8 @@ async function autoPublishLead(incoming, senderTab) {
   // Script-only details (DOB, group, ...) stay in this browser: they fill the
   // Salebase script and are never sent to the phone, bridge or cloud.
   const { scriptDetails, ...lead } = incoming || {};
+  const slot = await slotForTab(senderTab);
+  if (!slot) return { skipped: true, reason: 'only two phone windows' };
   const skip = await publishSkipReason(senderTab);
   if (skip) return { skipped: true, reason: skip };
   noteScriptGroup(lead, scriptDetails);
@@ -449,14 +471,14 @@ async function autoPublishLead(incoming, senderTab) {
   const fingerprint = makeLeadFingerprint(lead);
   const bearer = await accessToken();
   const refreshAfter = await cloudEnabled() ? 30000 : 900000;
-  if (`${bearer}:${fingerprint}` === lastAutoPublishFingerprint && Date.now() - lastAutoPublishAt < refreshAfter) {
+  const remembered = slotMemory.get(slot) || {};
+  if (`${bearer}:${fingerprint}` === remembered.fingerprint && Date.now() - (remembered.at || 0) < refreshAfter) {
     return { skipped: true, reason: "duplicate lead payload" };
   }
 
   try {
-    const result = await publishLead(lead, { eventName: "bridge.leadAutoPublished" });
-    lastAutoPublishFingerprint = `${bearer}:${fingerprint}`;
-    lastAutoPublishAt = Date.now();
+    const result = await publishLead(lead, { eventName: "bridge.leadAutoPublished", slot });
+    slotMemory.set(slot, { ...(slotMemory.get(slot) || {}), fingerprint: `${bearer}:${fingerprint}`, at: Date.now() });
     return result;
   } catch (error) {
     await appendLocalLog("warn", "bridge.autoPublishFailed", {
@@ -476,15 +498,18 @@ function publishLead(lead, options = {}) {
   if (!lead?.available) {
     return Promise.reject(new Error("No lead payload available to send."));
   }
-  if (lead.leadId) latestLeadId = lead.leadId;
-  return leadWrites.run((seq) => writeLead(lead, seq, options), { mustRun: Boolean(options.force) });
+  const slot = options.slot === '2' ? '2' : '1';
+  if (lead.leadId && slot === '1') latestLeadId = lead.leadId;
+  return queueFor(slot).run((seq) => writeLead(lead, seq, { ...options, slot }), { mustRun: Boolean(options.force) });
 }
 
 async function writeLead(lead, seq, options = {}) {
+  const slot = options.slot === '2' ? '2' : '1';
   lastPublishedLead = structuredClone(lead);
+  slotMemory.set(slot, { ...(slotMemory.get(slot) || {}), lead: lastPublishedLead, leadId: lead.leadId || '' });
   // Every lead write (auto, follow-after-result, resync, Sync phone) checks the script.
   void openMatchingSalebaseScript(lead);
-  const leadChanged = Boolean(lead.leadId) && lead.leadId !== lastWrittenLeadId;
+  const leadChanged = Boolean(lead.leadId) && lead.leadId !== (slot === '1' ? lastWrittenLeadId : slotMemory.get(slot)?.writtenId);
   let written;
   try {
     written = await sendLeadToPhone(lead, options);
@@ -496,15 +521,17 @@ async function writeLead(lead, seq, options = {}) {
     await appendLocalLog('info', 'phoneSync.published', { leadChanged, via: options.eventName || 'auto', seq, hasName: Boolean(lead.leadName), phoneCount: lead.phones?.length || 0 });
   }
   if (leadChanged) {
-    lastWrittenLeadId = lead.leadId;
+    if (slot === '1') lastWrittenLeadId = lead.leadId;
+    slotMemory.set(slot, { ...(slotMemory.get(slot) || {}), writtenId: lead.leadId });
     // Belt and braces: read back what the phone sees; resync if it differs.
-    void checkPhoneHasLead(lead.leadId);
+    void checkPhoneHasLead(lead.leadId, slot);
   }
   return written;
 }
 
 async function sendLeadToPhone(lead, options = {}) {
-  if (await cloudEnabled()) return publishCloud(lead);
+  const slot = options.slot === '2' ? '2' : '1';
+  if (await cloudEnabled()) return publishCloud(lead, slot);
 
   const result = await chrome.storage.local.get([
     STORAGE_KEYS.bridgeUrl,
@@ -527,6 +554,7 @@ async function sendLeadToPhone(lead, options = {}) {
     },
     body: JSON.stringify({
       lead,
+      slot,
       sentAt: new Date().toISOString()
     })
   });
@@ -682,6 +710,61 @@ async function reportScriptSelect(request, outcome) {
   await chrome.storage.session.set({ 'impact.scriptSelect': { ...entry, at: Date.now() } }).catch(() => {});
 }
 
+// ---- Two IMPACT windows, one per phone ----
+// Slots are per lead tab, and claims run one at a time. Two windows opening
+// together used to both read an empty list and both become Phone 1.
+const WINDOW_SLOTS_KEY = 'impact.windowSlots';
+let slotClaims = Promise.resolve();
+async function readWindowSlots() {
+  const stored = await chrome.storage.session.get(WINDOW_SLOTS_KEY).catch(() => ({}));
+  return stored[WINDOW_SLOTS_KEY] || {};
+}
+async function writeWindowSlots(map) {
+  await chrome.storage.session.set({ [WINDOW_SLOTS_KEY]: map }).catch(() => {});
+}
+function queueSlotClaim(task) {
+  const run = slotClaims.then(task, task);
+  slotClaims = run.then(() => {}, () => {});
+  return run;
+}
+async function liveSlotMap() {
+  const map = await readWindowSlots();
+  try {
+    const tabs = await chrome.tabs.query({});
+    const open = new Set(tabs.map((item) => String(item.id)));
+    return Object.fromEntries(Object.entries(map).filter(([id]) => open.has(id)));
+  } catch (_error) {
+    return map;
+  }
+}
+function slotForTab(tab) {
+  if (!tab?.id) return Promise.resolve('1');
+  return queueSlotClaim(async () => {
+    const claimed = claimWindowSlot(await liveSlotMap(), tab.id);
+    await writeWindowSlots(claimed.map);
+    return claimed.slot || '1';
+  });
+}
+function setTabSlot(tab, slot) {
+  if (!tab?.id) return Promise.resolve('1');
+  const wanted = slot === '2' ? '2' : '1';
+  return queueSlotClaim(async () => {
+    await writeWindowSlots(assignWindowSlot(await liveSlotMap(), tab.id, wanted));
+    return wanted;
+  });
+}
+function forgetTab(tabId) {
+  return queueSlotClaim(async () => {
+    const map = await readWindowSlots();
+    const slot = map[String(tabId)];
+    if (!slot) return;
+    delete map[String(tabId)];
+    await writeWindowSlots(map);
+    if (await cloudEnabled()) await clearCloudSlot(slot).catch(() => {});
+  });
+}
+chrome.tabs.onRemoved.addListener((tabId) => { void forgetTab(tabId); });
+
 // ---- Keeping the phone on IMPACT's lead ----
 async function publishSkipReason(senderTab) {
   const [focused] = await chrome.tabs.query({ active: true, lastFocusedWindow: true }).catch(() => []);
@@ -691,11 +774,11 @@ async function publishSkipReason(senderTab) {
   return reason;
 }
 
-async function readPhoneLeadId() {
-  if (await cloudEnabled()) return cloudLeadId();
+async function readPhoneLeadId(slot = '1') {
+  if (await cloudEnabled()) return cloudLeadId(slot);
   const settings = await chrome.storage.local.get([STORAGE_KEYS.bridgeUrl, STORAGE_KEYS.bridgeToken]);
   const bridgeUrl = parseBridgeUrl(settings[STORAGE_KEYS.bridgeUrl]).replace(/\/$/, '');
-  const response = await fetch(`${bridgeUrl}/api/current-lead?token=${encodeURIComponent(settings[STORAGE_KEYS.bridgeToken] || '')}`, {
+  const response = await fetch(`${bridgeUrl}/api/current-lead?token=${encodeURIComponent(settings[STORAGE_KEYS.bridgeToken] || '')}&slot=${encodeURIComponent(slot)}`, {
     headers: { Authorization: `Bearer ${await accessToken()}` }, signal: AbortSignal.timeout(8000), cache: 'no-store'
   });
   const payload = await response.json().catch(() => ({}));
@@ -703,21 +786,26 @@ async function readPhoneLeadId() {
   return payload.lead?.leadId || '';
 }
 
-function checkPhoneHasLead(leadId) {
+function checkPhoneHasLead(leadId, slot = '1') {
+  const key = slot === '2' ? '2' : '1';
   return verifyPhoneLead({
     expectedLeadId: leadId,
-    currentLeadId: () => latestLeadId,
-    readPhoneLeadId,
-    republish: () => (lastPublishedLead?.leadId === leadId ? publishLead(lastPublishedLead, { force: true, eventName: 'phoneSync.resync' }) : Promise.resolve()),
+    currentLeadId: () => slotMemory.get(key)?.leadId || '',
+    readPhoneLeadId: () => readPhoneLeadId(key),
+    republish: () => {
+      const remembered = slotMemory.get(key)?.lead;
+      return remembered?.leadId === leadId ? publishLead(remembered, { force: true, slot: key, eventName: 'phoneSync.resync' }) : Promise.resolve();
+    },
     log: appendLocalLog
   }).catch(() => {});
 }
 
-async function followAfterCommand(tabId, fromLeadId) {
-  const generation = ++followGeneration;
+async function followAfterCommand(tabId, fromLeadId, slot = '1') {
+  const generation = (followGenerations.get(tabId) || 0) + 1;
+  followGenerations.set(tabId, generation);
   await followLeadChange({
     fromLeadId,
-    isCurrent: () => generation === followGeneration,
+    isCurrent: () => followGenerations.get(tabId) === generation,
     readLead: async () => {
       const response = await chrome.tabs.sendMessage(tabId, { type: 'impact/readCurrentLead' });
       if (!response?.lead?.available) return null;
@@ -726,7 +814,7 @@ async function followAfterCommand(tabId, fromLeadId) {
       await rememberScriptLead(lead, scriptDetails, tabId).catch(() => {});
       return lead;
     },
-    publish: (lead) => publishLead(lead, { force: true, eventName: 'phoneSync.followPublished' }).catch(() => {}),
+    publish: (lead) => publishLead(lead, { force: true, slot, eventName: 'phoneSync.followPublished' }).catch(() => {}),
     verify: async () => {}, // writeLead already checks the phone when the lead changes
     log: appendLocalLog
   }).catch(() => {});

@@ -47,9 +47,9 @@ test('today line counts only today\'s Central-day entries, and anything odd keep
   assert.equal(api.todaySummary(null,central(20)),'');
 });
 
-test('Home keeps every way in: workspace, sign in, account, calendar, statistics, settings, setup, privacy', ()=>{
+test('Home keeps every way in: workspace, sign in, account, calendar, statistics, number health, settings, setup, privacy', ()=>{
   const html=read('index.html');
-  for(const href of ['workspace.html','account.html?next=workspace.html','account.html','calendar.html?from=home','statistics.html','settings.html?from=home','start.html','privacy.html'])
+  for(const href of ['workspace.html','account.html?next=workspace.html','account.html','calendar.html?from=home','statistics.html','numbers.html','settings.html?from=home','start.html','privacy.html'])
     assert.ok(html.includes(`href="${href}"`),href);
   for(const id of ['signedIn','signedOut','homeShortcuts','accountName','homeStatus','homeGreeting','homeDate','calendarToday']) assert.match(html,new RegExp(`id="${id}"`),id);
   assert.match(html,/data-encourage="home"/);

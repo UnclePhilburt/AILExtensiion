@@ -14,8 +14,32 @@ export function publisherDecision(senderTab, focusedTab) {
   if (!senderTab?.id) return 'no tab';
   if (!IMPACT_LEAD_URL.test(senderTab.url || '')) return 'not an IMPACT lead page';
   if (senderTab.active === false) return 'background tab';
-  if (focusedTab?.id && focusedTab.id !== senderTab.id && IMPACT_LEAD_URL.test(focusedTab.url || '')) return 'another IMPACT tab is in front';
+  // Another IMPACT window may stay open for the second phone. Only a second
+  // lead tab in THIS window is in the way.
+  const otherWindow = senderTab.windowId && focusedTab?.windowId && senderTab.windowId !== focusedTab.windowId;
+  if (!otherWindow && focusedTab?.id && focusedTab.id !== senderTab.id && IMPACT_LEAD_URL.test(focusedTab.url || '')) return 'another IMPACT tab is in front';
   return '';
+}
+
+// Two IMPACT windows, one per phone. A third window is not given a phone.
+export function claimWindowSlot(map, windowId) {
+  const slots = { ...(map || {}) };
+  const id = String(windowId || '');
+  if (!id) return { map: slots, slot: '1' };
+  if (slots[id] === '1' || slots[id] === '2') return { map: slots, slot: slots[id] };
+  const used = new Set(Object.values(slots));
+  if (!used.has('1')) slots[id] = '1';
+  else if (!used.has('2')) slots[id] = '2';
+  else return { map: slots, slot: '' };
+  return { map: slots, slot: slots[id] };
+}
+
+export function assignWindowSlot(map, windowId, slot) {
+  const wanted = slot === '2' ? '2' : '1';
+  const slots = {};
+  for (const [id, owned] of Object.entries(map || {})) if (owned !== wanted) slots[id] = owned;
+  slots[String(windowId)] = wanted;
+  return slots;
 }
 
 // Runs lead writes one at a time, in the order they were requested, so an

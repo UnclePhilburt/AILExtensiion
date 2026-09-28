@@ -27,6 +27,7 @@
   // goes to the phone once it has been on screen this long.
   const INCOMPLETE_LEAD_SETTLE_MS = 2000;
   let incompleteLead = { leadId: "", since: 0, logged: false };
+  let windowSlot = "";
   let lastAppointmentOptionsFingerprint = "";
   let resultDialogsBeforeSubmit = new WeakSet();
   const dismissedQuietHoursDialogs = new WeakSet();
@@ -84,6 +85,7 @@
 
   startAutoPublishWatcher();
   startPhoneCommandWatcher();
+  chrome.runtime.sendMessage({ type: "impact/windowSlot" }, (response) => paintPhoneWindowBadge(response?.slot));
   window.setInterval(finishResultAdvance, 150);
   startQuietHoursDialogWatcher();
 
@@ -627,6 +629,31 @@
     }, 1000);
   }
 
+  function paintPhoneWindowBadge(slot) {
+    if (slot === "1" || slot === "2") windowSlot = slot;
+    if (!["/Lead/InboxDetail", "/Lead/WhatHappend", "/Lead/SetAppointment"].includes(location.pathname)) return;
+    const label = slot === '2' ? 'Phone 2' : slot === '1' ? 'Phone 1' : 'Extra window';
+    let badge = document.getElementById('impact-companion-phone-slot');
+    if (!badge) {
+      badge = document.createElement('button');
+      badge.id = 'impact-companion-phone-slot';
+      badge.type = 'button';
+      badge.title = 'Click to switch which phone controls this window';
+      Object.assign(badge.style, {
+        position: 'fixed', top: '12px', right: '12px', zIndex: '2147483646',
+        padding: '8px 12px', borderRadius: '999px', border: '0', cursor: 'pointer',
+        background: '#123b3a', color: '#f4fff8', font: '700 13px/1 system-ui, sans-serif',
+        boxShadow: '0 8px 24px #123b3a44'
+      });
+      badge.addEventListener('click', () => {
+        const next = badge.textContent === 'Phone 1' ? '2' : '1';
+        chrome.runtime.sendMessage({ type: 'impact/setWindowSlot', slot: next }, (result) => paintPhoneWindowBadge(result?.slot || next));
+      });
+      document.documentElement.append(badge);
+    }
+    badge.textContent = label;
+  }
+
   function startPhoneCommandWatcher() {
     const poll = async () => {
       await pollPhoneCommand();
@@ -645,6 +672,7 @@
     commandPollBusy = true;
     try {
       const response = await chrome.runtime.sendMessage({ type: "impact/getPhoneCommand" });
+      if (response?.result?.slot) paintPhoneWindowBadge(response.result.slot);
       const command = response?.result?.command;
       if (!command?.type) {
         return;
@@ -662,6 +690,7 @@
             message = "Virtual appointment day selected. Choose a time on your phone.";
           } else {
             await clickVirtualAppointmentSlot(command);
+            void rememberWindowLead(getCurrentLeadId(), true);
             message = "Virtual appointment time selected in IMPACT.";
           }
         } catch (error) {
@@ -686,6 +715,7 @@
             clickNoAnswer(command);
             message = "No Answer submitted. Waiting for IMPACT, then moving to the next lead...";
           }
+          if (command.type !== "virtual-appointment") void rememberWindowLead(getCurrentLeadId(), true);
         } catch (error) {
           message = error.message;
         }
@@ -715,6 +745,7 @@
         try {
           if (["in-home", "call-back", "left-message", "dropby-appointment"].includes(command.type)) openWhatHappened(labels[command.type]);
           else openDetailAction(labels[command.type]);
+          if (command.type === "left-message") void rememberWindowLead(getCurrentLeadId(), true);
           await chrome.runtime.sendMessage({ type: "impact/commandResult", message: `${labels[command.type]} opened in IMPACT.` });
         } catch (error) {
           await chrome.runtime.sendMessage({ type: "impact/commandResult", message: error.message });
@@ -724,6 +755,7 @@
 
       if (command.type === "call") {
         try {
+          void rememberWindowLead(getCurrentLeadId(), true);
           clickLeadCallButton(command);
           await log("info", "phone.callControlClicked", { phoneType: command.phoneType });
         } catch (error) {
@@ -770,31 +802,38 @@
 
   // Next / Previous follow the saved Inbox list. IMPACT's own arrows use a
   // separate cursor, so after a direct open they can jump back to an earlier lead.
-  function neighborInQueue(queue, currentLeadId, direction) {
+  function neighborInQueue(queue, currentLeadId, direction, blockedIds) {
     const leads = (Array.isArray(queue) ? queue : []).filter((lead) => lead?.url && lead.leadId);
     const index = leads.findIndex((lead) => lead.leadId === currentLeadId);
     if (index === -1) return { status: "unknown" };
-    const neighbor = leads[direction === "previous" ? index - 1 : index + 1];
-    if (!neighbor) return { status: "end" };
-    return { status: "open", lead: neighbor };
+    const blocked = new Set((Array.isArray(blockedIds) ? blockedIds : []).map((id) => String(id)));
+    const step = direction === "previous" ? -1 : 1;
+    let skipped = false;
+    for (let cursor = index + step; cursor >= 0 && cursor < leads.length; cursor += step) {
+      if (blocked.has(String(leads[cursor].leadId))) { skipped = true; continue; }
+      return { status: "open", lead: leads[cursor] };
+    }
+    return { status: skipped ? "blocked" : "end" };
   }
 
   // The lead after the one just worked, even if IMPACT's cursor already moved.
-  function leadAfterWorked(queue, finishedLeadId, currentLeadId) {
-    const choice = neighborInQueue(queue, finishedLeadId, "next");
+  function leadAfterWorked(queue, finishedLeadId, currentLeadId, blockedIds) {
+    const choice = neighborInQueue(queue, finishedLeadId, "next", blockedIds);
     if (choice.status === "open" && choice.lead.leadId === currentLeadId) return { status: "already", lead: choice.lead };
     return choice;
   }
 
   // Best next walks the Inbox once before it may offer someone again.
-  function bestNextPool(queue, currentLeadId, seenIds) {
+  // blockedIds is only the lead the other phone is on right now.
+  function bestNextPool(queue, currentLeadId, seenIds, blockedIds) {
     const leads = (Array.isArray(queue) ? queue : []).filter((lead) => lead?.url && lead.leadId && lead.leadId !== currentLeadId);
+    const blocked = new Set((Array.isArray(blockedIds) ? blockedIds : []).map((id) => String(id)));
     const seen = new Set((Array.isArray(seenIds) ? seenIds : []).map((id) => String(id)).filter(Boolean));
     if (currentLeadId) seen.add(String(currentLeadId));
-    const waiting = (lead) => !seen.has(String(lead.leadId));
+    const waiting = (lead) => !seen.has(String(lead.leadId)) && !blocked.has(String(lead.leadId));
     let pool = leads.filter(waiting);
     let freshPass = false;
-    if (!pool.length && leads.length) {
+    if (!pool.length && leads.some((lead) => !blocked.has(String(lead.leadId)))) {
       freshPass = true;
       seen.clear();
       if (currentLeadId) seen.add(String(currentLeadId));
@@ -803,6 +842,17 @@
     return { pool, seen: [...seen], freshPass };
   }
 
+  function otherPhoneBlockedIds(record, mySlot) {
+    const mine = String(mySlot || "");
+    const blocked = [];
+    for (const [slot, leadId] of Object.entries(record?.slots || {})) {
+      if (slot !== mine && leadId) blocked.push(String(leadId));
+    }
+    return [...new Set(blocked)];
+  }
+
+  const OTHER_PHONE_KEY = "impact.otherPhoneLeads";
+  const OTHER_PHONE_RECENT_MS = 15 * 60 * 1000;
   const BEST_NEXT_SEEN_KEY = "impact.bestNextSeen";
   const BEST_NEXT_CACHE_KEY = "impact.bestNextDetails";
   const RECENT_ATTEMPT_MS = 4 * 60 * 60 * 1000;
@@ -952,7 +1002,8 @@
     const seen = await readReminderSeen();
     const currentDue = reminders.find((item) => item?.leadId === current && item.kind && !seen.has(reminderStamp(item)));
     if (currentDue) await markReminderSeen(currentDue);
-    const due = reminders.find((item) => item?.leadId && item.leadId !== current && item.kind && !seen.has(reminderStamp(item)));
+    const blocked = new Set(await otherPhoneBlocked());
+    const due = reminders.find((item) => item?.leadId && item.leadId !== current && !blocked.has(String(item.leadId)) && item.kind && !seen.has(reminderStamp(item)));
     if (!due) return false;
     await markReminderSeen(due);
     const queue = await readInboxQueue();
@@ -967,10 +1018,15 @@
 
   async function openInboxNeighbor(direction) {
     if (direction === "next" && await openDueReminder()) return;
-    const choice = neighborInQueue(await readInboxQueue(), getCurrentLeadId(), direction);
+    const blocked = await otherPhoneBlocked();
+    const choice = neighborInQueue(await readInboxQueue(), getCurrentLeadId(), direction, blocked);
     if (choice.status === "open") {
       if (direction === "next") writeBestNextSeen([...readBestNextSeen(), getCurrentLeadId()]);
       location.assign(choice.lead.url);
+      return;
+    }
+    if (choice.status === "blocked") {
+      await chrome.runtime.sendMessage({ type: "impact/commandResult", message: "The other phone is on that lead." });
       return;
     }
     if (choice.status === "end") {
@@ -984,8 +1040,13 @@
   }
 
   async function openLeadAfterWorked(finishedLeadId, currentId) {
-    const choice = leadAfterWorked(await readInboxQueue(), finishedLeadId, currentId);
+    const blocked = await otherPhoneBlocked();
+    const choice = leadAfterWorked(await readInboxQueue(), finishedLeadId, currentId, blocked);
     if (choice.status === "already") return;
+    if (choice.status === "blocked") {
+      await chrome.runtime.sendMessage({ type: "impact/commandResult", message: "The other phone is on the next lead. Staying on this one." });
+      return;
+    }
     if (choice.status === "open") {
       writeBestNextSeen([...readBestNextSeen(), finishedLeadId]);
       location.assign(choice.lead.url);
@@ -998,8 +1059,9 @@
     if (await openDueReminder()) return;
     const queue = await readInboxQueue();
     const currentLeadId = getCurrentLeadId();
-    const choice = bestNextPool(queue, currentLeadId, readBestNextSeen());
-    if (!choice.pool.length) throw new Error("Open the IMPACT Inbox on your computer so the phone can see the list, then try again.");
+    const blocked = await otherPhoneBlocked();
+    const choice = bestNextPool(queue, currentLeadId, readBestNextSeen(), blocked);
+    if (!choice.pool.length) throw new Error(blocked.length ? "The other phone is on the only lead left in this pass." : "Open the IMPACT Inbox on your computer so the phone can see the list, then try again.");
     const now = Date.now();
     const group = bestCallingGroup(choice.pool, now);
     const cache = readDetailCache();
@@ -1573,7 +1635,38 @@
     }
   }
 
+  async function windowPhoneSlot() {
+    if (windowSlot === "1" || windowSlot === "2") return windowSlot;
+    try {
+      const response = await chrome.runtime.sendMessage({ type: "impact/windowSlot" });
+      if (response?.slot === "1" || response?.slot === "2") windowSlot = response.slot;
+    } catch (_error) { /* the window can still show the lead */ }
+    return windowSlot;
+  }
+
+  async function rememberWindowLead(leadId, called) {
+    const id = String(leadId || "");
+    const slot = await windowPhoneSlot();
+    if (!id || (slot !== "1" && slot !== "2")) return;
+    const stored = await chrome.storage.local.get(OTHER_PHONE_KEY).catch(() => ({}));
+    const record = stored[OTHER_PHONE_KEY] && typeof stored[OTHER_PHONE_KEY] === "object" ? stored[OTHER_PHONE_KEY] : {};
+    const recent = (Array.isArray(record.recent) ? record.recent : [])
+      .filter((item) => Date.now() - Number(item.at) < OTHER_PHONE_RECENT_MS);
+    if (called) recent.push({ leadId: id, slot, at: Date.now() });
+    await chrome.storage.local.set({
+      [OTHER_PHONE_KEY]: { slots: { ...(record.slots || {}), [slot]: id }, recent: recent.slice(-40) }
+    }).catch(() => {});
+  }
+
+  async function otherPhoneBlocked() {
+    const slot = await windowPhoneSlot();
+    if (slot !== "1" && slot !== "2") return [];
+    const stored = await chrome.storage.local.get(OTHER_PHONE_KEY).catch(() => ({}));
+    return otherPhoneBlockedIds(stored[OTHER_PHONE_KEY], slot);
+  }
+
   async function publishCurrentLead(lead) {
+      void rememberWindowLead(lead?.leadId, false);
       const fingerprint = JSON.stringify({
         url: location.href,
         leadName: lead.leadName,

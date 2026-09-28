@@ -13,6 +13,11 @@
 .morningBriefing a { color:inherit; text-underline-offset:3px; }
 .morningStart,.morningBriefingLink { cursor:pointer; border-radius:12px; padding:14px 18px; font:inherit; }
 .morningStart { margin-top:18px; width:100%; border:0; background:#395d49; color:#fff; }
+.morningWorn { margin: 18px 0 4px; padding: 14px 14px 12px; border-radius: 16px; background: #fdecea; color: #6d332c; }
+.morningWorn h3 { margin: 0 0 8px; font-size: 22px; }
+.morningWorn p { margin: 0 0 8px; }
+.morningWorn a { font-weight: 750; }
+html[data-theme="dark"] .morningWorn { background: #3d2622; color: #f6d2cb; }
 .morningBriefingLink { margin:16px 0 0; width:100%; background:transparent; color:inherit; border:1px solid #ae9c7e88; }
 .morningBriefingLink[hidden] { display:none; }
 .morningBriefing :focus-visible { outline:3px solid #a98647; outline-offset:3px; }

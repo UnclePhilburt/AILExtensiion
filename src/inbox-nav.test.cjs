@@ -7,7 +7,7 @@ const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../extension/src/content/impact-diagnostic.js'), 'utf8');
 const pure = source.slice(source.indexOf('  function neighborInQueue('), source.indexOf('  const BEST_NEXT_SEEN_KEY'));
 const context = vm.createContext({});
-vm.runInContext(`${pure}\nthis.neighborInQueue = neighborInQueue; this.leadAfterWorked = leadAfterWorked; this.bestNextPool = bestNextPool;`, context);
+vm.runInContext(`${pure}\nthis.neighborInQueue = neighborInQueue; this.leadAfterWorked = leadAfterWorked; this.bestNextPool = bestNextPool; this.otherPhoneBlockedIds = otherPhoneBlockedIds;`, context);
 
 const lead = (leadId) => ({ leadId, url: `https://mobile.impact.ailife.com/Lead/InboxDetail?LeadId=${leadId}`, order: Number(leadId) });
 const queue = [lead('1'), lead('2'), lead('3')];
@@ -45,6 +45,18 @@ test('Best next skips people already offered until the Inbox has all been seen',
   assert.equal(restart.freshPass, true);
   assert.equal([...restart.seen].join(','), '3');
   assert.equal(restart.pool.map((item) => item.leadId).join(','), '1,2');
+
+  const shared = context.bestNextPool(queue, '2', [], ['1']);
+  assert.deepEqual(shared.pool.map((item) => item.leadId), ['3']);
+  assert.equal(context.neighborInQueue(queue, '1', 'next', ['2']).lead.leadId, '3');
+  assert.equal(context.neighborInQueue(queue, '1', 'next', ['2', '3']).status, 'blocked');
+});
+
+test('a window skips only the lead the other phone is on, not the rest of the list', () => {
+  const record = { slots: { '1': '9', '2': '4' }, recent: [{ leadId: '7', slot: '2', at: 1 }, { leadId: '1', slot: '2', at: 1 }, { leadId: '3', slot: '2', at: 1 }] };
+  assert.equal([...context.otherPhoneBlockedIds(record, '1')].join(','), '4');
+  assert.equal([...context.otherPhoneBlockedIds(record, '2')].join(','), '9');
+  assert.equal(context.neighborInQueue(queue, '1', 'next', ['4']).lead.leadId, '2');
 });
 
 function ranker() {

@@ -1,5 +1,22 @@
 import { client } from './auth-runtime.js';
-import { normalizeCallingNumber, formatCallingNumber, numberHealth } from './calling-numbers-model.js';
+import { normalizeCallingNumber, formatCallingNumber, numberHealth } from './calling-numbers-model.js?v=1';
+import { applyUserName } from './user-name.js';
+import { loadPhoneSettings, savePhoneSettings } from './settings-store.js';
+
+// Carrier forms open in the browser. Companion does not send the number.
+const SPAM_REMOVAL = [
+  ['Verizon', 'https://www.voicespamfeedback.com/vsf/'],
+  ['T-Mobile', 'https://callreporting.t-mobile.com/'],
+  ['AT&T', 'https://hiyahelp.zendesk.com/hc/en-us/requests/new?ticket_form_id=824667'],
+  ['Sprint', 'https://reportarobocall.com/trf/'],
+  ['Register as a real number', 'https://www.freecallerregistry.com/fcr/']
+];
+const SPAM_HELP = [
+  ['My number is showing as spam', 'https://www.youtube.com/results?search_query=my+number+is+showing+as+spam'],
+  ['Twilio video', 'https://www.youtube.com/watch?v=TatXBxVXPzs']
+];
+
+if (typeof applyUserName === 'function') applyUserName();
 
 const section = document.querySelector('#callingNumbers');
 const form = document.querySelector('#callingNumberForm');
@@ -16,30 +33,114 @@ function node(tag, text, className) {
 function controls(disabled) { section.querySelectorAll('button,input').forEach(item => { item.disabled = disabled; }); }
 function render(numbers, stats) {
   list.replaceChildren();
-  if (!numbers.length) list.append(node('p', 'No calling numbers saved. Add a number, then set it active before your next call.'));
-  for (const number of numbers) {
-    const card = node('article', '', 'callingNumberCard');
-    card.append(node('h3', formatCallingNumber(number.phone)), node('p', `${number.label || 'Calling number'} · ${number.active ? 'Active for new calls' : number.archived ? 'Archived · history saved' : 'Not active'}`, 'numberState'));
-    if (stats) {
-      const health = numberHealth(stats, number.id);
-      const grid = node('dl', '', 'numberMetrics');
-      for (const [label,value] of [['Calls started',health.calls],['Results recorded',health.recorded],['No-answer rate',health.noAnswerRate],['Appointment rate',health.appointmentRate],['Appointments',health.appointments],['Refused',health.refused]]) {
-        const item = node('div',''); item.append(node('dt',label),node('dd',String(value))); grid.append(item);
-      }
-      card.append(node('p','Last 30 days','numberPeriod'),grid,
-        node('p',`${health.missing} calls without a recorded result. Rates use recorded results only.`),node('p',health.trend));
-    } else card.append(node('p','Statistics are unavailable. Refresh to try again.'));
-    if (!number.archived) {
-      const actions = node('div','','numberActions');
-      const active = node('button',number.active ? 'Stop tracking new calls' : 'Set active'); active.type='button';
-      active.addEventListener('click',()=>void run(()=>manage(number.id,number.active?'pause':'activate')));
-      const archive = node('button','Archive'); archive.type='button'; archive.className='secondary';
-      archive.addEventListener('click',()=>void run(()=>manage(number.id,'archive')));
-      actions.append(active,archive); card.append(actions);
-    }
-    list.append(card);
+  if (!numbers.length) {
+    list.append(node('p', 'No calling numbers saved. Add one above, then set it active before the next call.', 'emptyNumbers'));
+    return;
+  }
+  const live = numbers.filter((number) => !number.archived).sort((a, b) => Number(b.active) - Number(a.active));
+  const archived = numbers.filter((number) => number.archived);
+  for (const number of live) list.append(numberCard(number, stats));
+  if (!archived.length) return;
+  const box = document.createElement('details');
+  box.className = 'archivedNumbers';
+  box.append(node('summary', `Archived (${archived.length})`));
+  for (const number of archived) box.append(numberCard(number, stats));
+  list.append(box);
+}
+
+function numberCard(number, stats) {
+  const card = node('article', '', `callingNumberCard${number.active ? ' isActive' : ''}`);
+  const top = document.createElement('div');
+  top.className = 'cardTop';
+  const state = number.active ? 'Active for new calls' : number.archived ? 'Archived · history saved' : 'Not in use';
+  if (stats) {
+    const health = numberHealth(stats, number.id);
+    top.append(node('p', health.estimateLabel, `healthEstimate ${health.estimate}`), node('p', state, 'numberState'));
+    card.append(top, node('h3', formatCallingNumber(number.phone)));
+    if (number.label) card.append(node('p', number.label, 'numberName'));
+    card.append(countRow([[health.answered, 'Answered'], [health.no_answer, 'No answer'], [health.appointments, 'Appointments']]));
+    if (health.estimate === 'early') card.append(node('p', health.estimateDetail, 'earlyNote'));
+  } else {
+    top.append(node('p', state, 'numberState'));
+    card.append(top, node('h3', formatCallingNumber(number.phone)));
+    if (number.label) card.append(node('p', number.label, 'numberName'));
+    card.append(node('p', 'Statistics are unavailable. Refresh to try again.', 'earlyNote'));
+  }
+  if (!number.archived) {
+    const actions = node('div', '', 'numberActions');
+    const active = node('button', number.active ? 'Stop tracking new calls' : 'Set active');
+    active.type = 'button';
+    active.addEventListener('click', () => void run(() => manage(number.id, number.active ? 'pause' : 'activate')));
+    const archive = node('button', 'Archive');
+    archive.type = 'button';
+    archive.className = 'secondary';
+    archive.addEventListener('click', () => void run(() => manage(number.id, 'archive')));
+    actions.append(active, archive);
+    const mine = typeof loadPhoneSettings === 'function' && loadPhoneSettings(localStorage).phoneLineId === number.id;
+    const use = node('button', mine ? 'This phone dials this' : 'Use on this phone');
+    use.type = 'button';
+    use.className = 'secondary';
+    use.disabled = mine;
+    use.addEventListener('click', () => {
+      if (typeof savePhoneSettings === 'function') savePhoneSettings(localStorage, { phoneLineId: number.id });
+      status.textContent = 'This phone will count new calls on this number.';
+      use.textContent = 'This phone dials this';
+      use.disabled = true;
+    });
+    actions.append(use);
+    card.append(actions);
+  }
+  card.append(spamRemoval(formatCallingNumber(number.phone)));
+  return card;
+}
+
+function countRow(pairs) {
+  const row = document.createElement('div');
+  row.className = 'countRow';
+  for (const [value, label] of pairs) {
+    const cell = document.createElement('div');
+    cell.append(node('strong', String(value)), node('span', label));
+    row.append(cell);
+  }
+  return row;
+}
+
+function spamRemoval(phone) {
+  const box = document.createElement('details');
+  box.className = 'spamRemoval';
+  box.append(node('summary', 'Clear spam lists'));
+  box.append(node('p', 'About once a month. Copy this number, then paste it into each form.'));
+  const copy = node('button', 'Copy this number');
+  copy.type = 'button';
+  copy.addEventListener('click', () => { void copyNumber(copy, phone); });
+  box.append(copy, linkRow(SPAM_REMOVAL, 'spamLinks'), linkRow(SPAM_HELP, 'spamLinks spamHelp'));
+  return box;
+}
+
+function linkRow(items, className) {
+  const row = document.createElement('div');
+  row.className = className;
+  for (const [label, href] of items) {
+    const link = document.createElement('a');
+    link.href = href;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = label;
+    row.append(link);
+  }
+  return row;
+}
+
+async function copyNumber(button, phone) {
+  try {
+    await navigator.clipboard.writeText(phone);
+    button.textContent = 'Copied';
+    setTimeout(() => { if (button.textContent === 'Copied') button.textContent = 'Copy this number'; }, 1600);
+  } catch (_error) {
+    status.textContent = `Copy didn't work. Select this number and copy it: ${phone}`;
   }
 }
+
 async function manage(id,action) {
   const {error} = await client.rpc('calling_number_manage',{p_id:id,p_action:action});
   if(error) throw error;

@@ -41,13 +41,31 @@
 .callingNumberCard { border:1px solid #d4e1d8; border-radius:14px; padding:16px; display:grid; gap:10px; }
 .callingNumberCard h3 { margin:0; font-size:20px; overflow-wrap:anywhere; }
 .numberState { font-weight:650; overflow-wrap:anywhere; }
+.healthEstimate { justify-self:start; margin:0; padding:6px 12px; border-radius:999px; font-size:13px; font-weight:750; }
+.healthEstimate.steady { background:#e5f6ec; color:#17684e; }
+.healthEstimate.mixed { background:#fff4df; color:#8a5a14; }
+.healthEstimate.wearing { background:#fdecea; color:#8a3328; }
+.healthEstimate.early { background:#eef2ef; color:#5d6f66; }
 .numberMetrics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin:0; }
 .numberMetrics dt { font-size:12px; color:#62776d; }
 .numberMetrics dd { margin:4px 0 0; font-size:24px; font-weight:750; }
 .numberActions { display:flex; flex-wrap:wrap; gap:8px; }
 .numberActions button { flex:1 1 140px; min-height:44px; }
+.spamRemoval { display:grid; gap:10px; margin-top:4px; padding-top:8px; border-top:1px solid #e4eee8; }
+.spamRemoval summary { min-height:44px; display:flex; align-items:center; font-weight:750; color:#17684e; cursor:pointer; }
+.spamRemoval button { justify-self:start; min-height:44px; padding:0 14px; }
+.spamLinks { display:flex; flex-wrap:wrap; gap:8px; }
+.spamLinks a { display:inline-flex; align-items:center; min-height:44px; padding:8px 12px; border-radius:12px; background:#edf3ef; color:#17684e; font-size:14px; font-weight:750; text-decoration:none; }
+.spamHelp a { background:#f4f7f5; color:#304d43; }
 #callingNumberStatus { overflow-wrap:anywhere; }
 html[data-theme="dark"] #callingNumbers { color:#d8e7df; }
 html[data-theme="dark"] .numberHealthNote { background:#213e35; }
 html[data-theme="dark"] .callingNumberCard { border-color:#466357; }
+html[data-theme="dark"] .spamRemoval { border-top-color:#466357; }
+html[data-theme="dark"] .spamRemoval summary, html[data-theme="dark"] .spamLinks a { color:#d8f2e1; }
+html[data-theme="dark"] .spamLinks a { background:#213e35; }
+html[data-theme="dark"] .healthEstimate.steady { background:#1d4334; color:#d8f2e1; }
+html[data-theme="dark"] .healthEstimate.mixed { background:#3a3120; color:#f3e2c0; }
+html[data-theme="dark"] .healthEstimate.wearing { background:#3d2622; color:#f6d2cb; }
+html[data-theme="dark"] .healthEstimate.early { background:#2a342e; color:#c5d5cb; }
 html[data-theme="dark"] .numberHelp, html[data-theme="dark"] .numberPeriod, html[data-theme="dark"] .numberMetrics dt { color:#a9c2b5; }

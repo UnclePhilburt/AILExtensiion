@@ -55,7 +55,7 @@ test('message is stable for the account/day and schedule-aware',()=>{
   assert.match(message,/calendar today/);
 });
 
-async function harness(hour=9) {
+async function harness(hour=9, extras={}) {
   let now=at(27,hour), authCallback, active=false;
   const nodes=[],docEvents={},winEvents={},saved=new Map(),timers=[];
   const make=tag=>({tag,children:[],dataset:{},listeners:{},hidden:false,
@@ -70,9 +70,11 @@ async function harness(hour=9) {
     location:{pathname:'/index.html'},document:doc,navigator:{},
     window:{addEventListener:(k,fn)=>winEvents[k]=fn},clearTimeout(){},setTimeout:(fn,ms=0)=>{if(ms)timers.push({fn,ms});else Promise.resolve().then(fn);},
     localStorage:{getItem:k=>saved.get(k),setItem:(k,v)=>saved.set(k,v)},
-    client:{auth:{onAuthStateChange:fn=>authCallback=fn,getSession:async()=>({data:{session:{user:{id:'a'}}}})},from:()=>query},
+    client:{auth:{onAuthStateChange:fn=>authCallback=fn,getSession:async()=>({data:{session:{user:{id:'a'}}}})},
+      from:table=>table==='calling_numbers'&&extras.numbers?{select(){return this;},eq(){return this;},order:async()=>({data:extras.numbers,error:null})}:query,
+      rpc:extras.rpc},
     readPendingCall:()=>active?{resultSentAt:0}:null});
-  vm.runInContext(strip(read('time-zone.js'))+'\n'+strip(read('morning-briefing-model.js'))+'\n'+strip(read('appointment-outcomes.js')),context);
+  vm.runInContext(strip(read('time-zone.js'))+'\n'+strip(read('morning-briefing-model.js'))+'\n'+strip(read('appointment-outcomes.js'))+'\n'+strip(read('calling-numbers-model.js')),context);
   vm.runInContext(strip(read('morning-briefing.js')).replace('import.meta.url',"'https://example.test/morning-briefing.js'"),context);
   const settle=async()=>{for(let i=0;i<12;i++)await new Promise(setImmediate);};await settle();
   return {nodes,saved,settle,docEvents,winEvents,body,timers,
@@ -97,6 +99,21 @@ test('an already-open page triggers at 8 without another login or focus',async()
   const h=await harness(7);assert.equal(h.dialogs().length,0);
   assert.equal(h.timers[0].ms,60*60*1000);
   h.setHour(8);h.timers[0].fn();await h.settle();assert.equal(h.dialogs().length,1);
+});
+test('a worn number is mentioned inside the daily briefing, still as one popup',async()=>{
+  const h=await harness(8,{
+    numbers:[{id:'n1',phone:'+13125550199',label:'Work phone',active:true,archived:false}],
+    rpc:async()=>({data:[{number_id:'n1',period:'current',calls:20,recorded:20,no_answer:20,appointments:0,refused:0}],error:null})
+  });
+  assert.equal(h.dialogs().length,1);
+  const text=node=>`${node.textContent||''} ${(node.children||[]).map(text).join(' ')}`;
+  const body=text(h.dialogs()[0]);
+  assert.match(body,/One number needs the spam lists/);
+  assert.match(body,/Open the spam lists/);
+  assert.match(body,/Start my day/);
+  h.dialogs()[0].children.find(n=>n.className==='morningStart').listeners.click();
+  h.winEvents.focus();await h.settle();
+  assert.equal(h.dialogs().length,0);
 });
 test('7:59 waits one minute, while a late login is immediately eligible',()=>{
   assert.equal(model.nextBriefingDelay(new Date(2026,8,27,7,59)),60000);

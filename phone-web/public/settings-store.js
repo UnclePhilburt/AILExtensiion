@@ -33,6 +33,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   , scriptOverlay: false // show the calling script over the lead while a call is in progress
   , firstName: '' // the caller's own first name, used on the pages and in the script
   , shareAlongside: true // let teammates see your totals on Alongside
+  , phoneSlot: '1' // this phone drives IMPACT window 1 or 2
+  , phoneLineId: '' // the calling number this phone dials, if one was chosen
 });
 
 const BOOLEAN_KEYS = ['swipeLeads', 'keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard', 'bestNextLead', 'scriptOverlay', 'shareAlongside'];
@@ -53,6 +55,8 @@ export function normalizeSettings(value, base = DEFAULT_SETTINGS) {
   for (const key of BOOLEAN_KEYS) if (typeof source[key] === 'boolean') settings[key] = source[key];
   if (TEXT_SIZES.some((size) => size.id === source.textSize)) settings.textSize = source.textSize;
   if (ORGANIZATIONS.some((organization) => organization.id === source.organization)) settings.organization = source.organization;
+  if (source.phoneSlot === '1' || source.phoneSlot === '2') settings.phoneSlot = source.phoneSlot;
+  if (typeof source.phoneLineId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(source.phoneLineId)) settings.phoneLineId = source.phoneLineId;
   if (typeof source.firstName === 'string') {
     const name = cleanFirstName(source.firstName);
     if (name !== null) settings.firstName = name;

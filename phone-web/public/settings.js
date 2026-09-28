@@ -4,7 +4,7 @@ import { BACKGROUNDS, readBackground, saveBackground } from './backgrounds.js';
 import { TEXT_SIZES, ORGANIZATIONS, loadPhoneSettings, savePhoneSettings, resetPhoneSettings } from './settings-store.js';
 import { applyUserName } from './user-name.js';
 import { publishAlongsideProfile } from './alongside-profile.js';
-import { refreshEncouragement } from './encouragement-ui.js';
+import { refreshEncouragement } from './encouragement-ui.js?v=2';
 
 // Back link: only known pages (never an arbitrary URL from the query string).
 const BACK = {
@@ -76,6 +76,27 @@ textSize.addEventListener('change', (event) => {
   saved();
 });
 
+const phoneSlot = document.querySelector('#phoneSlot');
+if (phoneSlot) {
+  for (const item of [{ id: '1', label: 'Phone 1' }, { id: '2', label: 'Phone 2' }]) {
+    const label = document.createElement('label');
+    label.className = 'segment';
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'phoneSlot';
+    input.value = item.id;
+    const text = document.createElement('span');
+    text.textContent = item.label;
+    label.append(input, text);
+    phoneSlot.append(label);
+  }
+  phoneSlot.addEventListener('change', (event) => {
+    if (event.target.name !== 'phoneSlot') return;
+    savePhoneSettings(localStorage, { phoneSlot: event.target.value });
+    saved(event.target.value === '2' ? 'This phone is Phone 2' : 'This phone is Phone 1');
+  });
+}
+
 const organization = document.querySelector('#organization');
 // Options are also present in the HTML so the control is usable even before
 // this script has loaded on a slow or cached phone connection.
@@ -137,6 +158,7 @@ function render() {
   const background = readBackground(localStorage);
   for (const input of bgGrid.querySelectorAll('input')) input.checked = input.value === background;
   for (const input of textSize.querySelectorAll('input')) input.checked = input.value === settings.textSize;
+  for (const input of phoneSlot?.querySelectorAll('input') || []) input.checked = input.value === settings.phoneSlot;
   organization.value = settings.organization;
   document.querySelector('#firstName').value = settings.firstName;
   for (const key of SWITCHES) {

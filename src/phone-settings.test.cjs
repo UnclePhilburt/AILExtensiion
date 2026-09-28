@@ -12,7 +12,7 @@ function memoryStorage(initial = {}) {
   const data = { ...initial };
   return { data, getItem: (k) => (k in data ? data[k] : null), setItem: (k, v) => { data[k] = String(v); }, removeItem: (k) => { delete data[k]; } };
 }
-const DEFAULTS = { swipeLeads: true, keepAwake: true, vibrate: true, confirmResults: true, textSize: 'normal', showHeadsUp: true, showDoNotKnock: true, autoSkipQuietHours: false, showEncouragement: true, encourageAfterResults: true, organization: 'shaefinator', darkMode: false, beigeLeadCard: false, bestNextLead: false, scriptOverlay: false, firstName: '', shareAlongside: true };
+const DEFAULTS = { swipeLeads: true, keepAwake: true, vibrate: true, confirmResults: true, textSize: 'normal', showHeadsUp: true, showDoNotKnock: true, autoSkipQuietHours: false, showEncouragement: true, encourageAfterResults: true, organization: 'shaefinator', darkMode: false, beigeLeadCard: false, bestNextLead: false, scriptOverlay: false, firstName: '', shareAlongside: true, phoneSlot: '1', phoneLineId: '' };
 
 test('defaults: everything on, Normal text, one JSON key', () => {
   assert.equal(store.SETTINGS_KEY, 'impact.phoneSettings');
@@ -83,6 +83,8 @@ test('the CSS implements every display setting', () => {
   assert.match(css, /\.statsPage :is\(\.statsSummary,\.statsCard,\.statsNote\) \{ zoom:var\(--text-zoom, 1\); \}/, 'Statistics cards follow the text size too');
   assert.match(css, /\.calendarPage :is\(\.calCard,\.calNotice\) \{ zoom:var\(--text-zoom, 1\); \}/);
   assert.match(read('workspace.html'), /<main class="app workspace" hidden>/);
+  assert.match(read('numbers.html'), /id="callingNumbers"/);
+  assert.doesNotMatch(read('settings.html'), /id="callingNumbers"/, 'phone number health has its own page');
 });
 
 test('the settings page has a control for every setting, and the back link only goes to known pages', () => {

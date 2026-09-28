@@ -20,7 +20,12 @@ test('health rates use recorded results, distinguish empty data and require enou
     {number_id:'b',period:'current',calls:500,recorded:500,no_answer:500}];
   const health=model.numberHealth(stats,'a');
   assert.equal(health.missing,60); assert.equal(health.noAnswerRate,'75%'); assert.equal(health.appointmentRate,'20%');
+  assert.equal(health.answered,10); assert.equal(health.estimate,'mixed'); assert.equal(health.estimateLabel,'Mixed');
   assert.match(health.trend,/25 percentage points higher/);
+  assert.equal(empty.estimate,'early');
+  assert.equal(model.numberHealth(stats,'b').estimate,'wearing');
+  const steady=model.numberHealth([{number_id:'c',period:'current',calls:20,recorded:20,no_answer:8,appointments:8,refused:4}],'c');
+  assert.equal(steady.estimate,'steady'); assert.equal(steady.answered,12);
   stats[1].recorded=19; assert.match(model.numberHealth(stats,'a').trend,/at least 20/);
 });
 
@@ -37,7 +42,7 @@ test('number storage, call attribution, retries, cloud integration and owner pri
       create function auth.uid() returns uuid language sql as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
       grant usage on schema public, auth to authenticated, anon; grant execute on function auth.uid() to authenticated, anon;
       insert into auth.users values ('${a}'),('${b}');`);
-    for(const file of ['001_cloud_sync.sql','006_activity_statistics.sql','008_allow_activity_logging.sql','010_call_timing_insights.sql','018_calling_numbers.sql']) await db.exec(fs.readFileSync(`supabase/migrations/${file}`,'utf8'));
+    for(const file of ['001_cloud_sync.sql','006_activity_statistics.sql','008_allow_activity_logging.sql','010_call_timing_insights.sql','018_calling_numbers.sql','019_two_phone_windows.sql']) await db.exec(fs.readFileSync(`supabase/migrations/${file}`,'utf8'));
     await db.exec(`insert into companion_members(user_id) values ('${a}'),('${b}'); set role authenticated;`);
     await asUser(a);
     await db.query('select calling_number_save($1,$2)',['+13125550199','Work']);
@@ -125,6 +130,13 @@ test('settings UI saves, activates, archives, and reports unavailable stats with
     const walk=node=>node.children.flatMap(child=>[child,...walk(child)]);
     return walk(els.get('callingNumberList')).find(n=>n.tag==='button'&&n.textContent===label);
   };
+  assert.match(text(els.get('callingNumberList')), /Verizon/);
+  assert.match(text(els.get('callingNumberList')), /T-Mobile/);
+  assert.match(text(els.get('callingNumberList')), /AT&T/);
+  assert.match(text(els.get('callingNumberList')), /Sprint/);
+  assert.match(text(els.get('callingNumberList')), /Register as a real number/);
+  assert.match(text(els.get('callingNumberList')), /Twilio video/);
+  assert.equal(currentButton('Copy this number').textContent, 'Copy this number');
   currentButton('Set active').listeners.click();await settle();assert.equal(numbers[0].active,true);
   assert.match(text(els.get('callingNumberList')),/Active for new calls/);
   currentButton('Archive').listeners.click();await settle();assert.equal(numbers[0].archived,true);

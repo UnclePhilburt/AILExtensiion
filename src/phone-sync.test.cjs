@@ -9,7 +9,7 @@ const path = require('node:path');
 function load() {
   const source = fs.readFileSync(path.join(__dirname, '../extension/src/background/phone-sync.js'), 'utf8').replace(/^export /gm, '');
   const context = vm.createContext({ setTimeout, Promise });
-  vm.runInContext(`${source}\nthis.api = { publisherDecision, createLatestWinsQueue, followLeadChange, verifyPhoneLead, LEAD_CHANGING_COMMANDS };`, context);
+  vm.runInContext(`${source}\nthis.api = { publisherDecision, claimWindowSlot, assignWindowSlot, createLatestWinsQueue, followLeadChange, verifyPhoneLead, LEAD_CHANGING_COMMANDS };`, context);
   return context.api;
 }
 const api = load();
@@ -30,6 +30,10 @@ test('ROOT CAUSE: the IMPACT tab may publish even when the Salebase script windo
   // Still protected: a background IMPACT tab, or another IMPACT lead tab in front.
   assert.equal(api.publisherDecision({ ...impactTab, active: false }, salebaseFocused), 'background tab');
   assert.equal(api.publisherDecision(impactTab, { id: 3, url: 'https://mobile.impact.ailife.com/Lead/InboxDetail?LeadId=9', active: true }), 'another IMPACT tab is in front');
+  assert.equal(api.publisherDecision(impactTab, { id: 8, windowId: 30, url: 'https://mobile.impact.ailife.com/Lead/InboxDetail?LeadId=4', active: true }), '', 'a second IMPACT window stays open for the other phone');
+  assert.equal(api.claimWindowSlot({}, 10).slot, '1');
+  assert.equal(api.claimWindowSlot({ 10: '1' }, 11).slot, '2');
+  assert.equal(api.claimWindowSlot({ 10: '1', 11: '2' }, 12).slot, '');
   assert.equal(api.publisherDecision({ id: 4, url: SALEBASE, active: true }, null), 'not an IMPACT lead page');
   assert.equal(api.publisherDecision(null, null), 'no tab');
 });
@@ -131,14 +135,14 @@ test('service worker wiring: no focused-window gate, ordered writes, follow afte
   assert.doesNotMatch(auto, /senderTab\.id !== active\?\.id/, 'the lastFocusedWindow gate that dropped leads is gone');
   assert.match(auto, /const skip = await publishSkipReason\(senderTab\);/);
   assert.doesNotMatch(worker.slice(worker.indexOf('async function publishAppointmentOptions'), worker.indexOf('async function reportCommandResult')), /senderTab\.id !== active\?\.id/);
-  assert.match(worker, /return leadWrites\.run\(\(seq\) => writeLead\(lead, seq, options\), \{ mustRun: Boolean\(options\.force\) \}\);/);
-  assert.match(worker, /if \(command\?\.type && LEAD_CHANGING_COMMANDS\.includes\(command\.type\)\) \{\r?\n\s*void followAfterCommand\(senderTab\.id, command\.leadId \|\| latestLeadId\);/);
-  assert.match(worker, /publishLead\(message\.lead, \{ force: true, eventName: 'phoneSync\.manualSync' \}\)/);
-  assert.match(worker, /void checkPhoneHasLead\(lead\.leadId\);/);
+  assert.match(worker, /return queueFor\(slot\)\.run\(\(seq\) => writeLead\(lead, seq, \{ \.\.\.options, slot \}\), \{ mustRun: Boolean\(options\.force\) \}\);/);
+  assert.match(worker, /if \(command\?\.type && LEAD_CHANGING_COMMANDS\.includes\(command\.type\)\) \{\r?\n\s*void followAfterCommand\(senderTab\.id, command\.leadId \|\| slotMemory\.get\(slot\)\?\.leadId \|\| latestLeadId, slot\);/);
+  assert.match(worker, /publishLead\(message\.lead, \{ force: true, eventName: 'phoneSync\.manualSync', slot \}\)/);
+  assert.match(worker, /void checkPhoneHasLead\(lead\.leadId, slot\);/);
   for (const event of ['phoneSync.publishSkipped', 'phoneSync.published', 'phoneSync.publishFailed', 'phoneSync.followPublished', 'phoneSync.resync']) assert.ok(worker.includes(event), event);
   const cloud = read('extension/src/background/cloud-desktop.js');
-  assert.match(cloud, /client\.rpc\('companion_desktop',\{p_device:await device\(\),p_lead:lead\}\)\.abortSignal\(AbortSignal\.timeout\(10000\)\)/);
-  assert.match(cloud, /export async function cloudLeadId\(\)/);
+  assert.match(cloud, /client\.rpc\('companion_desktop',\{p_device:await device\(\),p_lead:lead,p_slot:phone\}\)\.abortSignal\(AbortSignal\.timeout\(10000\)\)/);
+  assert.match(cloud, /export async function cloudLeadId\(slot = '1'\)/);
   assert.deepEqual([...api.LEAD_CHANGING_COMMANDS], ['no-answer', 'refused-appointment', 'virtual-appointment-slot', 'next', 'previous', 'best-next', 'open-lead', 'pres-done', 'reschedule', 'no-show', 'send-text', 'dropped-by', 'add-comments', 'in-home', 'call-back', 'left-message', 'dropby-appointment']);
   assert.match(worker, /if \(command\?\.type === 'best-next'\) \{\r?\n\s*\/\/[^\n]*\r?\n\s*\/\/[^\n]*\r?\n\s*command\.requestTypeScores = await requestTypeScores\(\)/, 'Best next carries only aggregate request-type scores');
 });
