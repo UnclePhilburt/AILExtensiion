@@ -3,6 +3,7 @@ import { cloudUser, checkCloud, watchCloud } from '../shared/cloud-sync.js';
 let devicePromise;
 let owner = '', stopWatch, nextPoll = 0, lastHeartbeat = 0;
 let busy = false;
+let liveOwner = '', liveChannel, liveReady;
 async function device() {
   if (!devicePromise) devicePromise = (async () => {
     const stored = await chrome.storage.local.get('impact.deviceId');
@@ -19,9 +20,21 @@ async function ready() {
     stopWatch = await watchCloud(() => { nextPoll = 0; });
   }
 }
+async function publishLiveLane(lead, slot, clear = false) {
+  const user = await cloudUser();
+  if (liveOwner !== user) {
+    liveChannel?.unsubscribe?.();
+    liveOwner = user;
+    liveChannel = client.channel(`companion-live-${user}`, {config:{broadcast:{self:false}}});
+    liveReady = new Promise(resolve => liveChannel.subscribe(status => { if (status === 'SUBSCRIBED') resolve(); }));
+  }
+  await liveReady;
+  await liveChannel.send({type:'broadcast',event:'lane',payload:{slot,lead,clear,at:new Date().toISOString()}});
+}
 chrome.storage.onChanged.addListener(changes => {
   if (changes['impact.supabase.session'] || changes['impact.connectionMode']) {
     stopWatch?.(); stopWatch = null; owner = ''; lastHeartbeat = 0; nextPoll = 0;
+    liveChannel?.unsubscribe?.(); liveChannel = null; liveOwner = ''; liveReady = null;
   }
 });
 function missingSlotRpc(error) {
@@ -36,6 +49,7 @@ export async function publishCloud(lead, slot = '1') {
     ({error} = await client.rpc('companion_desktop',{p_device:await device(),p_lead:lead}).abortSignal(AbortSignal.timeout(10000)));
   }
   checkCloud(error); lastHeartbeat = Date.now();
+  void publishLiveLane(lead, phone).catch(() => {});
   return {ok:true};
 }
 export async function clearCloudSlot(slot) {
@@ -44,6 +58,7 @@ export async function clearCloudSlot(slot) {
   const {error} = await client.rpc('companion_desktop',{p_device:await device(),p_slot:phone,p_clear:true}).abortSignal(AbortSignal.timeout(10000));
   if (error && missingSlotRpc(error)) return {ok:false};
   checkCloud(error);
+  void publishLiveLane(null, phone, true).catch(() => {});
   return {ok:true};
 }
 // The lead id the phone will read from the cloud right now ('' if none).

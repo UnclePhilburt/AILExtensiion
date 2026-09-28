@@ -5,6 +5,7 @@ import { startOfToday, todayMetrics, laneStatus, dashboardNote, upcomingEvents }
 const $ = selector => document.querySelector(selector);
 let user = null, channel = null, loading = false, reloadQueued = false;
 let latestMetrics = {calls:0,noAnswer:0,appointments:0,refused:0,held:0}, latestUpcoming = [];
+let latestSyncState = null;
 const text = (tag, value, className = '') => { const item = document.createElement(tag); item.textContent = value; item.className = className; return item; };
 const eventTime = value => new Date(value).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});
 
@@ -15,6 +16,7 @@ function renderMetrics(metrics) {
   $('#metricHeld').textContent = metrics.held;
 }
 function renderLanes(state) {
+  latestSyncState = state;
   const lanes = ['1','2'].map(slot => laneStatus(state, slot));
   const list = $('#todayLanes'); list.replaceChildren();
   for (const lane of lanes) {
@@ -104,7 +106,25 @@ function watch() {
     }
     refresh();
   };
-  channel = client.channel(`today-desk-${crypto.randomUUID()}`)
+  const liveLane = ({payload}) => {
+    // The extension sends this broadcast as soon as it has accepted a lead
+    // from IMPACT. It keeps the tablet responsive even when database events
+    // are delayed by the network or a background refresh is in progress.
+    if (!latestSyncState || !payload) return refresh();
+    const slot = payload.slot === '2' ? '2' : '1';
+    const state = structuredClone(latestSyncState);
+    state.slot_leads ||= {};
+    state.slot_seen ||= {};
+    if (payload.clear) { delete state.slot_leads[slot]; delete state.slot_seen[slot]; }
+    else { state.slot_leads[slot] = payload.lead; state.slot_seen[slot] = payload.at; }
+    if (slot === '1') { state.lead = payload.clear ? null : payload.lead; }
+    const lanes = renderLanes(state);
+    $('#todayNote').textContent = dashboardNote(latestMetrics, lanes, latestUpcoming);
+    $('#todayStatus').textContent = 'Live lead update';
+    refresh();
+  };
+  channel = client.channel(`companion-live-${user.id}`, {config:{broadcast:{self:false}}})
+    .on('broadcast',{event:'lane'},liveLane)
     .on('postgres_changes',{event:'*',schema:'public',table:'companion_sync',filter:`user_id=eq.${user.id}`},syncLane)
     .on('postgres_changes',{event:'*',schema:'public',table:'companion_events',filter:`user_id=eq.${user.id}`},refresh)
     .on('postgres_changes',{event:'*',schema:'public',table:'appointment_outcomes',filter:`user_id=eq.${user.id}`},refresh)
