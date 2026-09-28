@@ -56,7 +56,9 @@ chrome.storage.onChanged.addListener((changes) => {
 // The Salebase script shows the lead only while its IMPACT lead page is open.
 chrome.tabs.onRemoved.addListener((tabId) => { void clearScriptLeadForTab(tabId); });
 chrome.tabs.onUpdated.addListener((tabId, change) => {
-  if (change.url && !IMPACT_LEAD_PAGE.test(change.url)) void clearScriptLeadForTab(tabId);
+  // A Salebase script also changes URL while it is loading. Only an IMPACT
+  // lead tab navigating away should release its lane’s lead data.
+  if (change.url && !IMPACT_LEAD_PAGE.test(change.url)) void clearImpactScriptLeadForTab(tabId);
 });
 // Salebase tabs that were already open before an install/update get the
 // script-fill content script too (the manifest only covers new page loads).
@@ -99,7 +101,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
   if (message?.type === 'impact/getScriptLead') {
-    Promise.resolve(allowScriptLeadInContentScripts()).then(() => readScriptLead(sender.tab?.id)).then((record) => sendResponse({ ok: true, fields: record?.fields || null })).catch(() => sendResponse({ ok: false, fields: null }));
+    Promise.resolve(allowScriptLeadInContentScripts()).then(() => readScriptLead(sender.tab?.id)).then((record) => sendResponse({ ok: true, fields: record?.fields || null, slot: record?.slot || '' })).catch(() => sendResponse({ ok: false, fields: null, slot: '' }));
     return true;
   }
   if (message?.type === 'impact/objectionTranscript') {
@@ -912,14 +914,20 @@ async function syncScriptLeadForLane(slot) {
   if (!tabId || !fields) return;
   const stored = await chrome.storage.session.get(SCRIPT_LEADS_KEY).catch(() => ({}));
   const records = stored[SCRIPT_LEADS_KEY] || {};
-  if (JSON.stringify(records[tabId]) === JSON.stringify(fields)) return;
-  await chrome.storage.session.set({ [SCRIPT_LEADS_KEY]: { ...records, [tabId]: fields } }).catch(() => {});
+  const record = { ...fields, slot: lane };
+  if (JSON.stringify(records[tabId]) === JSON.stringify(record)) return;
+  await chrome.storage.session.set({ [SCRIPT_LEADS_KEY]: { ...records, [tabId]: record } }).catch(() => {});
 }
 
-async function clearScriptLeadForTab(tabId) {
+async function clearImpactScriptLeadForTab(tabId) {
+  if (![...laneScriptFields.values()].some((record) => record?.sourceTabId === tabId)) return;
   for (const [slot, record] of laneScriptFields) {
     if (record?.sourceTabId === tabId) laneScriptFields.delete(slot);
   }
+}
+
+async function clearScriptLeadForTab(tabId) {
+  await clearImpactScriptLeadForTab(tabId);
   const map = await scriptSlotMap();
   if (map[String(tabId)]) {
     delete map[String(tabId)];

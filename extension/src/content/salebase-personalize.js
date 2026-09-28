@@ -169,18 +169,31 @@
     refresh();
   }
 
+  function setLane(slot) {
+    const label = slot === '2' ? 'PHONE 2 SCRIPT' : slot === '1' ? 'PHONE 1 SCRIPT' : '';
+    let badge = document.getElementById('impact-companion-script-lane');
+    if (!label) { badge?.remove(); return; }
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.id = 'impact-companion-script-lane';
+      Object.assign(badge.style, { position: 'fixed', top: '12px', right: '14px', zIndex: '2147483647', padding: '7px 10px', borderRadius: '999px', background: '#163f31', color: '#fff', font: '700 11px/1 Arial, sans-serif', letterSpacing: '1px', boxShadow: '0 2px 10px rgba(0,0,0,.2)' });
+      document.documentElement.append(badge);
+    }
+    badge.textContent = label;
+  }
+
   try {
     // No chrome.runtime.onMessage listener here on purpose: the rebuttal
     // script in this tab owns tab messages.
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area === 'local' && changes['impact.fillScript']) { enabled = changes['impact.fillScript'].newValue !== false; refresh(); }
       if (area === 'session' && changes['impact.scriptLeads']) {
-        chrome.runtime.sendMessage({ type: 'impact/getScriptLead' }).then((response) => setLead(response?.fields)).catch(() => {});
+        chrome.runtime.sendMessage({ type: 'impact/getScriptLead' }).then((response) => { setLead(response?.fields); setLane(response?.slot); }).catch(() => {});
       }
     });
     chrome.storage.local.get('impact.fillScript').then((stored) => { enabled = stored['impact.fillScript'] !== false; refresh(); }).catch(() => {});
     // Ask the service worker once (it also enables session access for us).
-    chrome.runtime.sendMessage({ type: 'impact/getScriptLead' }).then((response) => setLead(response?.fields)).catch(() => {});
+    chrome.runtime.sendMessage({ type: 'impact/getScriptLead' }).then((response) => { setLead(response?.fields); setLane(response?.slot); }).catch(() => {});
   } catch (_error) {
     // Extension context gone (updated/removed): leave the page as Salebase wrote it.
     stop();
