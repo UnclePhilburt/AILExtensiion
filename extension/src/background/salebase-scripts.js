@@ -5,6 +5,10 @@ export const SALEBASE_SCRIPT_LABELS = ['Response Card', 'Will Kit', 'MediaPlex',
   'POS Lapsed', 'Globe Lapse', 'Globe', 'AILPlus (Non-Customer)', 'AILPlus', 'Final Expense'];
 
 const GROUP_CODE_TYPE = /(?:^|[\s,;:|-])(?:[A-Z][A-Z&.'\/-]*[A-Z&.]|Local|Lodge|District|Council|Chapter)\s+#?\d{1,5}[A-Z]?\s*\((?=[^()]*[A-Za-z])[A-Za-z0-9&\/.' -]{1,20}\)/;
+// Some associations have long names (e.g. GREATER ST LOUIS BOWLING ASSOC)
+// before their normal response-card codes, so they exceed the short name
+// pattern above. The paired SG-style / benefit codes are still unambiguous.
+const RESPONSE_CARD_CODE_PAIR = /\([A-Z]{2,}\d[A-Z0-9]*\)\s*\([A-Z&]{2,}\)/i;
 
 // IMPACT request type text -> { label, rule }. Request types are free text, so
 // the rules stay readable and tolerate small wording differences.
@@ -32,7 +36,7 @@ export function scriptChoiceForLead(requestType, details = {}) {
   for (const [rule, pattern, label] of rules) if (pattern.test(type)) return { label, rule };
   // Response Card leads show their group where the request type is read, e.g.
   // "IBT 610 (SGCOY) (AD&D)": a name and number followed by bracketed codes.
-  if (GROUP_CODE_TYPE.test(String(requestType || ''))) return { label: 'Response Card', rule: 'group code in request type' };
+  if (GROUP_CODE_TYPE.test(String(requestType || '')) || RESPONSE_CARD_CODE_PAIR.test(String(requestType || ''))) return { label: 'Response Card', rule: 'group code in request type' };
   if (String(details?.group || '').trim()) return { label: 'Response Card', rule: 'has group' };
   return { label: '', rule: type ? 'no rule for this request type' : 'no request type' };
 }
