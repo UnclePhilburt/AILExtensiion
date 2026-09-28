@@ -972,11 +972,15 @@ function renderAppointmentPicker(lead) {
   appointmentTimes.replaceChildren();
   if (!active) return;
 
+  const callback = options.kind === "callback";
+  appointmentPicker.querySelector(".eyebrow").textContent = callback ? "CALL BACK" : "VIRTUAL APPOINTMENT";
+  appointmentPicker.querySelector("h2").textContent = callback ? "Choose a callback day and time" : "Choose a day and time";
+
   const days = options.days.filter((day) => day?.id && Array.isArray(day.slots));
   if (!days.some((day) => day.id === selectedAppointmentDay)) selectedAppointmentDay = options.selectedDayId || days[0]?.id || "";
   const selectedDay = days.find((day) => day.id === selectedAppointmentDay);
   const ready = selectedDay?.id === options.selectedDayId;
-  appointmentHint.textContent = ready ? "Tap an available time to set the appointment." : "Selecting this day in IMPACT…";
+  appointmentHint.textContent = ready ? `Tap an available time to set the ${callback ? "callback" : "appointment"}.` : "Selecting this day in IMPACT…";
   for (const day of days) {
     const button = document.createElement("button");
     button.type = "button";
@@ -987,7 +991,7 @@ function renderAppointmentPicker(lead) {
       if (day.id === selectedAppointmentDay && ready) return;
       selectedAppointmentDay = day.id;
       renderAppointmentPicker(displayedLead);
-      void sendCallResult("virtual-appointment-day", { dayId: day.id });
+      void sendCallResult("virtual-appointment-day", { dayId: day.id, appointmentType: callback ? "callback" : "virtual" });
     });
     appointmentDays.append(button);
   }
@@ -997,8 +1001,8 @@ function renderAppointmentPicker(lead) {
     button.textContent = time;
     button.disabled = !ready || !lead.leadId;
     button.addEventListener("click", async () => {
-      const sent = await sendCallResult("virtual-appointment-slot", { dayId: selectedDay.id, time });
-      if (sent && useCloud) void saveAppointmentChoice(lead, selectedDay.label, time).catch(() => {});
+      const sent = await sendCallResult("virtual-appointment-slot", { dayId: selectedDay.id, time, appointmentType: callback ? "callback" : "virtual" });
+      if (sent && useCloud && !callback) void saveAppointmentChoice(lead, selectedDay.label, time).catch(() => {});
     });
     appointmentTimes.append(button);
   }
