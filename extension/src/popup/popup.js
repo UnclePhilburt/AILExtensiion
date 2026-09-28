@@ -138,6 +138,17 @@ $('#fillScript').addEventListener('change', (event) => {
   void chrome.storage.local.set({ 'impact.fillScript': event.target.checked });
   say(event.target.checked ? 'Lead details will show in the Salebase script.' : 'The Salebase script shows its original placeholders.');
 });
+$('#reopenPhoneScripts').addEventListener('click', async () => {
+  const button = $('#reopenPhoneScripts');
+  button.disabled = true;
+  say('Opening your phone script…');
+  try {
+    const result = await chrome.runtime.sendMessage({ type: 'impact/reopenPhoneScripts' });
+    if (!result?.ok) throw new Error(result?.error || 'Could not reopen the phone script.');
+    say(result.lanes.length === 2 ? 'Opening Phone 1 and Phone 2 scripts.' : 'Opening the Phone 1 script.');
+  } catch (error) { say(error.message, true); }
+  finally { button.disabled = false; }
+});
 $('#requestMicrophone').addEventListener('click', async () => {
   await chrome.tabs.create({ url: chrome.runtime.getURL('src/offscreen/microphone-permission.html') });
   window.close();

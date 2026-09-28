@@ -104,6 +104,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     Promise.resolve(allowScriptLeadInContentScripts()).then(() => readScriptLead(sender.tab?.id)).then((record) => sendResponse({ ok: true, fields: record?.fields || null, slot: record?.slot || '' })).catch(() => sendResponse({ ok: false, fields: null, slot: '' }));
     return true;
   }
+  if (message?.type === 'impact/reopenPhoneScripts') {
+    reopenPhoneScripts().then((result) => sendResponse({ ok: true, ...result })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
   if (message?.type === 'impact/objectionTranscript') {
     void handleObjectionTranscript(message.transcript);
     return false;
@@ -681,6 +685,15 @@ async function openMatchingSalebaseScript(lead, slot = '1') {
     return;
   }
   await openSalebaseFallback(request, before);
+}
+
+async function reopenPhoneScripts() {
+  const lanes = ['1', '2'].filter((slot) => slotMemory.get(slot)?.lead?.available);
+  if (!lanes.length) throw new Error('Open an IMPACT lead first, then reopen its script.');
+  // Assign sequentially so two active lanes can never claim the same existing
+  // Salebase tab while rebuilding their assignments.
+  for (const slot of lanes) await openMatchingSalebaseScript(slotMemory.get(slot).lead, slot);
+  return { lanes };
 }
 
 async function clickSalebaseCallLink(tabId) {
