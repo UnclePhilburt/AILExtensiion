@@ -101,7 +101,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
   if (message?.type === 'impact/getScriptLead') {
-    Promise.resolve(allowScriptLeadInContentScripts()).then(() => readScriptLead(sender.tab?.id)).then((record) => sendResponse({ ok: true, fields: record?.fields || null, slot: record?.slot || '' })).catch(() => sendResponse({ ok: false, fields: null, slot: '' }));
+    Promise.resolve(allowScriptLeadInContentScripts()).then(async () => {
+      const slot = await scriptSlotForTab(sender.tab?.id);
+      const record = await readScriptLead(sender.tab?.id);
+      return { fields: record?.fields || laneScriptFields.get(slot)?.fields || null, slot: record?.slot || slot || '' };
+    }).then((result) => sendResponse({ ok: true, ...result })).catch(() => sendResponse({ ok: false, fields: null, slot: '' }));
     return true;
   }
   if (message?.type === 'impact/reopenPhoneScripts') {
@@ -688,6 +692,22 @@ async function openMatchingSalebaseScript(lead, slot = '1') {
 }
 
 async function reopenPhoneScripts() {
+  // Rebuild from the actual IMPACT tabs first. The service worker can restart
+  // while the browser stays open, which clears its in-memory lane cache.
+  const impactTabs = await chrome.tabs.query({ url: 'https://mobile.impact.ailife.com/Lead/*' });
+  for (const tab of impactTabs) {
+    if (!tab?.id) continue;
+    const slot = await slotForTab(tab);
+    if (!slot) continue;
+    try {
+      const response = await chrome.tabs.sendMessage(tab.id, { type: 'impact/readCurrentLead' });
+      if (!response?.lead?.available) continue;
+      const { scriptDetails, ...lead } = response.lead;
+      noteScriptGroup(lead, scriptDetails);
+      slotMemory.set(slot, { ...(slotMemory.get(slot) || {}), lead, leadId: lead.leadId || '' });
+      await rememberScriptLead(lead, scriptDetails, tab.id, slot);
+    } catch (_error) { /* a reloading or closed IMPACT tab is ignored */ }
+  }
   const lanes = ['1', '2'].filter((slot) => slotMemory.get(slot)?.lead?.available);
   if (!lanes.length) throw new Error('Open an IMPACT lead first, then reopen its script.');
   // Assign sequentially so two active lanes can never claim the same existing
