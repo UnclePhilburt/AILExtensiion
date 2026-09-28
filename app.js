@@ -326,7 +326,7 @@ async function refreshCloud() {
     const state = await cloudState();
     if (!signedIn || generation !== cloudGeneration) return;
     applyCloudState(state, startedAt);
-    if (Date.now() - lastPhoneTouch > 10000) { lastPhoneTouch = Date.now(); await cloudTouchPhone(); }
+    if (Date.now() - lastPhoneTouch > 10000) { lastPhoneTouch = Date.now(); await cloudTouchPhone(thisPhoneSlot()); }
   } catch (error) {
     if (!signedIn || generation !== cloudGeneration || startedAt < lastCloudFetchAt) return;
     if (isNetworkFailure(error.message) && currentCloudState) {
