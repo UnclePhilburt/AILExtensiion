@@ -662,7 +662,9 @@ button { font: inherit; cursor: pointer; }
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area === 'local' && changes[SETTING_KEY]) { enabled = changes[SETTING_KEY].newValue !== false; settingKnown = true; if (!enabled) showOriginal = false; update(); }
       if (area === 'local' && changes['impact.lastObjection']) setObjection(changes['impact.lastObjection'].newValue);
-      if (area === 'session' && changes['impact.scriptLead']) { lead = changes['impact.scriptLead'].newValue?.fields || null; scheduleRender(0); }
+      if (area === 'session' && changes['impact.scriptLeads']) {
+        chrome.runtime.sendMessage({ type: 'impact/getScriptLead' }).then((response) => { lead = response?.fields || null; scheduleRender(0); }).catch(() => {});
+      }
     });
     chrome.storage.local.get([SETTING_KEY, SIZE_KEY, 'impact.lastObjection']).then((stored) => {
       enabled = stored[SETTING_KEY] !== false;

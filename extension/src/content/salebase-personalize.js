@@ -174,7 +174,9 @@
     // script in this tab owns tab messages.
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area === 'local' && changes['impact.fillScript']) { enabled = changes['impact.fillScript'].newValue !== false; refresh(); }
-      if (area === 'session' && changes['impact.scriptLead']) setLead(changes['impact.scriptLead'].newValue?.fields);
+      if (area === 'session' && changes['impact.scriptLeads']) {
+        chrome.runtime.sendMessage({ type: 'impact/getScriptLead' }).then((response) => setLead(response?.fields)).catch(() => {});
+      }
     });
     chrome.storage.local.get('impact.fillScript').then((stored) => { enabled = stored['impact.fillScript'] !== false; refresh(); }).catch(() => {});
     // Ask the service worker once (it also enables session access for us).

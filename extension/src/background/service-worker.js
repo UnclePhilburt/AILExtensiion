@@ -11,17 +11,19 @@ import { scriptFieldsFromLead } from './script-fields.js';
 import { callingHoursOpen } from '../shared/work-hours.js';
 import { dueReminders } from '../shared/appointment-reminders.js';
 
-const SCRIPT_LEAD_KEY = 'impact.scriptLead';
+const SCRIPT_LEADS_KEY = 'impact.scriptLeads';
+const SCRIPT_TAB_SLOTS_KEY = 'impact.salebaseScriptSlots';
 const SCRIPT_FILL_CONTENT_SCRIPT = 'src/content/salebase-personalize.js';
 const CALM_SCRIPT_CONTENT_SCRIPT = 'src/content/salebase-calm.js';
 const IMPACT_LEAD_PAGE = /^https:\/\/mobile\.impact\.ailife\.com\/Lead\/(InboxDetail|WhatHappend|SetAppointment)(?:[?#]|$)/;
 
 let lastAutoPublishFingerprint = "";
 let lastAutoPublishAt = 0;
-let pendingSalebaseChoice = null; // { label, rule, requestType, leadKey } for a script tab still loading
-let lastScriptGroup = { leadKey: '', group: '' }; // browser-only, from the IMPACT page
-let lastScriptSelectKey = '';
-let lastSalebaseOpenKey = '';
+const pendingSalebaseChoices = new Map(); // slot -> { label, rule, requestType, leadKey }
+const scriptGroupsByLead = new Map(); // lead key -> group, browser-only
+const laneScriptFields = new Map(); // phone slot -> fields for its own script tab
+const lastScriptSelectKeys = new Map();
+const lastSalebaseOpenKeys = new Map();
 let objectionListening = false;
 // Lead writes to the phone run one at a time; an older lead never lands last.
 const slotQueues = new Map();
@@ -37,8 +39,11 @@ let lastPublishSkip = '';
 // One detected objection opens its rebuttal once, not on every repeat.
 const objectionDetector = createObjectionDetector();
 chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
-  if (change.status === 'complete' && isSalebaseScriptUrl(tab.url) && pendingSalebaseChoice?.label) {
-    void selectSalebaseScript(tabId, pendingSalebaseChoice);
+  if (change.status === 'complete' && isSalebaseScriptUrl(tab.url)) {
+    void scriptSlotForTab(tabId).then((slot) => {
+      const request = pendingSalebaseChoices.get(slot);
+      if (request?.label) void selectSalebaseScript(tabId, request, slot);
+    });
   }
 });
 chrome.storage.onChanged.addListener((changes) => {
@@ -94,7 +99,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
   if (message?.type === 'impact/getScriptLead') {
-    Promise.resolve(allowScriptLeadInContentScripts()).then(readScriptLead).then((record) => sendResponse({ ok: true, fields: record?.fields || null })).catch(() => sendResponse({ ok: false, fields: null }));
+    Promise.resolve(allowScriptLeadInContentScripts()).then(() => readScriptLead(sender.tab?.id)).then((record) => sendResponse({ ok: true, fields: record?.fields || null })).catch(() => sendResponse({ ok: false, fields: null }));
     return true;
   }
   if (message?.type === 'impact/objectionTranscript') {
@@ -461,7 +466,7 @@ async function autoPublishLead(incoming, senderTab) {
   const skip = await publishSkipReason(senderTab);
   if (skip) return { skipped: true, reason: skip };
   noteScriptGroup(lead, scriptDetails);
-  await rememberScriptLead(lead, scriptDetails, senderTab.id).catch(() => {});
+  await rememberScriptLead(lead, scriptDetails, senderTab.id, slot).catch(() => {});
   const result = await chrome.storage.local.get(STORAGE_KEYS.autoPublish);
   const autoPublish = result[STORAGE_KEYS.autoPublish] !== false;
 
@@ -508,7 +513,7 @@ async function writeLead(lead, seq, options = {}) {
   const laneLead = structuredClone(lead);
   slotMemory.set(slot, { ...(slotMemory.get(slot) || {}), lead: laneLead, leadId: lead.leadId || '' });
   // Every lead write (auto, follow-after-result, resync, Sync phone) checks the script.
-  void openMatchingSalebaseScript(lead);
+  void openMatchingSalebaseScript(lead, slot);
   const leadChanged = Boolean(lead.leadId) && lead.leadId !== (slot === '1' ? lastWrittenLeadId : slotMemory.get(slot)?.writtenId);
   let written;
   try {
@@ -574,26 +579,77 @@ async function sendLeadToPhone(lead, options = {}) {
 // The group (e.g. "IUOE 148 (SGK2Q)") only helps choose the script; it stays in this browser.
 function noteScriptGroup(lead, details) {
   const leadKey = lead?.leadId || lead?.leadName || '';
-  if (leadKey) lastScriptGroup = { leadKey, group: String(details?.group || '') };
+  if (leadKey) scriptGroupsByLead.set(leadKey, String(details?.group || ''));
 }
 
-async function openMatchingSalebaseScript(lead) {
+function laneKey(slot) { return slot === '2' ? '2' : '1'; }
+function twoPhoneLanesActive() { return Boolean(slotMemory.get('1')?.leadId && slotMemory.get('2')?.leadId); }
+
+async function scriptSlotMap() {
+  const stored = await chrome.storage.session.get(SCRIPT_TAB_SLOTS_KEY).catch(() => ({}));
+  return stored[SCRIPT_TAB_SLOTS_KEY] || {};
+}
+
+async function writeScriptSlotMap(map) {
+  await chrome.storage.session.set({ [SCRIPT_TAB_SLOTS_KEY]: map }).catch(() => {});
+}
+
+async function scriptSlotForTab(tabId) {
+  const map = await scriptSlotMap();
+  return map[String(tabId)] === '1' || map[String(tabId)] === '2' ? map[String(tabId)] : '';
+}
+
+async function scriptTabForLane(slot, tabs) {
+  const lane = laneKey(slot);
+  const map = await scriptSlotMap();
+  const live = new Set((tabs || []).map((tab) => String(tab.id)));
+  for (const id of Object.keys(map)) if (!live.has(id)) delete map[id];
+  const existingId = Object.entries(map).find(([, assigned]) => assigned === lane)?.[0];
+  if (existingId) return (tabs || []).find((tab) => String(tab.id) === existingId) || null;
+  const used = new Set(Object.keys(map));
+  const available = (tabs || []).find((tab) => !used.has(String(tab.id)));
+  if (available) {
+    map[String(available.id)] = lane;
+    await writeScriptSlotMap(map);
+    return available;
+  }
+  return null;
+}
+
+async function bindScriptTab(tabId, slot) {
+  const map = await scriptSlotMap();
+  map[String(tabId)] = laneKey(slot);
+  await writeScriptSlotMap(map);
+  await syncScriptLeadForLane(slot);
+}
+
+async function openMatchingSalebaseScript(lead, slot = '1') {
+  const lane = laneKey(slot);
   const requestType = String(lead?.requestType || '');
   const leadKey = lead?.leadId || lead?.leadName || '';
-  const group = lastScriptGroup.leadKey === leadKey ? lastScriptGroup.group : '';
+  const group = scriptGroupsByLead.get(leadKey) || '';
   const choice = scriptChoiceForLead(requestType, { group });
-  const request = { label: choice.label, rule: choice.rule, requestType, leadKey };
-  pendingSalebaseChoice = request;
+  const request = { label: choice.label, rule: choice.rule, requestType, leadKey, slot: lane };
+  pendingSalebaseChoices.set(lane, request);
   const option = choice.label;
   const tabs = await findSalebaseScriptTabs(chrome).catch(() => []);
   if (!option) {
     await reportScriptSelect(request, { status: 'no-mapping', reason: choice.rule });
     return;
   }
-  if (tabs.length) {
-    // Runs on every write, so a lead change always re-checks the dropdown
-    // (nothing changes when the right script is already selected).
-    await Promise.all(tabs.map((tab) => selectSalebaseScript(tab.id, request)));
+  const assigned = await scriptTabForLane(lane, tabs);
+  if (assigned) {
+    // Only this phone's script is changed and filled. The other lane keeps
+    // its own person, script choice, and rebuttal view intact.
+    await selectSalebaseScript(assigned.id, request, lane);
+    await syncScriptLeadForLane(lane);
+    return;
+  }
+
+  // A second script window is created only when both phone lanes are active.
+  if (twoPhoneLanesActive()) {
+    const created = await chrome.tabs.create({ url: SALEBASE_SCRIPTS_URL, active: false });
+    if (created?.id) await bindScriptTab(created.id, lane);
     return;
   }
 
@@ -602,8 +658,8 @@ async function openMatchingSalebaseScript(lead) {
   // Only try to open a script window once per lead so re-publishing can never
   // keep adding Salebase tabs.
   const openKey = `${leadKey}|${option}`;
-  if (openKey === lastSalebaseOpenKey) return;
-  lastSalebaseOpenKey = openKey;
+  if (openKey === lastSalebaseOpenKeys.get(lane)) return;
+  lastSalebaseOpenKeys.set(lane, openKey);
   await reportScriptSelect(request, { status: 'no-script-window', reason: 'opening the Salebase script window' });
   const saved = await chrome.storage.session.get('impact.salebaseOpenKey').catch(() => ({}));
   if (saved['impact.salebaseOpenKey'] === openKey) return; // Survives a service-worker restart.
@@ -644,24 +700,30 @@ async function clickSalebaseCallLink(tabId) {
 
 async function openSalebaseFallback(request, before = new Set()) {
   const tabs = await findSalebaseScriptTabs(chrome);
-  if (tabs.length) {
-    await Promise.all(tabs.map((tab) => selectSalebaseScript(tab.id, request)));
+  const slot = laneKey(request?.slot);
+  const assigned = await scriptTabForLane(slot, tabs);
+  if (assigned) {
+    await selectSalebaseScript(assigned.id, request, slot);
+    await syncScriptLeadForLane(slot);
     return;
   }
   // If the dashboard's Call link already opened a Salebase window (even at a
   // URL we do not recognise), use it instead of adding another tab.
   const opened = (await findSalebaseTabs(chrome)).filter((tab) => !before.has(tab.id));
   if (opened.length) {
-    await Promise.all(opened.map((tab) => selectSalebaseScript(tab.id, request)));
+    const tab = opened[0];
+    await bindScriptTab(tab.id, slot);
+    await selectSalebaseScript(tab.id, request, slot);
     return;
   }
-  await chrome.tabs.create({ url: SALEBASE_SCRIPTS_URL, active: false });
+  const created = await chrome.tabs.create({ url: SALEBASE_SCRIPTS_URL, active: false });
+  if (created?.id) await bindScriptTab(created.id, slot);
 }
 
 // Reads the script dropdown, picks the option for this lead (see
 // matchScriptOption) and selects it the way a click would. Every outcome is
 // logged as salebase.scriptSelect and shown in the popup's Script line.
-async function selectSalebaseScript(tabId, request) {
+async function selectSalebaseScript(tabId, request, slot = '1') {
   let page = null;
   try {
     [{ result: page }] = await chrome.scripting.executeScript({ target: { tabId }, func: readScriptDropdown });
@@ -692,6 +754,7 @@ async function selectSalebaseScript(tabId, request) {
     applied = { ok: false, reason: error.message };
   }
   await reportScriptSelect(request, { ...base, status: applied?.ok ? 'selected' : 'select-failed', chosen: match.text, how: match.how, reason: applied?.reason || '' });
+  if (applied?.ok || page.selectedIndex === match.index) await syncScriptLeadForLane(slot);
 }
 
 async function reportScriptSelect(request, outcome) {
@@ -703,8 +766,9 @@ async function reportScriptSelect(request, outcome) {
   };
   // The same lead is re-published every 30 seconds: log each distinct outcome once.
   const key = JSON.stringify([request?.leadKey || '', entry.label, entry.status, entry.chosen, entry.options]);
-  if (key === lastScriptSelectKey) return;
-  lastScriptSelectKey = key;
+  const lane = laneKey(request?.slot);
+  if (key === lastScriptSelectKeys.get(lane)) return;
+  lastScriptSelectKeys.set(lane, key);
   const ok = ['selected', 'already-selected'].includes(entry.status);
   await appendLocalLog(ok || entry.status === 'no-script-window' ? 'info' : 'warn', 'salebase.scriptSelect', entry);
   await chrome.storage.session.set({ 'impact.scriptSelect': { ...entry, at: Date.now() } }).catch(() => {});
@@ -811,7 +875,7 @@ async function followAfterCommand(tabId, fromLeadId, slot = '1') {
       if (!response?.lead?.available) return null;
       const { scriptDetails, ...lead } = response.lead;
       noteScriptGroup(lead, scriptDetails);
-      await rememberScriptLead(lead, scriptDetails, tabId).catch(() => {});
+      await rememberScriptLead(lead, scriptDetails, tabId, slot).catch(() => {});
       return lead;
     },
     publish: (lead) => publishLead(lead, { force: true, slot, eventName: 'phoneSync.followPublished' }).catch(() => {}),
@@ -821,29 +885,51 @@ async function followAfterCommand(tabId, fromLeadId, slot = '1') {
 }
 
 // ---- Lead details for the Salebase phone script ----
-async function readScriptLead() {
-  const stored = await chrome.storage.session.get(SCRIPT_LEAD_KEY).catch(() => ({}));
-  return stored[SCRIPT_LEAD_KEY] || null;
+async function readScriptLead(scriptTabId) {
+  const stored = await chrome.storage.session.get(SCRIPT_LEADS_KEY).catch(() => ({}));
+  const records = stored[SCRIPT_LEADS_KEY] || {};
+  return records[String(scriptTabId)] || null;
 }
 
-async function rememberScriptLead(lead, details, sourceTabId) {
+async function rememberScriptLead(lead, details, sourceTabId, slot = '1') {
   if (!lead?.available || !lead.leadName) return;
   let user = null;
   try { user = (await client.auth.getSession()).data?.session?.user || null; } catch (_error) {}
   const fields = scriptFieldsFromLead(lead, details || {}, user);
   if (!fields) return;
-  const previous = await readScriptLead();
+  const lane = laneKey(slot);
+  const previous = laneScriptFields.get(lane);
   if (previous && previous.sourceTabId === sourceTabId && JSON.stringify(previous.fields) === JSON.stringify(fields)) return;
-  await chrome.storage.session.set({ [SCRIPT_LEAD_KEY]: { fields, sourceTabId, at: Date.now() } });
+  laneScriptFields.set(lane, { fields, sourceTabId, at: Date.now() });
+  await syncScriptLeadForLane(lane);
+}
+
+async function syncScriptLeadForLane(slot) {
+  const lane = laneKey(slot);
+  const fields = laneScriptFields.get(lane);
+  const map = await scriptSlotMap();
+  const tabId = Object.entries(map).find(([, assigned]) => assigned === lane)?.[0];
+  if (!tabId || !fields) return;
+  const stored = await chrome.storage.session.get(SCRIPT_LEADS_KEY).catch(() => ({}));
+  const records = stored[SCRIPT_LEADS_KEY] || {};
+  if (JSON.stringify(records[tabId]) === JSON.stringify(fields)) return;
+  await chrome.storage.session.set({ [SCRIPT_LEADS_KEY]: { ...records, [tabId]: fields } }).catch(() => {});
 }
 
 async function clearScriptLeadForTab(tabId) {
-  const record = await readScriptLead();
-  if (record && record.sourceTabId === tabId) await clearScriptLead();
+  for (const [slot, record] of laneScriptFields) {
+    if (record?.sourceTabId === tabId) laneScriptFields.delete(slot);
+  }
+  const map = await scriptSlotMap();
+  if (map[String(tabId)]) {
+    delete map[String(tabId)];
+    await writeScriptSlotMap(map);
+  }
 }
 
 async function clearScriptLead() {
-  await chrome.storage.session.remove(SCRIPT_LEAD_KEY).catch(() => {});
+  laneScriptFields.clear();
+  await chrome.storage.session.remove([SCRIPT_LEADS_KEY, SCRIPT_TAB_SLOTS_KEY]).catch(() => {});
 }
 
 async function injectScriptFill() {

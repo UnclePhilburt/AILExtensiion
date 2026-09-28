@@ -94,11 +94,12 @@ test('popup Script line says what was chosen or exactly why not', () => {
 test('service worker: every lead write re-checks the script, logs each outcome and keeps the group local', () => {
   const worker = fs.readFileSync(path.join(__dirname, '../extension/src/background/service-worker.js'), 'utf8');
   const writeLead = worker.slice(worker.indexOf('async function writeLead'), worker.indexOf('async function sendLeadToPhone'));
-  assert.match(writeLead, /void openMatchingSalebaseScript\(lead\);/, 'auto, follow-after-result, resync and Sync phone all write through here');
+  assert.match(writeLead, /void openMatchingSalebaseScript\(lead, slot\);/, 'auto, follow-after-result, resync and Sync phone all write through each phone lane');
   const opener = worker.slice(worker.indexOf('async function openMatchingSalebaseScript'), worker.indexOf('async function clickSalebaseCallLink'));
   // Selection in open script tabs comes before (and never behind) the open-once-per-lead guard.
-  assert.ok(opener.indexOf('selectSalebaseScript(tab.id, request)') < opener.indexOf('if (openKey === lastSalebaseOpenKey) return;'));
-  assert.match(opener, /pendingSalebaseChoice = request;\n/, 'a lead without a script clears the old pending one');
+  assert.ok(opener.indexOf('selectSalebaseScript(assigned.id, request, lane)') < opener.indexOf('if (openKey === lastSalebaseOpenKeys.get(lane)) return;'));
+  assert.match(opener, /pendingSalebaseChoices\.set\(lane, request\);/, 'each phone lane retains its own pending script choice');
+  assert.match(opener, /if \(twoPhoneLanesActive\(\)\)/, 'a second script is created only for two active phone lanes');
   assert.match(opener, /status: 'no-mapping'/);
   assert.match(opener, /scriptChoiceForLead\(requestType, \{ group \}\)/);
   const select = worker.slice(worker.indexOf('async function selectSalebaseScript'), worker.indexOf("// ---- Keeping the phone on IMPACT's lead ----"));
@@ -119,6 +120,6 @@ test('service worker: every lead write re-checks the script, logs each outcome a
 
 test('IMPACT page logs what group it read, once per lead', () => {
   const impact = fs.readFileSync(path.join(__dirname, '../extension/src/content/impact-diagnostic.js'), 'utf8');
-  assert.match(impact, /"impact\.groupRead", \{\n\s*requestType: lead\.requestType \|\| "", group: details\.group \|\| "", source: details\.groupSource \|\| "none"/);
+  assert.match(impact, /"impact\.groupRead", \{\r?\n\s*requestType: lead\.requestType \|\| "", group: details\.group \|\| "", source: details\.groupSource \|\| "none"/);
   assert.equal((impact.match(/logGroupRead\(lead\);/g) || []).length, 2);
 });
