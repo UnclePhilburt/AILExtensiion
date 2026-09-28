@@ -35,14 +35,14 @@ test('number storage, call attribution, retries, cloud integration and owner pri
   const device='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
   const id=n=>`cccccccc-cccc-4ccc-8ccc-${String(n).padStart(12,'0')}`;
   const asUser=user=>db.query("select set_config('request.jwt.claim.sub',$1,false)",[user]);
-  const record=(n,type)=>db.query('select calling_number_record($1,$2)',[id(n),type]);
+  const record=(n,type,number=null)=>db.query('select calling_number_record($1,$2,$3)',[id(n),type,number]);
   const manage=(number,action)=>db.query('select calling_number_manage($1,$2)',[number,action]);
   try {
     await db.exec(`create role anon; create role authenticated; create schema auth; create table auth.users(id uuid primary key);
       create function auth.uid() returns uuid language sql as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
       grant usage on schema public, auth to authenticated, anon; grant execute on function auth.uid() to authenticated, anon;
       insert into auth.users values ('${a}'),('${b}');`);
-    for(const file of ['001_cloud_sync.sql','006_activity_statistics.sql','008_allow_activity_logging.sql','010_call_timing_insights.sql','018_calling_numbers.sql','019_two_phone_windows.sql']) await db.exec(fs.readFileSync(`supabase/migrations/${file}`,'utf8'));
+    for(const file of ['001_cloud_sync.sql','006_activity_statistics.sql','008_allow_activity_logging.sql','010_call_timing_insights.sql','018_calling_numbers.sql','019_two_phone_windows.sql','021_phone_specific_calling_numbers.sql']) await db.exec(fs.readFileSync(`supabase/migrations/${file}`,'utf8'));
     await db.exec(`insert into companion_members(user_id) values ('${a}'),('${b}'); set role authenticated;`);
     await asUser(a);
     await db.query('select calling_number_save($1,$2)',['+13125550199','Work']);
@@ -53,18 +53,16 @@ test('number storage, call attribution, retries, cloud integration and owner pri
     const first=numbers[0].id,second=numbers[1].id;
     await assert.rejects(db.query('select calling_number_save($1,$2)',['not a number','Invalid']),/check constraint/);
     await record(1,'call'); // no active number: remains unattributed
-    await manage(first,'activate');
-    await record(2,'call');
-    await manage(second,'activate');
-    await record(2,'call'); // retry must not move the original call
+    await record(2,'call',first);
+    await record(2,'call',second); // retry must not move the original call
     await record(2,'no-answer');
     await record(2,'no-answer');
     await record(2,'refused-appointment'); // first result wins
-    await record(3,'call');
+    await record(3,'call',second);
     await record(3,'virtual-appointment'); // picker opened: not yet an appointment
     assert.equal((await db.query('select outcome from calling_number_calls where id=$1',[id(3)])).rows[0].outcome,null);
     await record(3,'virtual-appointment-slot');
-    await record(1,'call');
+    await record(1,'call',first);
     const calls=(await db.query('select * from calling_number_calls order by id')).rows;
     assert.equal(calls.length,3); assert.equal(calls[0].number_id,null);
     assert.equal(calls[1].number_id,first); assert.equal(calls[1].outcome,'no-answer');
@@ -75,10 +73,8 @@ test('number storage, call attribution, retries, cloud integration and owner pri
     assert.equal((await db.query('select archived from calling_numbers where id=$1',[first])).rows[0].archived,false);
 
     await db.query('select companion_desktop($1,$2)',[device,{available:true,leadId:'123'}]);
-    await db.query('select companion_send($1,$2,$3)',[id(10),device,{type:'call',leadId:'123',healthCallId:id(4)}]);
-    await db.query('select companion_send($1,$2,$3)',[id(10),device,{type:'call',leadId:'123',healthCallId:id(4)}]);
-    await manage(first,'activate');
-    await db.query('select companion_send($1,$2,$3)',[id(11),device,{type:'refused-appointment',leadId:'123',healthCallId:id(4)}]);
+    await db.query('select companion_send($1,$2,$3)',[id(10),device,{type:'call',leadId:'123',healthCallId:id(4),healthNumberId:second}]);
+    await db.query('select companion_send($1,$2,$3)',[id(11),device,{type:'refused-appointment',leadId:'123',healthCallId:id(4),healthNumberId:second}]);
     const cloud=(await db.query('select * from calling_number_calls where id=$1',[id(4)])).rows[0];
     assert.equal(cloud.number_id,second); assert.equal(cloud.outcome,'refused-appointment');
     await assert.rejects(db.query('select companion_send($1,$2,$3)',[id(12),device,{type:'call',leadId:'wrong',healthCallId:id(5)}]),/lead changed/);
@@ -97,7 +93,7 @@ test('number storage, call attribution, retries, cloud integration and owner pri
   } finally {await db.close();}
 });
 
-test('settings UI saves, activates, archives, and reports unavailable stats without false zeroes',async()=>{
+test('settings UI saves, assigns a line to this phone, archives, and reports unavailable stats without false zeroes',async()=>{
   const nodes=[];
   const make=tag=>{
     const item={tag,children:[],listeners:{},textContent:'',disabled:false,value:'',
@@ -117,7 +113,7 @@ test('settings UI saves, activates, archives, and reports unavailable stats with
       if(name==='calling_number_manage'){numbers[0].active=args.p_action==='activate';numbers[0].archived=args.p_action==='archive';}
       return {};
     }};
-  const context=vm.createContext({client,document:{querySelector:s=>els.get(s.slice(1)),createElement:make},setTimeout});
+  const context=vm.createContext({client,document:{querySelector:s=>els.get(s.slice(1)),createElement:make},setTimeout,localStorage:{},loadPhoneSettings:()=>({phoneLineId:''}),savePhoneSettings:()=>{}});
   vm.runInContext(fs.readFileSync('phone-web/public/calling-numbers-model.js','utf8').replace(/^export /gm,'')+'\n'+fs.readFileSync('phone-web/public/calling-numbers.js','utf8').replace(/^import .*;\r?\n/gm,''),context);
   const settle=async()=>{for(let i=0;i<5;i++)await new Promise(setImmediate);};
   const text=node=>node.textContent+' '+node.children.map(text).join(' ');
@@ -137,8 +133,8 @@ test('settings UI saves, activates, archives, and reports unavailable stats with
   assert.match(text(els.get('callingNumberList')), /Register as a real number/);
   assert.match(text(els.get('callingNumberList')), /Twilio video/);
   assert.equal(currentButton('Copy this number').textContent, 'Copy this number');
-  currentButton('Set active').listeners.click();await settle();assert.equal(numbers[0].active,true);
-  assert.match(text(els.get('callingNumberList')),/Active for new calls/);
+  currentButton('Use on this phone').listeners.click();await settle();
+  assert.match(els.get('callingNumberStatus').textContent,/other phone/);
   currentButton('Archive').listeners.click();await settle();assert.equal(numbers[0].archived,true);
   assert.match(text(els.get('callingNumberList')),/history saved/);
   statsFail=true;els.get('refreshCallingNumbers').listeners.click();await settle();
