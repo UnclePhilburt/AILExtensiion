@@ -685,13 +685,16 @@
       if (["virtual-appointment-day", "virtual-appointment-slot"].includes(command.type)) {
         let message;
         try {
+          const callback = command.appointmentType === "callback";
           if (command.type === "virtual-appointment-day") {
-            clickVirtualAppointmentDay(command);
-            message = "Virtual appointment day selected. Choose a time on your phone.";
+            if (callback) clickCallbackAppointmentDay(command);
+            else clickVirtualAppointmentDay(command);
+            message = `${callback ? "Callback" : "Virtual appointment"} day selected. Choose a time on your phone.`;
           } else {
-            await clickVirtualAppointmentSlot(command);
+            if (callback) await clickCallbackAppointmentSlot(command);
+            else await clickVirtualAppointmentSlot(command);
             void rememberWindowLead(getCurrentLeadId(), true);
-            message = "Virtual appointment time selected in IMPACT.";
+            message = `${callback ? "Callback" : "Virtual appointment"} time selected in IMPACT.`;
           }
         } catch (error) {
           message = error.message;
@@ -743,6 +746,7 @@
           "in-home": "Set In - Home Appointment", "call-back": "Set Call Back Appointment", "left-message": "Left Message", "dropby-appointment": "Bad Number/Set Dropby Appointment"
         };
         try {
+          if (command.type === "call-back") sessionStorage.setItem("impact.callbackAppointmentContext", JSON.stringify({ leadId: command.leadId, startedAt: Date.now() }));
           if (["in-home", "call-back", "left-message", "dropby-appointment"].includes(command.type)) openWhatHappened(labels[command.type]);
           else openDetailAction(labels[command.type]);
           if (command.type === "left-message") void rememberWindowLead(getCurrentLeadId(), true);
@@ -1354,14 +1358,31 @@
     return context;
   }
 
+  function getCallbackAppointmentContext() {
+    try {
+      const context = JSON.parse(sessionStorage.getItem("impact.callbackAppointmentContext") || "null");
+      if (!context?.leadId || !Number.isFinite(context.startedAt) || Date.now() - context.startedAt > 30 * 60 * 1000) return null;
+      return context;
+    } catch (_error) { return null; }
+  }
+
+  function validateCallbackAppointmentCommand(command) {
+    if (location.pathname !== "/Lead/SetAppointment") throw new Error("Open Set Call Back Appointment in IMPACT, then choose a day and time.");
+    const requestedAt = Date.parse(command.requestedAt);
+    if (!Number.isFinite(requestedAt) || Date.now() - requestedAt > 15000) throw new Error("Callback selection expired. Press it again on the phone.");
+    const context = getCallbackAppointmentContext();
+    if (!context || context.leadId !== command.leadId) throw new Error("This callback no longer matches the phone lead. Start the call from the phone again.");
+    return context;
+  }
+
   function collectVirtualAppointmentOptions() {
     if (location.pathname !== "/Lead/SetAppointment") return null;
     const context = getVirtualAppointmentContext();
     const root = document.querySelector(".setappoinment");
     if (!context || !root) return null;
     const days = [];
-    for (const header of Array.from(root.querySelectorAll('a[href^="#"]')).slice(0, 14)) {
-      const id = (header.getAttribute("href") || "").slice(1);
+    for (const header of Array.from(root.querySelectorAll('a[href]')).slice(0, 40)) {
+      const id = appointmentPanelId(header);
       const panel = id ? document.getElementById(id) : null;
       const label = sanitizeText(header.innerText || header.textContent || "");
       if (!id || !panel || !label) continue;
@@ -1375,15 +1396,46 @@
     return { leadId: context.leadId, days, selectedDayId };
   }
 
+  function collectCallbackAppointmentOptions() {
+    if (location.pathname !== "/Lead/SetAppointment" || String(document.querySelector("#appointmenttype")?.value || "").toLowerCase() !== "callback") return null;
+    const context = getCallbackAppointmentContext();
+    const root = document.querySelector(".setappoinment");
+    if (!context || !root) return null;
+    const days = [];
+    for (const header of Array.from(root.querySelectorAll('a[href]')).slice(0, 40)) {
+      const id = appointmentPanelId(header);
+      const panel = id ? document.getElementById(id) : null;
+      const label = sanitizeText(header.innerText || header.textContent || "");
+      if (!id || !panel || !label) continue;
+      const slots = Array.from(panel.querySelectorAll(".appointmentslot")).slice(0, 80)
+        .map((slot) => callbackSlotLabel(sanitizeText(slot.innerText || slot.textContent || "")))
+        .filter(Boolean);
+      if (slots.length) days.push({ id, label, slots, selected: /\bin\b/.test(panel.className || "") || panel.getClientRects().length > 0 });
+    }
+    if (!days.length) return null;
+    const selectedDayId = days.find((day) => day.selected)?.id || days[0].id;
+    return { leadId: context.leadId, kind: "callback", days, selectedDayId };
+  }
+
   function appointmentSlotLabel(value) {
     return /^No Time Preference\b/i.test(value) ? "Right Now" : value;
+  }
+
+  function callbackSlotLabel(value) {
+    return /^No Time Preference\b/i.test(value) ? "No time preference" : value;
+  }
+
+  function appointmentPanelId(element) {
+    const href = element.getAttribute("href") || "";
+    const marker = href.lastIndexOf("#");
+    return marker >= 0 ? href.slice(marker + 1) : "";
   }
 
   function clickVirtualAppointmentDay(command) {
     validateVirtualAppointmentCommand(command);
     const dayId = String(command.dayId || "");
-    const headers = Array.from(document.querySelectorAll('.setappoinment a[href^="#"]'))
-      .filter((element) => (element.getAttribute("href") || "").slice(1) === dayId)
+    const headers = Array.from(document.querySelectorAll('.setappoinment a[href]'))
+      .filter((element) => appointmentPanelId(element) === dayId)
       .filter((element) => element.getClientRects().length && element.getAttribute("aria-disabled") !== "true");
     if (headers.length !== 1 || !document.getElementById(dayId)) throw new Error("That appointment day is no longer available. Refresh the phone.");
     headers[0].click();
@@ -1395,8 +1447,8 @@
     const time = sanitizeText(command.time || "");
     if (!panel || !time) throw new Error("That appointment time is no longer available. Refresh the phone.");
     if (!/\bin\b/.test(panel.className || "")) {
-      const headers = Array.from(document.querySelectorAll('.setappoinment a[href^="#"]'))
-        .filter((element) => (element.getAttribute("href") || "").slice(1) === panel.id)
+      const headers = Array.from(document.querySelectorAll('.setappoinment a[href]'))
+        .filter((element) => appointmentPanelId(element) === panel.id)
         .filter((element) => element.getClientRects().length && element.getAttribute("aria-disabled") !== "true");
       if (headers.length !== 1) throw new Error("That appointment day is no longer available. Refresh the phone.");
       headers[0].click();
@@ -1412,6 +1464,36 @@
     await submitVirtualAppointmentEmail();
     // The next phone call belongs to the next lead, not this appointment page.
     sessionStorage.removeItem("impact.virtualAppointmentContext");
+  }
+
+  function clickCallbackAppointmentDay(command) {
+    validateCallbackAppointmentCommand(command);
+    const dayId = String(command.dayId || "");
+    const headers = Array.from(document.querySelectorAll('.setappoinment a[href]'))
+      .filter((element) => appointmentPanelId(element) === dayId)
+      .filter((element) => element.getClientRects().length && element.getAttribute("aria-disabled") !== "true");
+    if (headers.length !== 1 || !document.getElementById(dayId)) throw new Error("That callback day is no longer available. Refresh the phone.");
+    headers[0].click();
+  }
+
+  async function clickCallbackAppointmentSlot(command) {
+    validateCallbackAppointmentCommand(command);
+    const panel = document.getElementById(String(command.dayId || ""));
+    const time = sanitizeText(command.time || "");
+    if (!panel || !time) throw new Error("That callback time is no longer available. Refresh the phone.");
+    if (!/\bin\b/.test(panel.className || "")) {
+      const headers = Array.from(document.querySelectorAll('.setappoinment a[href]'))
+        .filter((element) => appointmentPanelId(element) === panel.id)
+        .filter((element) => element.getClientRects().length && element.getAttribute("aria-disabled") !== "true");
+      if (headers.length !== 1) throw new Error("That callback day is no longer available. Refresh the phone.");
+      headers[0].click(); await new Promise((resolve) => window.setTimeout(resolve, 120));
+    }
+    const slots = Array.from(panel.querySelectorAll(".appointmentslot"))
+      .filter((element) => callbackSlotLabel(sanitizeText(element.innerText || element.textContent || "")) === time)
+      .filter((element) => element.getClientRects().length && element.getAttribute("aria-disabled") !== "true");
+    if (slots.length !== 1) throw new Error("That callback time is no longer available. Refresh the phone.");
+    (slots[0].querySelector("a, button, input, [role='button'], [onclick]") || slots[0]).click();
+    sessionStorage.removeItem("impact.callbackAppointmentContext");
   }
 
   async function submitVirtualAppointmentEmail() {
@@ -1595,7 +1677,7 @@
       }
 
       if (location.pathname === "/Lead/SetAppointment") {
-        const appointmentOptions = collectVirtualAppointmentOptions();
+        const appointmentOptions = collectCallbackAppointmentOptions() || collectVirtualAppointmentOptions();
         if (!appointmentOptions) return;
         const fingerprint = JSON.stringify(appointmentOptions);
         if (fingerprint === lastAppointmentOptionsFingerprint) return;
