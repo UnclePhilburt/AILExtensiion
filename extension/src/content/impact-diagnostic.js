@@ -301,10 +301,36 @@
   }
 
   function collectRequestType(panel) {
-    // Scope the picker-provided location to the active lead's detail panel.
-    // Read the actual value: request types are not a fixed list.
-    const cell = panel.querySelector("#myTabContentJust div:nth-of-type(4) > table.table-bordered > tbody > tr:nth-of-type(2) > td");
-    return sanitizeText(cell?.innerText || cell?.textContent || "");
+    // Read the actual value: request types are not a fixed list. Older IMPACT
+    // pages put it in one fixed table position, but other lead types move the
+    // same labelled row into a different table or section.
+    const value = (element) => sanitizeText(element?.innerText || element?.textContent || "");
+    const original = panel.querySelector("#myTabContentJust div:nth-of-type(4) > table.table-bordered > tbody > tr:nth-of-type(2) > td");
+    if (value(original)) return value(original);
+
+    const isTypeLabel = (text) => /^(?:request|lead)\s*type\s*:?(?:\s*\/\s*(?:request|lead)\s*type)?$/i.test(sanitizeText(text));
+    for (const row of Array.from(panel.querySelectorAll("tr"))) {
+      const cells = Array.from(row.querySelectorAll(":scope > th, :scope > td"));
+      for (let index = 0; index < cells.length - 1; index += 1) {
+        if (!isTypeLabel(value(cells[index]))) continue;
+        const type = value(cells[index + 1]);
+        if (type) return type;
+      }
+    }
+
+    // Some newer cards use a label/value layout instead of a table.
+    for (const label of Array.from(panel.querySelectorAll("label, dt, .label, .control-label"))) {
+      if (!isTypeLabel(value(label))) continue;
+      const targetId = label.getAttribute("for");
+      const target = targetId ? panel.querySelector(`#${CSS.escape(targetId)}`) : null;
+      const sibling = label.nextElementSibling;
+      const type = value(target) || value(sibling);
+      if (type) return type;
+    }
+
+    // Final fallback for a plain-text card such as "Lead Type: Referral".
+    const match = value(panel).match(/(?:^|\n)\s*(?:request|lead)\s*type\s*:\s*([^\n]+)/i);
+    return sanitizeText(match?.[1] || "");
   }
 
   function collectCallHistory(panel) {
