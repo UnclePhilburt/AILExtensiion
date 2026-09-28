@@ -187,6 +187,24 @@ export function hasScheduledAppointment(callHistory, now = new Date(), zones = r
   });
 }
 
+// One immediate, plain-language line for the lead card. The full history is
+// still available below, but callers should not have to open it just to see
+// when this person was last worked.
+export function latestActivity(callHistory, now = Date.now(), { phoneTimeZone } = {}) {
+  const zones = resolveZones({ phoneTimeZone });
+  const entries = splitHistory(callHistory).map((entry) => parseHistoryEntry(entry))
+    .filter((entry) => entry.dates[0]?.at <= now);
+  if (!entries.length) return null;
+  const entry = entries.sort((a, b) => b.dates[0].at - a.dates[0].at)[0];
+  const date = entry.dates[0];
+  return {
+    action: entry.action,
+    when: clockTime(date.at, zones.phone),
+    relative: relativeTime(date.at, now, date.hasTime, zones),
+    tone: ['bad-number', 'refused', 'appointment-missed'].includes(entry.kind) ? 'danger' : entry.kind === 'callback' ? 'callback' : 'neutral'
+  };
+}
+
 export function buildHeadsUp(callHistory, now, { max = 4, phoneTimeZone } = {}) {
   const zones = resolveZones({ phoneTimeZone });
   const entries = splitHistory(callHistory).map((entry) => parseHistoryEntry(entry));

@@ -28,6 +28,11 @@ h1 { font-size: 32px; font-weight: 650; letter-spacing: -1px; margin: 5px 0 8px;
 .quietHoursFlag { display:grid; gap:3px; margin:0 0 14px; padding:10px 12px; border:1px solid #d77845; border-left:5px solid #be4f26; border-radius:12px; background:#fff0e9; color:#853719; }.quietHoursFlag strong { font-size:12px; letter-spacing:.6px; }.quietHoursFlag span { font-size:13px; line-height:1.35; }
 .leadCard h2 { color: #163c37; font-size: 27px; line-height: 1.2; letter-spacing: -.6px; font-weight: 700; margin-bottom: 22px; overflow-wrap: anywhere; }
 .headsUp { display: grid; gap: 8px; margin: -8px 0 18px; }
+.latestActivity { display:grid; grid-template-columns:auto 1fr; align-items:baseline; gap:2px 9px; margin:-4px 0 18px; padding:10px 12px; border-left:4px solid #7a8e84; border-radius:10px; background:#f2f5f3; color:#43554d; }
+.latestActivity > span:first-child { font-size:10px; font-weight:800; letter-spacing:1px; color:#5e7167; }
+.latestActivity strong { font-size:14px; line-height:1.25; color:#263b31; overflow-wrap:anywhere; }
+.latestActivity > span:last-child { grid-column:2; font-size:12px; color:#61736a; }
+.latestActivity.callback { border-left-color:#d49534; background:#fff7e7; }.latestActivity.danger { border-left-color:#b3412c; background:#fdf0ed; }
 .headsUpPriority { gap: 6px; margin-top: -5px; padding: 8px; border: 1px solid #9fcdb8; border-radius: 13px; background: #f3faf6; }
 .headsUpHeading { margin: 0 1px; color: #17684e; font-size: 10px; font-weight: 800; letter-spacing: 1.2px; }
 .headsUpChip { display: grid; gap: 2px; padding: 10px 13px; border-radius: 12px; border: 1px solid #dce6df; border-left-width: 5px; background: #f6f8f7; min-width: 0; }
@@ -199,6 +204,7 @@ html[data-bg] .wsBand { background-color: transparent; background-image: radial-
 
 /* Heads-up chips: soft tints, one consistent shape */
 .workspace .headsUp { gap: 8px; margin: -6px 0 18px; }
+.workspace .latestActivity { margin:-4px 0 18px; background:#f3f6f4; }.workspace .latestActivity.callback { background:#fdf4e3; }.workspace .latestActivity.danger { background:#fcefec; }
 .workspace .headsUpPriority { margin-top: -6px; padding: 0; border: 0; background: none; }
 .workspace .headsUpHeading { color: #4f7d66; font-weight: 750; }
 .workspace .headsUpChip { padding: 11px 14px; border: 0; border-radius: 14px; background: #f3f6f4; }
