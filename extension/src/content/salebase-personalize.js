@@ -169,8 +169,9 @@
     refresh();
   }
 
-  function setLane(slot) {
-    const label = slot === '2' ? 'PHONE 2 SCRIPT' : slot === '1' ? 'PHONE 1 SCRIPT' : '';
+  function setLane(slot, scriptType = '') {
+    const phone = slot === '2' ? 'PHONE 2' : slot === '1' ? 'PHONE 1' : '';
+    const label = phone ? `${phone}${scriptType ? ` · ${String(scriptType).toUpperCase()}` : ''} SCRIPT` : '';
     let badge = document.getElementById('impact-companion-script-lane');
     if (!label) { badge?.remove(); return; }
     if (!badge) {
@@ -188,12 +189,12 @@
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area === 'local' && changes['impact.fillScript']) { enabled = changes['impact.fillScript'].newValue !== false; refresh(); }
       if (area === 'session' && changes['impact.scriptLeads']) {
-        chrome.runtime.sendMessage({ type: 'impact/getScriptLead' }).then((response) => { setLead(response?.fields); setLane(response?.slot); }).catch(() => {});
+        chrome.runtime.sendMessage({ type: 'impact/getScriptLead' }).then((response) => { setLead(response?.fields); setLane(response?.slot, response?.scriptType); }).catch(() => {});
       }
     });
     chrome.storage.local.get('impact.fillScript').then((stored) => { enabled = stored['impact.fillScript'] !== false; refresh(); }).catch(() => {});
     // Ask the service worker once (it also enables session access for us).
-    chrome.runtime.sendMessage({ type: 'impact/getScriptLead' }).then((response) => { setLead(response?.fields); setLane(response?.slot); }).catch(() => {});
+    chrome.runtime.sendMessage({ type: 'impact/getScriptLead' }).then((response) => { setLead(response?.fields); setLane(response?.slot, response?.scriptType); }).catch(() => {});
   } catch (_error) {
     // Extension context gone (updated/removed): leave the page as Salebase wrote it.
     stop();

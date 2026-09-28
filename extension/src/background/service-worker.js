@@ -105,7 +105,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     Promise.resolve(allowScriptLeadInContentScripts()).then(async () => {
       const slot = await scriptSlotForTab(sender.tab?.id);
       const record = await readScriptLead(sender.tab?.id);
-      return { fields: record?.fields || laneScriptFields.get(slot)?.fields || null, slot: record?.slot || slot || '' };
+      return { fields: record?.fields || laneScriptFields.get(slot)?.fields || null, slot: record?.slot || slot || '', scriptType: record?.scriptType || pendingSalebaseChoices.get(slot)?.label || '' };
     }).then((result) => sendResponse({ ok: true, ...result })).catch(() => sendResponse({ ok: false, fields: null, slot: '' }));
     return true;
   }
@@ -966,7 +966,7 @@ async function syncScriptLeadForLane(slot) {
   if (!tabId || !fields) return;
   const stored = await chrome.storage.session.get(SCRIPT_LEADS_KEY).catch(() => ({}));
   const records = stored[SCRIPT_LEADS_KEY] || {};
-  const record = { ...fields, slot: lane };
+  const record = { ...fields, slot: lane, scriptType: pendingSalebaseChoices.get(lane)?.label || '' };
   if (JSON.stringify(records[tabId]) === JSON.stringify(record)) return;
   await chrome.storage.session.set({ [SCRIPT_LEADS_KEY]: { ...records, [tabId]: record } }).catch(() => {});
 }
