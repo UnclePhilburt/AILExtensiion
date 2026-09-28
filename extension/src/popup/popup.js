@@ -141,11 +141,11 @@ $('#fillScript').addEventListener('change', (event) => {
 $('#reopenPhoneScripts').addEventListener('click', async () => {
   const button = $('#reopenPhoneScripts');
   button.disabled = true;
-  say('Opening your phone script…');
+  say('Opening new phone script windows…');
   try {
     const result = await chrome.runtime.sendMessage({ type: 'impact/reopenPhoneScripts' });
     if (!result?.ok) throw new Error(result?.error || 'Could not reopen the phone script.');
-    say(result.lanes.length === 2 ? 'Opening Phone 1 and Phone 2 scripts.' : 'Opening the Phone 1 script.');
+    say(result.lanes.length === 2 ? 'Opened new Phone 1 and Phone 2 script windows.' : 'Opened a new Phone 1 script window.');
   } catch (error) { say(error.message, true); }
   finally { button.disabled = false; }
 });

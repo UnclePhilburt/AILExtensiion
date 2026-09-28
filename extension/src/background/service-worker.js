@@ -636,7 +636,7 @@ async function bindScriptTab(tabId, slot) {
   if (request?.label) scheduleScriptSelectionRetry(tabId, request, slot, 1);
 }
 
-async function openMatchingSalebaseScript(lead, slot = '1') {
+async function openMatchingSalebaseScript(lead, slot = '1', forceNewWindow = false) {
   const lane = laneKey(slot);
   const requestType = String(lead?.requestType || '');
   const leadKey = lead?.leadId || lead?.leadName || '';
@@ -645,11 +645,18 @@ async function openMatchingSalebaseScript(lead, slot = '1') {
   const request = { label: choice.label, rule: choice.rule, requestType, leadKey, slot: lane };
   pendingSalebaseChoices.set(lane, request);
   const option = choice.label;
-  const tabs = await findSalebaseScriptTabs(chrome).catch(() => []);
   if (!option) {
     await reportScriptSelect(request, { status: 'no-mapping', reason: choice.rule });
     return;
   }
+  if (forceNewWindow) {
+    const created = await chrome.windows.create({ url: SALEBASE_SCRIPTS_URL, type: 'popup', focused: false, width: 1080, height: 900 });
+    const tab = created?.tabs?.find((item) => item?.id);
+    if (!tab?.id) throw new Error(`Could not open the Phone ${lane} script window.`);
+    await bindScriptTab(tab.id, lane);
+    return;
+  }
+  const tabs = await findSalebaseScriptTabs(chrome).catch(() => []);
   const assigned = await scriptTabForLane(lane, tabs);
   if (assigned) {
     // Only this phone's script is changed and filled. The other lane keeps
@@ -715,7 +722,7 @@ async function reopenPhoneScripts() {
   if (!lanes.length) throw new Error('Open an IMPACT lead first, then reopen its script.');
   // Assign sequentially so two active lanes can never claim the same existing
   // Salebase tab while rebuilding their assignments.
-  for (const slot of lanes) await openMatchingSalebaseScript(slotMemory.get(slot).lead, slot);
+  for (const slot of lanes) await openMatchingSalebaseScript(slotMemory.get(slot).lead, slot, true);
   return { lanes };
 }
 
