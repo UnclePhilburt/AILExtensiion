@@ -113,6 +113,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     reopenPhoneScripts().then((result) => sendResponse({ ok: true, ...result })).catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
+  if (message?.type === 'impact/openPhoneScriptWindow') {
+    openPhoneScriptWindow(message.slot).then((result) => sendResponse({ ok: true, ...result })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
   if (message?.type === 'impact/objectionTranscript') {
     void handleObjectionTranscript(message.transcript);
     return false;
@@ -724,6 +728,31 @@ async function reopenPhoneScripts() {
   // Salebase tab while rebuilding their assignments.
   for (const slot of lanes) await openMatchingSalebaseScript(slotMemory.get(slot).lead, slot, true);
   return { lanes };
+}
+
+async function openPhoneScriptWindow(slot) {
+  const lane = laneKey(slot);
+  // Use the same live IMPACT refresh as the combined button, then open only
+  // the requested lane. This prevents Phone 1 from ever being reused for the
+  // Phone 2 window.
+  await reopenPhoneScriptsForLane(lane);
+  return { lane };
+}
+
+async function reopenPhoneScriptsForLane(lane) {
+  const impactTabs = await chrome.tabs.query({ url: 'https://mobile.impact.ailife.com/Lead/*' });
+  for (const tab of impactTabs) {
+    if (!tab?.id || await slotForTab(tab) !== lane) continue;
+    const response = await chrome.tabs.sendMessage(tab.id, { type: 'impact/readCurrentLead' }).catch(() => null);
+    if (!response?.lead?.available) continue;
+    const { scriptDetails, ...lead } = response.lead;
+    noteScriptGroup(lead, scriptDetails);
+    slotMemory.set(lane, { ...(slotMemory.get(lane) || {}), lead, leadId: lead.leadId || '' });
+    await rememberScriptLead(lead, scriptDetails, tab.id, lane);
+    await openMatchingSalebaseScript(lead, lane, true);
+    return;
+  }
+  throw new Error(`Phone ${lane} has no open IMPACT lead. Open its IMPACT window first.`);
 }
 
 async function clickSalebaseCallLink(tabId) {

@@ -149,6 +149,17 @@ $('#reopenPhoneScripts').addEventListener('click', async () => {
   } catch (error) { say(error.message, true); }
   finally { button.disabled = false; }
 });
+for (const [id, slot] of [['#openPhone1Script', '1'], ['#openPhone2Script', '2']]) {
+  $(id).addEventListener('click', async () => {
+    const button = $(id); button.disabled = true;
+    try {
+      const result = await chrome.runtime.sendMessage({ type: 'impact/openPhoneScriptWindow', slot });
+      if (!result?.ok) throw new Error(result?.error || `Could not open the Phone ${slot} script.`);
+      say(`Opened a new Phone ${slot} script window.`);
+    } catch (error) { say(error.message, true); }
+    finally { button.disabled = false; }
+  });
+}
 $('#requestMicrophone').addEventListener('click', async () => {
   await chrome.tabs.create({ url: chrome.runtime.getURL('src/offscreen/microphone-permission.html') });
   window.close();
