@@ -1178,18 +1178,24 @@
 
   async function clickRefusedAppointment(command, prTimings) {
     validateCallResult(command);
-    const choices = Array.from(document.querySelectorAll('#statuscontainer #collapseFour a[href="#panelRefused"]'))
+    // IMPACT sometimes emits a full URL before the #panelRefused fragment,
+    // rather than the short href used by the older page. Use the fragment so
+    // the phone action works with either version.
+    const choices = Array.from(document.querySelectorAll('#statuscontainer #collapseFour a[href]'))
+      .filter((element) => appointmentPanelId(element) === "panelRefused")
       .filter((element) => /^Refused Appointment\s*:/i.test(sanitizeText(element.innerText || element.textContent || "")));
     if (choices.length !== 1) throw new Error("Refused Appointment option was not found uniquely in IMPACT.");
     if (choices[0].getAttribute("aria-disabled") === "true") throw new Error("Refused Appointment is disabled in IMPACT.");
     choices[0].click();
-    const deadline = Date.now() + 4000;
+    const deadline = Date.now() + 6000;
     while (Date.now() < deadline) {
       validateCallResult(command);
       const panel = document.querySelector("#statuscontainer #panelRefused");
-      const submits = panel ? Array.from(panel.querySelectorAll('input[type="button"], button'))
+      const submits = panel ? Array.from(panel.querySelectorAll('input[type="button"], input[type="submit"], button, a[onclick]'))
         .filter((element) => /^(Submit)$/i.test(sanitizeText(element.value || element.textContent || "")))
-        .filter((element) => /^\s*MarkResolveRefused\s*\([^,]+,[^,]+,\s*8\s*\)/.test(element.getAttribute("onclick") || "")) : [];
+        // The final numeric argument varies across IMPACT releases. The
+        // function name is the stable, refusal-specific safety check.
+        .filter((element) => /^\s*MarkResolveRefused\s*\(/.test(element.getAttribute("onclick") || "")) : [];
       if (submits.length > 1) throw new Error("Refused Appointment Submit was not found uniquely.");
       const submit = submits[0];
       if (submit && submit.getClientRects().length && !submit.disabled && submit.getAttribute("aria-disabled") !== "true") {
