@@ -24,6 +24,7 @@ const scriptGroupsByLead = new Map(); // lead key -> group, browser-only
 const laneScriptFields = new Map(); // phone slot -> fields for its own script tab
 const lastScriptSelectKeys = new Map();
 const lastSalebaseOpenKeys = new Map();
+const scriptSelectionRetries = new Map();
 let objectionListening = false;
 // Lead writes to the phone run one at a time; an older lead never lands last.
 const slotQueues = new Map();
@@ -631,6 +632,8 @@ async function bindScriptTab(tabId, slot) {
   map[String(tabId)] = laneKey(slot);
   await writeScriptSlotMap(map);
   await syncScriptLeadForLane(slot);
+  const request = pendingSalebaseChoices.get(laneKey(slot));
+  if (request?.label) scheduleScriptSelectionRetry(tabId, request, slot, 1);
 }
 
 async function openMatchingSalebaseScript(lead, slot = '1') {
@@ -758,17 +761,32 @@ async function openSalebaseFallback(request, before = new Set()) {
 // Reads the script dropdown, picks the option for this lead (see
 // matchScriptOption) and selects it the way a click would. Every outcome is
 // logged as salebase.scriptSelect and shown in the popup's Script line.
-async function selectSalebaseScript(tabId, request, slot = '1') {
+function scheduleScriptSelectionRetry(tabId, request, slot = '1', attempt = 1) {
+  if (attempt > 4) return;
+  const lane = laneKey(slot);
+  const key = `${lane}:${tabId}`;
+  clearTimeout(scriptSelectionRetries.get(key));
+  scriptSelectionRetries.set(key, setTimeout(async () => {
+    scriptSelectionRetries.delete(key);
+    const current = pendingSalebaseChoices.get(lane);
+    if (!current?.label || current.leadKey !== request.leadKey || await scriptSlotForTab(tabId) !== lane) return;
+    await selectSalebaseScript(tabId, current, lane, attempt);
+  }, 1200));
+}
+
+async function selectSalebaseScript(tabId, request, slot = '1', attempt = 0) {
   let page = null;
   try {
     [{ result: page }] = await chrome.scripting.executeScript({ target: { tabId }, func: readScriptDropdown });
   } catch (error) {
     // Still signing in or loading: the completed-load listener above retries.
     await reportScriptSelect(request, { status: 'tab-not-ready', reason: error.message });
+    scheduleScriptSelectionRetry(tabId, request, slot, attempt + 1);
     return;
   }
   if (!page?.found) {
     await reportScriptSelect(request, { status: 'no-dropdown', reason: 'no #myDropdown with options on the Salebase page' });
+    scheduleScriptSelectionRetry(tabId, request, slot, attempt + 1);
     return;
   }
   const options = page.options || [];
@@ -790,6 +808,7 @@ async function selectSalebaseScript(tabId, request, slot = '1') {
   }
   await reportScriptSelect(request, { ...base, status: applied?.ok ? 'selected' : 'select-failed', chosen: match.text, how: match.how, reason: applied?.reason || '' });
   if (applied?.ok || page.selectedIndex === match.index) await syncScriptLeadForLane(slot);
+  else scheduleScriptSelectionRetry(tabId, request, slot, attempt + 1);
 }
 
 async function reportScriptSelect(request, outcome) {
