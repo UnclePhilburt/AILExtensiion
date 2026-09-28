@@ -3,7 +3,8 @@ import { numberHealth, formatCallingNumber } from './calling-numbers-model.js';
 import { startOfToday, todayMetrics, laneStatus, dashboardNote, upcomingEvents } from './today-view.js';
 
 const $ = selector => document.querySelector(selector);
-let user = null, channel = null, loading = false;
+let user = null, channel = null, loading = false, reloadQueued = false;
+let latestMetrics = {calls:0,noAnswer:0,appointments:0,refused:0,held:0}, latestUpcoming = [];
 const text = (tag, value, className = '') => { const item = document.createElement(tag); item.textContent = value; item.className = className; return item; };
 const eventTime = value => new Date(value).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});
 
@@ -61,7 +62,8 @@ function renderTips(metrics, events) {
   holder.append(...tips.map(value => text('p', value, 'tipRow')));
 }
 async function load() {
-  if (!user || loading) return;
+  if (!user) return;
+  if (loading) { reloadQueued = true; return; }
   loading = true; $('#todayRefresh').disabled = true; $('#todayStatus').textContent = 'Updating…';
   const from = startOfToday(), to = new Date(from); to.setDate(to.getDate() + 1);
   try {
@@ -77,19 +79,33 @@ async function load() {
     const events = eventsResult.data || [], outcomes = outcomesResult.error ? [] : outcomesResult.data || [];
     const metrics = todayMetrics(events, outcomes);
     const upcoming = scheduleResult.error ? [] : upcomingEvents(scheduleResult.data || []);
+    latestMetrics = metrics; latestUpcoming = upcoming;
     const lanes = renderLanes(stateResult.error ? null : stateResult.data);
     renderMetrics(metrics); renderUpcoming(upcoming); renderNumbers(numbersResult.error ? [] : numbersResult.data || [], statsResult.error ? [] : statsResult.data || []); renderTips(metrics, events);
     $('#todayNote').textContent = dashboardNote(metrics, lanes, upcoming);
     $('#todayStatus').textContent = `Updated ${new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`;
   } catch (error) {
     $('#todayStatus').textContent = error.message || 'Could not update the desk.';
-  } finally { loading = false; $('#todayRefresh').disabled = false; }
+  } finally {
+    loading = false; $('#todayRefresh').disabled = false;
+    if (reloadQueued) { reloadQueued = false; void load(); }
+  }
 }
 function watch() {
   channel?.unsubscribe?.();
   const refresh = () => void load();
+  const syncLane = payload => {
+    // A desktop lead write contains the full, new lane state. Paint that state
+    // immediately; the following load refreshes the rest of the dashboard.
+    if (payload.new) {
+      const lanes = renderLanes(payload.new);
+      $('#todayNote').textContent = dashboardNote(latestMetrics, lanes, latestUpcoming);
+      $('#todayStatus').textContent = 'Live update';
+    }
+    refresh();
+  };
   channel = client.channel(`today-desk-${crypto.randomUUID()}`)
-    .on('postgres_changes',{event:'*',schema:'public',table:'companion_sync',filter:`user_id=eq.${user.id}`},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'companion_sync',filter:`user_id=eq.${user.id}`},syncLane)
     .on('postgres_changes',{event:'*',schema:'public',table:'companion_events',filter:`user_id=eq.${user.id}`},refresh)
     .on('postgres_changes',{event:'*',schema:'public',table:'appointment_outcomes',filter:`user_id=eq.${user.id}`},refresh)
     .subscribe();
