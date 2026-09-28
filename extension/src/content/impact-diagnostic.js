@@ -878,11 +878,19 @@
     for (const [slot, leadId] of Object.entries(record?.slots || {})) {
       if (slot !== mine && leadId) blocked.push(String(leadId));
     }
+    // A lead that the other phone just completed should stay in that phone's
+    // lane for a while. Otherwise, as soon as it advances, Best next on this
+    // phone can pull the just-worked person back into the other workflow.
+    for (const item of Array.isArray(record?.recent) ? record.recent : []) {
+      if (String(item?.slot || "") !== mine && item?.leadId && Date.now() - Number(item.at) < OTHER_PHONE_RECENT_MS) {
+        blocked.push(String(item.leadId));
+      }
+    }
     return [...new Set(blocked)];
   }
 
   const OTHER_PHONE_KEY = "impact.otherPhoneLeads";
-  const OTHER_PHONE_RECENT_MS = 15 * 60 * 1000;
+  const OTHER_PHONE_RECENT_MS = 4 * 60 * 60 * 1000;
   const BEST_NEXT_SEEN_KEY = "impact.bestNextSeen";
   const BEST_NEXT_CACHE_KEY = "impact.bestNextDetails";
   const RECENT_ATTEMPT_MS = 4 * 60 * 60 * 1000;

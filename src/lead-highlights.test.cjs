@@ -14,6 +14,7 @@ const now=ct(24); // Sep 24 2026 10:00 AM Central
 const central={phoneTimeZone:'America/Chicago'};
 const heads=(history,at,options=central)=>plain(highlights().buildHeadsUp(history,at,options));
 const scheduled=(history,at=now)=>highlights().hasScheduledAppointment(history,at,central);
+const latest=(history,at=now,options=central)=>plain(highlights().latestActivity(history,at,options));
 test('a future appointment or callback is scheduled, a past one is not', () => {
   assert.equal(scheduled(['Schedule Virtual Appointment on Sep 26 2026 03:00 PM by Me']), true);
   assert.equal(scheduled(['Schedule Call Back appointment on Sep 24 2026 - No Time Preference by Me']), true);
@@ -61,6 +62,13 @@ test('real IMPACT Status lines parse as Central wall-clock times', ()=>{
   assert.equal(h.classifyEntry('Refused Appointment on Sep 23 2026 04:48 PM by Me.'),'refused');
   assert.equal(h.classifyEntry('Bad Number on Sep 20 2026 09:00 AM by Me.'),'bad-number');
   assert.equal(h.classifyEntry('Appointment cancelled on Sep 23 2026 04:48 PM by Me.'),'appointment-missed');
+});
+
+test('the lead card gets the most recent completed action without opening history', ()=>{
+  assert.deepEqual(latest(['No Answer on Sep 24 2026 09:00 AM by Me', 'Checkin on Sep 22 2026 04:41 PM by Me'], now), {
+    action:'No Answer', when:'9:00 AM', relative:'1 hr ago', tone:'neutral'
+  });
+  assert.equal(latest(['Schedule Call Back appointment on Sep 25 2026 02:00 PM by Me'], now), null, 'future appointment is not an action that already happened');
 });
 
 test('IMPACT times respect Central daylight saving time', ()=>{
@@ -213,7 +221,7 @@ test('the phone lead card shows heads-up chips above the details and hides them 
     installLeadSwipe(){},
     client:{auth:{onAuthStateChange:fn=>{authChanged=fn;}}}, saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, encourageLead:()=>{}, encourageResult:()=>{}, cloudEnabled:async()=>true,
     cloudState:async()=>state,cloudTouchPhone:async()=>{}, cloudSend:async()=>{},
-    watchCloud:async()=>()=>{},visibleLead:s=>s?.lead,isOnline:()=>true,
+    watchCloud:async()=>()=>{},visibleLead:s=>s?.lead,slotView:s=>s,isOnline:()=>true,
     document:{querySelector:selector=>selector.startsWith('meta')?null:el(selector),createElement:make,addEventListener(){}},
     localStorage:{getItem:()=>null,setItem(){},removeItem(){}},location:{search:'',origin:'https://example.test',replace(){}},
     URLSearchParams, Date:FakeDate, crypto:require('node:crypto'), setInterval(){},setTimeout(){}, console

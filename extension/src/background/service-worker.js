@@ -18,7 +18,6 @@ const IMPACT_LEAD_PAGE = /^https:\/\/mobile\.impact\.ailife\.com\/Lead\/(InboxDe
 
 let lastAutoPublishFingerprint = "";
 let lastAutoPublishAt = 0;
-let lastPublishedLead = null;
 let pendingSalebaseChoice = null; // { label, rule, requestType, leadKey } for a script tab still loading
 let lastScriptGroup = { leadKey: '', group: '' }; // browser-only, from the IMPACT page
 let lastScriptSelectKey = '';
@@ -32,7 +31,6 @@ function queueFor(slot) {
   if (!slotQueues.has(key)) slotQueues.set(key, createLatestWinsQueue());
   return slotQueues.get(key);
 }
-let latestLeadId = '';      // the newest lead IMPACT has shown (what the phone should have)
 let lastWrittenLeadId = '';
 const followGenerations = new Map();
 let lastPublishSkip = '';
@@ -46,7 +44,6 @@ chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
 chrome.storage.onChanged.addListener((changes) => {
   if (changes['impact.supabase.session']) {
     lastAutoPublishFingerprint = '';
-    lastPublishedLead = null;
     void chrome.storage.local.remove([STORAGE_KEYS.lastSnapshot, STORAGE_KEYS.inboxQueue]);
     if (!changes['impact.supabase.session'].newValue) void clearScriptLead();
   }
@@ -320,7 +317,9 @@ async function getPhoneCommand(senderTab) {
   }
   // After a result or Previous/Next, follow IMPACT to the lead it moves to.
   if (command?.type && LEAD_CHANGING_COMMANDS.includes(command.type)) {
-    void followAfterCommand(senderTab.id, command.leadId || slotMemory.get(slot)?.leadId || latestLeadId, slot);
+    // Keep the follow-up tied to this phone's own IMPACT tab. Never borrow a
+    // recently published lead from the other phone's lane.
+    void followAfterCommand(senderTab.id, command.leadId || slotMemory.get(slot)?.leadId || '', slot);
   }
   return { ...taken, slot };
 }
@@ -432,7 +431,9 @@ async function publishAppointmentOptions(appointmentOptions, senderTab) {
   if (skip || !slot || !/^https:\/\/mobile\.impact\.ailife\.com\/Lead\/SetAppointment(?:[?#]|$)/.test(senderTab?.url || "")) {
     return { skipped: true, reason: skip || !slot ? "only two phone windows" : "not the appointment page" };
   }
-  const current = slotMemory.get(slot)?.lead || lastPublishedLead;
+  // Appointment choices must belong to this slot. A global "last lead"
+  // fallback can accidentally send Phone 1's lead to Phone 2.
+  const current = slotMemory.get(slot)?.lead;
   if (!current?.available || !appointmentOptions?.leadId || appointmentOptions.leadId !== current.leadId) {
     throw new Error("Appointment options do not match the current lead.");
   }
@@ -499,14 +500,13 @@ function publishLead(lead, options = {}) {
     return Promise.reject(new Error("No lead payload available to send."));
   }
   const slot = options.slot === '2' ? '2' : '1';
-  if (lead.leadId && slot === '1') latestLeadId = lead.leadId;
   return queueFor(slot).run((seq) => writeLead(lead, seq, { ...options, slot }), { mustRun: Boolean(options.force) });
 }
 
 async function writeLead(lead, seq, options = {}) {
   const slot = options.slot === '2' ? '2' : '1';
-  lastPublishedLead = structuredClone(lead);
-  slotMemory.set(slot, { ...(slotMemory.get(slot) || {}), lead: lastPublishedLead, leadId: lead.leadId || '' });
+  const laneLead = structuredClone(lead);
+  slotMemory.set(slot, { ...(slotMemory.get(slot) || {}), lead: laneLead, leadId: lead.leadId || '' });
   // Every lead write (auto, follow-after-result, resync, Sync phone) checks the script.
   void openMatchingSalebaseScript(lead);
   const leadChanged = Boolean(lead.leadId) && lead.leadId !== (slot === '1' ? lastWrittenLeadId : slotMemory.get(slot)?.writtenId);

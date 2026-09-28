@@ -136,7 +136,7 @@ test('service worker wiring: no focused-window gate, ordered writes, follow afte
   assert.match(auto, /const skip = await publishSkipReason\(senderTab\);/);
   assert.doesNotMatch(worker.slice(worker.indexOf('async function publishAppointmentOptions'), worker.indexOf('async function reportCommandResult')), /senderTab\.id !== active\?\.id/);
   assert.match(worker, /return queueFor\(slot\)\.run\(\(seq\) => writeLead\(lead, seq, \{ \.\.\.options, slot \}\), \{ mustRun: Boolean\(options\.force\) \}\);/);
-  assert.match(worker, /if \(command\?\.type && LEAD_CHANGING_COMMANDS\.includes\(command\.type\)\) \{\r?\n\s*void followAfterCommand\(senderTab\.id, command\.leadId \|\| slotMemory\.get\(slot\)\?\.leadId \|\| latestLeadId, slot\);/);
+  assert.match(worker, /if \(command\?\.type && LEAD_CHANGING_COMMANDS\.includes\(command\.type\)\) \{[\s\S]{0,260}?void followAfterCommand\(senderTab\.id, command\.leadId \|\| slotMemory\.get\(slot\)\?\.leadId \|\| '', slot\);/);
   assert.match(worker, /publishLead\(message\.lead, \{ force: true, eventName: 'phoneSync\.manualSync', slot \}\)/);
   assert.match(worker, /void checkPhoneHasLead\(lead\.leadId, slot\);/);
   for (const event of ['phoneSync.publishSkipped', 'phoneSync.published', 'phoneSync.publishFailed', 'phoneSync.followPublished', 'phoneSync.resync']) assert.ok(worker.includes(event), event);

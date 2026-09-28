@@ -52,9 +52,10 @@ test('Best next skips people already offered until the Inbox has all been seen',
   assert.equal(context.neighborInQueue(queue, '1', 'next', ['2', '3']).status, 'blocked');
 });
 
-test('a window skips only the lead the other phone is on, not the rest of the list', () => {
-  const record = { slots: { '1': '9', '2': '4' }, recent: [{ leadId: '7', slot: '2', at: 1 }, { leadId: '1', slot: '2', at: 1 }, { leadId: '3', slot: '2', at: 1 }] };
-  assert.equal([...context.otherPhoneBlockedIds(record, '1')].join(','), '4');
+test('a window skips the other phone’s current and recently worked leads', () => {
+  const recent = Date.now();
+  const record = { slots: { '1': '9', '2': '4' }, recent: [{ leadId: '7', slot: '2', at: recent }, { leadId: '1', slot: '2', at: recent }, { leadId: '3', slot: '2', at: recent }] };
+  assert.equal([...context.otherPhoneBlockedIds(record, '1')].join(','), '4,7,1,3');
   assert.equal([...context.otherPhoneBlockedIds(record, '2')].join(','), '9');
   assert.equal(context.neighborInQueue(queue, '1', 'next', ['4']).lead.leadId, '2');
 });
