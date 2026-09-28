@@ -34,10 +34,10 @@ function controls(disabled) { section.querySelectorAll('button,input').forEach(i
 function render(numbers, stats) {
   list.replaceChildren();
   if (!numbers.length) {
-    list.append(node('p', 'No calling numbers saved. Add one above, then set it active before the next call.', 'emptyNumbers'));
+    list.append(node('p', 'No calling numbers saved. Add one above, then choose it on the phone that dials from it.', 'emptyNumbers'));
     return;
   }
-  const live = numbers.filter((number) => !number.archived).sort((a, b) => Number(b.active) - Number(a.active));
+  const live = numbers.filter((number) => !number.archived);
   const archived = numbers.filter((number) => number.archived);
   for (const number of live) list.append(numberCard(number, stats));
   if (!archived.length) return;
@@ -49,10 +49,11 @@ function render(numbers, stats) {
 }
 
 function numberCard(number, stats) {
-  const card = node('article', '', `callingNumberCard${number.active ? ' isActive' : ''}`);
+  const card = node('article', '', 'callingNumberCard');
   const top = document.createElement('div');
   top.className = 'cardTop';
-  const state = number.active ? 'Active for new calls' : number.archived ? 'Archived · history saved' : 'Not in use';
+  const mine = typeof loadPhoneSettings === 'function' && loadPhoneSettings(localStorage).phoneLineId === number.id;
+  const state = mine ? 'Used on this phone' : number.archived ? 'Archived · history saved' : 'Available to assign';
   if (stats) {
     const health = numberHealth(stats, number.id);
     top.append(node('p', health.estimateLabel, `healthEstimate ${health.estimate}`), node('p', state, 'numberState'));
@@ -68,22 +69,21 @@ function numberCard(number, stats) {
   }
   if (!number.archived) {
     const actions = node('div', '', 'numberActions');
-    const active = node('button', number.active ? 'Stop tracking new calls' : 'Set active');
-    active.type = 'button';
-    active.addEventListener('click', () => void run(() => manage(number.id, number.active ? 'pause' : 'activate')));
     const archive = node('button', 'Archive');
     archive.type = 'button';
     archive.className = 'secondary';
-    archive.addEventListener('click', () => void run(() => manage(number.id, 'archive')));
-    actions.append(active, archive);
-    const mine = typeof loadPhoneSettings === 'function' && loadPhoneSettings(localStorage).phoneLineId === number.id;
+    archive.addEventListener('click', () => void run(async () => {
+      await manage(number.id, 'archive');
+      if (mine && typeof savePhoneSettings === 'function') savePhoneSettings(localStorage, { phoneLineId: '' });
+    }));
+    actions.append(archive);
     const use = node('button', mine ? 'This phone dials this' : 'Use on this phone');
     use.type = 'button';
     use.className = 'secondary';
     use.disabled = mine;
     use.addEventListener('click', () => {
       if (typeof savePhoneSettings === 'function') savePhoneSettings(localStorage, { phoneLineId: number.id });
-      status.textContent = 'This phone will count new calls on this number.';
+      status.textContent = 'This phone will count new calls on this number. Set the other phone to its own number.';
       use.textContent = 'This phone dials this';
       use.disabled = true;
     });
@@ -154,13 +154,13 @@ async function load() {
     if(authError) throw authError;
     if(!auth.session) { list.replaceChildren(); status.textContent='Sign in to save calling numbers and view their stats.'; return; }
     const [numbers,stats] = await Promise.all([
-      client.from('calling_numbers').select('id,phone,label,active,archived').order('created_at',{ascending:true}),
+      client.from('calling_numbers').select('id,phone,label,archived').order('created_at',{ascending:true}),
       client.rpc('calling_number_stats')
     ]);
     if(token!==generation) return;
     if(numbers.error) throw numbers.error;
     render(numbers.data || [], stats.error ? null : stats.data || []);
-    status.textContent=stats.error ? 'Numbers loaded; statistics could not be loaded.' : 'Saved to your account. '+(numbers.data?.some(n=>n.active)?'New calls use your active number.':'No active number selected. New calls will not be assigned to a number.');
+    status.textContent=stats.error ? 'Numbers loaded; statistics could not be loaded.' : 'Saved to your account. Choose the number this phone dials; each phone can choose a different one.';
     controls(false);
   } catch(error) {
     if(token!==generation) return;

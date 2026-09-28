@@ -56,7 +56,7 @@ export function normalizeSettings(value, base = DEFAULT_SETTINGS) {
   if (TEXT_SIZES.some((size) => size.id === source.textSize)) settings.textSize = source.textSize;
   if (ORGANIZATIONS.some((organization) => organization.id === source.organization)) settings.organization = source.organization;
   if (source.phoneSlot === '1' || source.phoneSlot === '2') settings.phoneSlot = source.phoneSlot;
-  if (typeof source.phoneLineId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(source.phoneLineId)) settings.phoneLineId = source.phoneLineId;
+  if (source.phoneLineId === '' || (typeof source.phoneLineId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(source.phoneLineId))) settings.phoneLineId = source.phoneLineId;
   if (typeof source.firstName === 'string') {
     const name = cleanFirstName(source.firstName);
     if (name !== null) settings.firstName = name;
