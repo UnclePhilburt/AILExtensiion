@@ -4,6 +4,7 @@ import { STORAGE_KEYS } from '../shared/storage-keys.js';
 import { cloudEnabled, cloudState, isOnline, PHONE_URL } from '../shared/cloud-sync.js';
 import { scriptStatusText } from '../background/salebase-scripts.js';
 import { CLOSED_MESSAGE, callingHoursOpen } from '../shared/work-hours.js';
+import { phoneRecovery } from '../shared/phone-recovery.js';
 const $ = selector => document.querySelector(selector);
 let session = null;
 let checking = false;
@@ -85,6 +86,7 @@ $('#openOptions').addEventListener('click', async () => {
   if (tab?.id) await chrome.storage.session.set({'impact.debugTabId':tab.id});
   await chrome.runtime.openOptionsPage();
 });
+$('#refreshStatus').addEventListener('click', () => void refreshStatus());
 $('#loginForm').addEventListener('submit', async event => {
   event.preventDefault();
   $('#signIn').disabled = true; say('Signing in…');
@@ -182,7 +184,7 @@ async function refreshStatus() {
       const state = await cloudState();
       const local = await chrome.storage.local.get('impact.deviceId');
       if (isOnline(state?.desktop_seen) && state.device_id !== local['impact.deviceId']) throw new Error('Another computer is connected. Close IMPACT there and wait 45 seconds.');
-      status = {phoneConnected:isOnline(state?.phone_seen),updatedAt:state?.lead_updated_at};
+      status = {phoneConnected:isOnline(state?.phone_seen),updatedAt:state?.lead_updated_at, state};
     } else {
     const settings = await chrome.storage.local.get([STORAGE_KEYS.bridgeUrl,STORAGE_KEYS.bridgeToken]);
     const bridgeUrl = parseBridgeUrl(settings[STORAGE_KEYS.bridgeUrl]);
@@ -193,19 +195,44 @@ async function refreshStatus() {
     }
     if (session?.user.id !== accountId) return;
     $('#bridgeState').textContent = 'Connected';
-    $('#phoneState').textContent = status.phoneConnected ? 'Connected' : 'Not connected';
     $('#lastUpdate').textContent = status.updatedAt ? new Date(status.updatedAt).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}) : 'No updates yet';
     const connected = status.phoneConnected && onImpact;
     $('#connectionCard').dataset.state = connected ? 'connected' : 'checking';
     $('#connectionTitle').textContent = connected ? 'Connected' : 'Almost ready';
     $('#connectionHint').textContent = !onImpact ? 'Select your IMPACT lead tab to use the phone controls.' : !status.phoneConnected ? 'Open the phone page and sign in with this account.' : 'Your computer and phone are ready to work together.';
     $('#updatePhone').disabled = !onImpact || busy;
+    renderPhoneLanes(status.state, useCloud, status.phoneConnected);
   } catch (error) {
-    $('#bridgeState').textContent = 'Not connected'; $('#phoneState').textContent = 'Unavailable'; $('#lastUpdate').textContent = '—';
+    $('#bridgeState').textContent = 'Not connected'; $('#lastUpdate').textContent = '—';
     $('#connectionCard').dataset.state = 'offline'; $('#connectionTitle').textContent = 'Connection needed';
     $('#connectionHint').textContent = error.name==='TimeoutError' || error instanceof TypeError ? 'Cannot reach your connection. Check your internet and connection settings.' : error.message;
     $('#updatePhone').disabled = true;
+    renderPhoneLanes(null, true, false);
   } finally { checking = false; }
+}
+function renderPhoneLanes(state, useCloud, phoneConnected) {
+  const lanes = $('#phoneLanes');
+  lanes.replaceChildren();
+  const recovery = useCloud
+    ? ['1', '2'].map(slot => phoneRecovery(state, slot))
+    : ['1'].map(slot => ({ id: slot, connected: phoneConnected, state: phoneConnected ? 'connected' : 'reconnect', message: phoneConnected ? 'Connected' : 'Reconnect phone', lead: null }));
+  let needsReconnect = false;
+  for (const lane of recovery) {
+    const row = document.createElement('article'); row.className = 'phoneLane'; row.dataset.state = lane.state;
+    const number = document.createElement('span'); number.className = 'laneNumber'; number.textContent = lane.id;
+    const copy = document.createElement('div'); copy.className = 'laneCopy';
+    const title = document.createElement('strong'); title.textContent = `Phone ${lane.id}`;
+    const detail = document.createElement('span'); detail.textContent = lane.lead?.leadName ? `Lead waiting: ${lane.lead.leadName}` : lane.connected ? 'Ready for its assigned IMPACT window' : 'No phone heartbeat received';
+    copy.append(title, detail);
+    const stateLabel = document.createElement('span'); stateLabel.className = 'laneState'; stateLabel.textContent = lane.message;
+    row.append(number, copy, stateLabel); lanes.append(row);
+    needsReconnect ||= lane.state === 'reconnect';
+  }
+  const hint = $('#recoveryHint');
+  hint.hidden = !needsReconnect;
+  hint.textContent = needsReconnect ? 'The assigned lead stays safely in its lane for 30 minutes. Reconnect the named phone, then select its matching Phone 1 or Phone 2 setting.' : '';
+  $('#phoneSetup').hidden = !needsReconnect;
+  $('#overallPill').textContent = needsReconnect ? 'Needs attention' : phoneConnected ? 'Ready' : 'Checking';
 }
 $('#updatePhone').addEventListener('click', async () => {
   if (busy) return;

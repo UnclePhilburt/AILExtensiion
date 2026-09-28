@@ -41,8 +41,12 @@ export function visibleLead(state, slot = '1') {
   const view = slotView(state, slot);
   return isOnline(view?.desktop_seen) && Date.now() - Date.parse(view?.lead_updated_at) < 1800000 ? view?.lead : null;
 }
-export async function cloudTouchPhone() {
-  const { error } = await client.from('companion_sync').update({phone_seen:new Date().toISOString()}).eq('user_id',await cloudUser());
+export async function cloudTouchPhone(slot = '1') {
+  let { error } = await client.rpc('companion_phone_seen', { p_slot: slot === '2' ? '2' : '1' });
+  // Older accounts still receive the original, shared heartbeat until migration 020 is applied.
+  if (['PGRST202', 'PGRST205'].includes(error?.code)) {
+    ({ error } = await client.from('companion_sync').update({phone_seen:new Date().toISOString()}).eq('user_id',await cloudUser()));
+  }
   checkCloud(error);
 }
 export async function cloudSend(state, command, id = crypto.randomUUID()) {

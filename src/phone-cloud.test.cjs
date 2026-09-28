@@ -21,7 +21,7 @@ test('phone cloud flow shows live leads, collapses history for a call and clears
   const lead={available:true,leadId:'test-a',leadName:'Fictional A',callHistory:['No Answer yesterday'],phones:[{label:'Mobile',number:'555-0100',dialHref:'#sample-call'}]};
   let state={lead,desktop_seen:new Date().toISOString(),lead_updated_at:new Date().toISOString(),device_id:'test-computer'};
   const context=vm.createContext({
-    buildLeadProfile(){},
+    buildLeadProfile(){}, createScriptOverlay:()=>({open(){},hide(){},sync(){}}),
     client:{auth:{onAuthStateChange:fn=>{authChanged=fn;}}}, saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, encourageLead:()=>{}, encourageResult:()=>{}, cloudEnabled:async()=>true,
     cloudState:async()=>state,cloudTouchPhone:async()=>{}, cloudSend:async(s,c)=>{sent={s,c};},
     watchCloud:async()=>()=>{},visibleLead:s=>s?.lead,isOnline:()=>true,
