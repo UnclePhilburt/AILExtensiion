@@ -890,7 +890,7 @@
   }
 
   const OTHER_PHONE_KEY = "impact.otherPhoneLeads";
-  const OTHER_PHONE_RECENT_MS = 4 * 60 * 60 * 1000;
+  const OTHER_PHONE_RECENT_MS = 30 * 60 * 1000;
   const BEST_NEXT_SEEN_KEY = "impact.bestNextSeen";
   const BEST_NEXT_CACHE_KEY = "impact.bestNextDetails";
   const RECENT_ATTEMPT_MS = 4 * 60 * 60 * 1000;
