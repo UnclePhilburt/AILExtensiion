@@ -398,6 +398,8 @@ async function stateForSend() {
   const state = await withTimeout(cloudState(), 10000, NETWORK_MESSAGE);
   if (!signedIn) throw new Error(SIGN_IN_MESSAGE);
   applyCloudState(state, startedAt);
+  // applyCloudState selects this phone's lead and preserves a newer response
+  // if another refresh finished while this request was in flight.
   return currentCloudState || slotView(state, thisPhoneSlot());
 }
 
