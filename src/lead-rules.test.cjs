@@ -20,6 +20,8 @@ test('quiet hours start at 8:00 PM Central', () => {
   assert.equal(flag.title, 'DO NOT KNOCK');
   assert.equal(flag.detail, 'Union member lead · Quiet hours started at 8 PM · Use Next to skip this lead.');
   assert.equal(warn({ requestType: 'Association Lead' }, central(24, 20, 5)).detail, 'Association lead · Quiet hours started at 8 PM · Use Next to skip this lead.');
+  assert.equal(warn({ requestType: 'GREATER ST LOUIS BOWLING ASSOC' }, central(24, 20, 5)).detail, 'Association lead · Quiet hours started at 8 PM · Use Next to skip this lead.');
+  assert.equal(warn({ requestType: 'GREATER ST LOUIS BOWLING ASSOC.' }, central(24, 20, 5)).detail, 'Association lead · Quiet hours started at 8 PM · Use Next to skip this lead.');
 });
 
 test('quiet hours continue overnight and end at 6:00 AM Central', () => {
@@ -84,6 +86,7 @@ test('any lead with a group gets the same flag, at the same Central times', () =
   // Union / Association wording still decides first.
   assert.equal(warn({ requestType: 'Union Member Request' }, central(24, 20, 0)).detail, 'Union member lead · Quiet hours started at 8 PM · Use Next to skip this lead.');
   assert.equal(warn({ requestType: 'Association Member Request' }, central(24, 20, 0)).detail, 'Association lead · Quiet hours started at 8 PM · Use Next to skip this lead.');
+  assert.equal(warn({ requestType: 'GREATER ST LOUIS BOWLING ASSOC (SGK2Q) (AD&D)' }, central(24, 20, 0)).detail, 'Association lead · Quiet hours started at 8 PM · Use Next to skip this lead.');
 });
 
 test('phone numbers, addresses and ordinary text are not groups', () => {

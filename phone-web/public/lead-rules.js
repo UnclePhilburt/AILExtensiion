@@ -64,7 +64,7 @@ export function speakableGroup(raw) {
 export function quietHoursLeadKind(requestType) {
   const text = String(requestType || '');
   if (/\bunion\b/i.test(text)) return 'Union member';
-  if (/\bassociation\b/i.test(text)) return 'Association';
+  if (/\b(?:association|assoc)\b\.?/i.test(text)) return 'Association';
   const group = findGroupCode(text);
   return group ? `${speakableGroup(group)} group` : '';
 }

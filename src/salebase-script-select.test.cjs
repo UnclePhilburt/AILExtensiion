@@ -15,14 +15,14 @@ const REAL = ['Select a script', 'Response Card', 'Will Kit', 'MediaPlex', 'Chil
 
 test('Response Card leads: IMPACT calls them union/association member requests, reply cards or response cards', () => {
   const { scriptChoiceForLead: choose } = load();
-  for (const type of ['Response Card', 'RESPONSE CARDS', 'Response\u00a0Card - IUOE 148 (SGK2Q)', 'Reply Card', 'Union Member Request', 'Association Member Request', 'Association Lead', 'Union Response', 'RC']) {
+  for (const type of ['Response Card', 'RESPONSE CARDS', 'Response\u00a0Card - IUOE 148 (SGK2Q)', 'Reply Card', 'Union Member Request', 'Association Member Request', 'Association Lead', 'GREATER ST LOUIS BOWLING ASSOC', 'Union Response', 'RC']) {
     assert.equal(choose(type).label, 'Response Card', type);
   }
   assert.deepEqual(plain(choose('Union Member Request')), { label: 'Response Card', rule: 'union/association member' });
   // Cody's capture: on these leads the cell read as the request type holds the group.
   assert.deepEqual(plain(choose('IBT 610 (SGCOY) (AD&D)')), { label: 'Response Card', rule: 'group code in request type' });
   assert.equal(choose('Local 150 (ABC12)').label, 'Response Card');
-  assert.deepEqual(plain(choose('GREATER ST LOUIS BOWLING ASSOC (SG2FT) (AD&D)')), { label: 'Response Card', rule: 'group code in request type' });
+  assert.deepEqual(plain(choose('GREATER ST LOUIS BOWLING ASSOC (SG2FT) (AD&D)')), { label: 'Response Card', rule: 'union/association member' });
   for (const type of ['(555) 010-0100', '123 MAIN ST SPRINGFIELD, IL 62704', 'Sample request', 'Call 3 (No Answer)', 'IBT 610']) assert.equal(choose(type).label, '', type);
   // A specific product still wins over the union wording.
   assert.equal(choose('Union Child Safe Kit').label, 'Child Safe');

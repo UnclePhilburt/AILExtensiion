@@ -398,7 +398,7 @@ async function stateForSend() {
   const state = await withTimeout(cloudState(), 10000, NETWORK_MESSAGE);
   if (!signedIn) throw new Error(SIGN_IN_MESSAGE);
   applyCloudState(state, startedAt);
-  return state;
+  return currentCloudState || slotView(state, thisPhoneSlot());
 }
 
 async function ensureSession() {

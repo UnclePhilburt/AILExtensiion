@@ -31,7 +31,7 @@ export function scriptChoiceForLead(requestType, details = {}) {
     ['ailplus non-customer', /ail\s*plus.*non.?customer|non.?customer.*ail\s*plus/, 'AILPlus (Non-Customer)'],
     ['ailplus', /ail\s*plus/, 'AILPlus'],
     ['final expense', /final\s*expense/, 'Final Expense'],
-    ['union/association member', /\b(?:union|association)\b/, 'Response Card']
+    ['union/association member', /\b(?:union|association|assoc)\b\.?/, 'Response Card']
   ];
   for (const [rule, pattern, label] of rules) if (pattern.test(type)) return { label, rule };
   // Response Card leads show their group where the request type is read, e.g.

@@ -16,7 +16,7 @@ const RULES = [
   [/ail\s*plus/i, 'APLUS'],
   [/final\s*expense/i, 'FE'],
   [/\bpos\b/i, 'POS'],
-  [/\b(?:union|association)\b/i, 'RESPONSE']
+  [/\b(?:union|association|assoc)\b\.?/i, 'RESPONSE']
 ];
 
 const GROUP_CODE = /(?:^|[\s,;:|-])(?:[A-Z][A-Z&.'/-]*[A-Z&.]|Local|Lodge|District|Council|Chapter)\s+#?\d{1,5}[A-Z]?\s*\(/;

@@ -15,6 +15,18 @@ const appSource=read('app.js').replace(/^import .*;\r?\n/gm,'');
 const MIN=60000;
 
 function actions(){const context=vm.createContext({setTimeout,clearTimeout});vm.runInContext(phoneActionsSource,context);context.NETWORK_MESSAGE=vm.runInContext('NETWORK_MESSAGE',context);return context;}
+function slotView(state, slot='1') {
+  if (!state) return state;
+  const key = slot === '2' ? '2' : '1';
+  const slotted = state.slot_leads?.[key];
+  const seen = state.slot_seen?.[key];
+  if (key === '2') return { ...state, lead: slotted || null, lead_updated_at: seen || null };
+  return { ...state, lead: slotted || state.lead, lead_updated_at: seen || state.lead_updated_at };
+}
+function visibleLead(state, slot='1', now=Date.now()) {
+  const view = slotView(state, slot);
+  return view?.desktop_seen && now - Date.parse(view.desktop_seen) < 45000 && now - Date.parse(view.lead_updated_at) < 30 * MIN ? view.lead : null;
+}
 
 // Loads app.js with a controllable clock, captured timers and page events, so a
 // phone going to the background (timers frozen) and coming back can be replayed.
@@ -41,7 +53,8 @@ async function loadPage(server,globals={}){
     cloudSend:async(state,command,id)=>{server.attempts.push({state,command,id});if(server.failNext){const e=server.failNext;server.failNext=null;throw e;}server.sent.push(command);},
     watchCloud:async()=>()=>{},
     isOnline:t=>Boolean(t&&clock.now-Date.parse(t)<45000),
-    visibleLead:s=>s&&s.desktop_seen&&clock.now-Date.parse(s.desktop_seen)<45000&&clock.now-Date.parse(s.lead_updated_at)<30*MIN?s.lead:null,
+    slotView,
+    visibleLead:(s,slot)=>visibleLead(s,slot,clock.now),
     document,localStorage:{data:new Map(),getItem(k){return this.data.get(k)??null;},setItem(k,v){this.data.set(k,String(v));},removeItem(k){this.data.delete(k);}},
     location:{search:'',origin:'https://example.test',replace(){}},
     addEventListener:(name,fn)=>{winEvents[name]=fn;},
@@ -66,6 +79,10 @@ const leadA={available:true,leadId:'test-a',leadName:'Fictional A',phones:[{labe
 const leadB={...leadA,leadId:'test-b',leadName:'Fictional B'};
 function makeServer(){return {reads:0,sent:[],attempts:[],failNext:null,nextRead:null,state:null};}
 function freshState(server,page,lead=leadA){const now=new Date(page?page.clock.now:Date.parse('2026-09-24T20:00:00Z')).toISOString();server.state={lead,desktop_seen:now,lead_updated_at:now,device_id:'test-computer'};}
+function freshTwoSlotState(server,page,lead1=leadA,lead2=leadB){
+  const now=new Date(page?page.clock.now:Date.parse('2026-09-24T20:00:00Z')).toISOString();
+  server.state={lead:lead1,desktop_seen:now,lead_updated_at:now,device_id:'test-computer',slot_leads:{'1':lead1,'2':lead2},slot_seen:{'1':now,'2':now}};
+}
 
 async function calledPage(globals){
   const server=makeServer(); freshState(server,null);
@@ -133,6 +150,24 @@ test('if IMPACT moved to another lead while away, No Answer is not sent to the w
   assert.equal(server.sent.length,1);
   assert.match(page.feedback(),/different lead now \(Fictional B\)/);
   assert.equal(page.el('#pendingCallNotice').hidden,false,'the unlogged-call reminder shows');
+});
+
+test('Phone 2 validates No Answer against its own slot on the first fresh read', async()=>{
+  const server=makeServer();
+  freshTwoSlotState(server,null,leadA,leadB);
+  const page=await loadPage(server);
+  page.storage.setItem('impact.phoneSettings',JSON.stringify({phoneSlot:'2'}));
+  await page.app.refreshCloud(); await settle();
+  page.callLink().listeners.click(); await settle();
+  assert.deepEqual([server.sent.at(-1).type,server.sent.at(-1).leadId,server.sent.at(-1).slot],['call','test-b','2']);
+  await page.hide();
+  page.clock.now+=20*MIN;
+  freshTwoSlotState(server,page,leadA,leadB);
+  await page.show({fireEvent:false});
+  await page.el('#noAnswer').listeners.click(); await settle();
+  assert.deepEqual([server.sent.at(-1).type,server.sent.at(-1).leadId,server.sent.at(-1).slot],['no-answer','test-b','2']);
+  assert.equal(server.attempts.at(-1).state.lead.leadId,'test-b','fresh send state is the Phone 2 slot, not Phone 1');
+  assert.match(page.feedback(),/Sending No Answer/);
 });
 
 test('an expired sign-in is refreshed and the send retried once with the same id', async()=>{
