@@ -707,7 +707,7 @@
     commandPollBusy = true;
     try {
       const response = await chrome.runtime.sendMessage({ type: "impact/getPhoneCommand" });
-      if (response?.result?.slot) paintPhoneWindowBadge(response.result.slot);
+      if (response?.result && Object.prototype.hasOwnProperty.call(response.result, 'slot')) paintPhoneWindowBadge(response.result.slot);
       const command = response?.result?.command;
       if (!command?.type) {
         return;
@@ -1767,10 +1767,9 @@
   }
 
   async function windowPhoneSlot() {
-    if (windowSlot === "1" || windowSlot === "2") return windowSlot;
     try {
       const response = await chrome.runtime.sendMessage({ type: "impact/windowSlot" });
-      if (response?.slot === "1" || response?.slot === "2") windowSlot = response.slot;
+      if (response?.ok) paintPhoneWindowBadge(response.slot);
     } catch (_error) { /* the window can still show the lead */ }
     return windowSlot;
   }

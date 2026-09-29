@@ -36,9 +36,15 @@ export function claimWindowSlot(map, windowId) {
 
 export function assignWindowSlot(map, windowId, slot) {
   const wanted = slot === '2' ? '2' : '1';
+  const target = String(windowId);
+  const previous = map?.[target];
   const slots = {};
-  for (const [id, owned] of Object.entries(map || {})) if (owned !== wanted) slots[id] = owned;
-  slots[String(windowId)] = wanted;
+  for (const [id, owned] of Object.entries(map || {})) {
+    if (id === target) continue;
+    if (owned !== wanted) slots[id] = owned;
+    else if ((previous === '1' || previous === '2') && previous !== wanted) slots[id] = previous;
+  }
+  slots[target] = wanted;
   return slots;
 }
 

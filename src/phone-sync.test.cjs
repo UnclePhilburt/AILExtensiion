@@ -17,6 +17,14 @@ const read = (file) => fs.readFileSync(path.join(__dirname, '..', file), 'utf8')
 const IMPACT = 'https://mobile.impact.ailife.com/Lead/InboxDetail?LeadId=2';
 const SALEBASE = 'https://salebase.ai/phone_scripts/phone_scripts.php';
 
+test('switching a phone assignment swaps the existing owner without leaving it unassigned', () => {
+  const swapped = api.assignWindowSlot({ 10: '1', 20: '2' }, 10, '2');
+  assert.deepEqual(JSON.parse(JSON.stringify(swapped)), { 10: '2', 20: '1' });
+  assert.equal(api.claimWindowSlot(swapped, 20).slot, '1');
+  assert.equal(api.claimWindowSlot(swapped, 10).slot, '2');
+  assert.deepEqual(JSON.parse(JSON.stringify(api.assignWindowSlot(swapped, 10, '2'))), { 10: '2', 20: '1' });
+});
+
 test('ROOT CAUSE: the IMPACT tab may publish even when the Salebase script window has focus', () => {
   const impactTab = { id: 1, url: IMPACT, active: true, windowId: 10 };
   const salebaseFocused = { id: 7, url: SALEBASE, active: true, windowId: 20 };
