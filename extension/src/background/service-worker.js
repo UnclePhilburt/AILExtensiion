@@ -151,7 +151,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === "impact/publishLead") {
     // "Sync phone": always writes, whatever was sent before.
-    slotForTab(sender.tab).then((slot) => publishLead(message.lead, { force: true, eventName: 'phoneSync.manualSync', slot }))
+    slotForTab(sender.tab).then((slot) => {
+      if (!slot) throw new Error('This IMPACT tab is not assigned to a phone. Select Phone 1 or Phone 2 first.');
+      return publishLead(message.lead, { force: true, eventName: 'phoneSync.manualSync', slot });
+    })
       .then((result) => sendResponse({ ok: true, result }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
@@ -184,7 +187,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === "impact/commandResult") {
-    slotForTab(sender.tab).then((slot) => reportCommandResult(message.message, slot || "1"))
+    slotForTab(sender.tab).then((slot) => slot ? reportCommandResult(message.message, slot) : undefined)
       .then(() => sendResponse({ ok: true }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
@@ -756,17 +759,18 @@ async function reopenPhoneScriptsForLane(lane) {
 
 async function impactTabForLane(tabs, lane) {
   const candidates = (tabs || []).filter((tab) => tab?.id).sort((a, b) => (a.windowId - b.windowId) || (a.index - b.index));
-  const map = await liveSlotMap();
-  const owned = candidates.find((tab) => map[String(tab.id)] === lane);
-  if (owned) return owned;
-  // Recover an old or corrupted assignment deterministically from the two
-  // open IMPACT windows. Existing explicit Phone 1 / Phone 2 assignments are
-  // kept; this only runs when the requested lane has none.
-  const other = lane === '2' ? '1' : '2';
-  const available = candidates.find((tab) => map[String(tab.id)] !== other) || candidates[lane === '2' ? 1 : 0];
-  if (!available) return null;
-  await setTabSlot(available, lane);
-  return available;
+  return queueSlotClaim(async () => {
+    const map = await liveSlotMap();
+    const owned = candidates.find((tab) => map[String(tab.id)] === lane);
+    if (owned) return owned;
+    // An assigned tab may be navigating outside /Lead/. Keep its ownership;
+    // script recovery must never take a tab from the other phone.
+    if (Object.values(map).includes(lane)) return null;
+    const available = candidates.find((tab) => !map[String(tab.id)]);
+    if (!available) return null;
+    await writeWindowSlots(assignWindowSlot(map, available.id, lane));
+    return available;
+  });
 }
 
 async function clickSalebaseCallLink(tabId) {
@@ -906,11 +910,11 @@ async function liveSlotMap() {
   }
 }
 function slotForTab(tab) {
-  if (!tab?.id) return Promise.resolve('1');
+  if (!tab?.id) return Promise.resolve('');
   return queueSlotClaim(async () => {
     const claimed = claimWindowSlot(await liveSlotMap(), tab.id);
     await writeWindowSlots(claimed.map);
-    return claimed.slot || '1';
+    return claimed.slot;
   });
 }
 function setTabSlot(tab, slot) {
