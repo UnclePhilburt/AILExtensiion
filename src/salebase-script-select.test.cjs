@@ -111,7 +111,7 @@ test('service worker: every lead write re-checks the script, logs each outcome a
   assert.match(worker, /func: readScriptDropdown/);
   assert.match(worker, /func: applyScriptOption, args: \[match\.index, match\.text\]/);
   // The group rides only in memory for this browser.
-  assert.equal((worker.match(/noteScriptGroup\(lead, scriptDetails\);/g) || []).length, 4, 'auto-publish, follow-after-result, combined recovery, and per-phone recovery');
+  assert.equal((worker.match(/noteScriptGroup\(lead, scriptDetails\);/g) || []).length, 3, 'auto-publish, follow-after-result, and per-phone recovery');
   assert.doesNotMatch(worker.slice(worker.indexOf('async function sendLeadToPhone'), worker.indexOf('// The group (e.g.')), /group/i);
   const popup = fs.readFileSync(path.join(__dirname, '../extension/src/popup/popup.js'), 'utf8');
   assert.match(popup, /scriptStatusText/);

@@ -706,27 +706,25 @@ async function openMatchingSalebaseScript(lead, slot = '1', forceNewWindow = fal
 }
 
 async function reopenPhoneScripts() {
-  // Rebuild from the actual IMPACT tabs first. The service worker can restart
-  // while the browser stays open, which clears its in-memory lane cache.
+  // Rebuild each lane independently. This also repairs stale tab ownership
+  // left behind if the extension worker restarted while both IMPACT windows
+  // stayed open.
   const impactTabs = await chrome.tabs.query({ url: 'https://mobile.impact.ailife.com/Lead/*' });
-  for (const tab of impactTabs) {
-    if (!tab?.id) continue;
-    const slot = await slotForTab(tab);
-    if (!slot) continue;
+  if (!impactTabs.length) throw new Error('Open an IMPACT lead first, then reopen its script.');
+
+  const lanes = [];
+  for (const lane of ['1', '2']) {
     try {
-      const response = await chrome.tabs.sendMessage(tab.id, { type: 'impact/readCurrentLead' });
-      if (!response?.lead?.available) continue;
-      const { scriptDetails, ...lead } = response.lead;
-      noteScriptGroup(lead, scriptDetails);
-      slotMemory.set(slot, { ...(slotMemory.get(slot) || {}), lead, leadId: lead.leadId || '' });
-      await rememberScriptLead(lead, scriptDetails, tab.id, slot);
-    } catch (_error) { /* a reloading or closed IMPACT tab is ignored */ }
+      await reopenPhoneScriptsForLane(lane);
+      lanes.push(lane);
+    } catch (error) {
+      // Phone 2 is optional. Phone 1 remains required when this is used from
+      // the extension control, so surface that error instead of silently
+      // opening the wrong script window.
+      if (lane === '1') throw error;
+    }
   }
-  const lanes = ['1', '2'].filter((slot) => slotMemory.get(slot)?.lead?.available);
   if (!lanes.length) throw new Error('Open an IMPACT lead first, then reopen its script.');
-  // Assign sequentially so two active lanes can never claim the same existing
-  // Salebase tab while rebuilding their assignments.
-  for (const slot of lanes) await openMatchingSalebaseScript(slotMemory.get(slot).lead, slot, true);
   return { lanes };
 }
 
@@ -741,18 +739,34 @@ async function openPhoneScriptWindow(slot) {
 
 async function reopenPhoneScriptsForLane(lane) {
   const impactTabs = await chrome.tabs.query({ url: 'https://mobile.impact.ailife.com/Lead/*' });
-  for (const tab of impactTabs) {
-    if (!tab?.id || await slotForTab(tab) !== lane) continue;
+  const tab = await impactTabForLane(impactTabs, lane);
+  if (tab?.id) {
     const response = await chrome.tabs.sendMessage(tab.id, { type: 'impact/readCurrentLead' }).catch(() => null);
-    if (!response?.lead?.available) continue;
-    const { scriptDetails, ...lead } = response.lead;
-    noteScriptGroup(lead, scriptDetails);
-    slotMemory.set(lane, { ...(slotMemory.get(lane) || {}), lead, leadId: lead.leadId || '' });
-    await rememberScriptLead(lead, scriptDetails, tab.id, lane);
-    await openMatchingSalebaseScript(lead, lane, true);
-    return;
+    if (response?.lead?.available) {
+      const { scriptDetails, ...lead } = response.lead;
+      noteScriptGroup(lead, scriptDetails);
+      slotMemory.set(lane, { ...(slotMemory.get(lane) || {}), lead, leadId: lead.leadId || '' });
+      await rememberScriptLead(lead, scriptDetails, tab.id, lane);
+      await openMatchingSalebaseScript(lead, lane, true);
+      return;
+    }
   }
   throw new Error(`Phone ${lane} has no open IMPACT lead. Open its IMPACT window first.`);
+}
+
+async function impactTabForLane(tabs, lane) {
+  const candidates = (tabs || []).filter((tab) => tab?.id).sort((a, b) => (a.windowId - b.windowId) || (a.index - b.index));
+  const map = await liveSlotMap();
+  const owned = candidates.find((tab) => map[String(tab.id)] === lane);
+  if (owned) return owned;
+  // Recover an old or corrupted assignment deterministically from the two
+  // open IMPACT windows. Existing explicit Phone 1 / Phone 2 assignments are
+  // kept; this only runs when the requested lane has none.
+  const other = lane === '2' ? '1' : '2';
+  const available = candidates.find((tab) => map[String(tab.id)] !== other) || candidates[lane === '2' ? 1 : 0];
+  if (!available) return null;
+  await setTabSlot(available, lane);
+  return available;
 }
 
 async function clickSalebaseCallLink(tabId) {
