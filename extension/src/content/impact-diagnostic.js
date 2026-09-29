@@ -656,7 +656,14 @@
   }
 
   function paintPhoneWindowBadge(slot) {
-    if (slot === "1" || slot === "2") windowSlot = slot;
+    const nextSlot = slot === "1" || slot === "2" ? slot : "";
+    const changed = windowSlot !== nextSlot;
+    windowSlot = nextSlot;
+    if (changed) {
+      lastAutoPublishFingerprint = "";
+      lastAppointmentOptionsFingerprint = "";
+      window.setTimeout(runAutoPublishCheck, 0);
+    }
     if (!["/Lead/InboxDetail", "/Lead/WhatHappend", "/Lead/SetAppointment"].includes(location.pathname)) return;
     const label = slot === '2' ? 'Phone 2' : slot === '1' ? 'Phone 1' : 'Extra window';
     let badge = document.getElementById('impact-companion-phone-slot');
@@ -673,7 +680,9 @@
       });
       badge.addEventListener('click', () => {
         const next = badge.textContent === 'Phone 1' ? '2' : '1';
-        chrome.runtime.sendMessage({ type: 'impact/setWindowSlot', slot: next }, (result) => paintPhoneWindowBadge(result?.slot || next));
+        chrome.runtime.sendMessage({ type: 'impact/setWindowSlot', slot: next }, (result) => {
+          if (result?.ok) paintPhoneWindowBadge(result.slot);
+        });
       });
       document.documentElement.append(badge);
     }

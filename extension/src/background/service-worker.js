@@ -751,6 +751,7 @@ async function reopenPhoneScriptsForLane(lane) {
       slotMemory.set(lane, { ...(slotMemory.get(lane) || {}), lead, leadId: lead.leadId || '' });
       await rememberScriptLead(lead, scriptDetails, tab.id, lane);
       await openMatchingSalebaseScript(lead, lane, true);
+      await publishLead(lead, { force: true, slot: lane, eventName: 'phoneSync.scriptRecovery' });
       return;
     }
   }
@@ -1012,17 +1013,26 @@ async function rememberScriptLead(lead, details, sourceTabId, slot = '1') {
   await syncScriptLeadForLane(lane);
 }
 
-async function syncScriptLeadForLane(slot) {
+let scriptLeadWrites = Promise.resolve();
+function syncScriptLeadForLane(slot) {
+  const run = scriptLeadWrites.then(() => writeScriptLeadForLane(slot));
+  scriptLeadWrites = run.catch(() => {});
+  return run;
+}
+
+async function writeScriptLeadForLane(slot) {
   const lane = laneKey(slot);
   const fields = laneScriptFields.get(lane);
   const map = await scriptSlotMap();
-  const tabId = Object.entries(map).find(([, assigned]) => assigned === lane)?.[0];
-  if (!tabId || !fields) return;
+  const tabIds = Object.entries(map).filter(([, assigned]) => assigned === lane).map(([id]) => id);
+  if (!tabIds.length || !fields) return;
   const stored = await chrome.storage.session.get(SCRIPT_LEADS_KEY).catch(() => ({}));
   const records = stored[SCRIPT_LEADS_KEY] || {};
   const record = { ...fields, slot: lane, scriptType: pendingSalebaseChoices.get(lane)?.label || '' };
-  if (JSON.stringify(records[tabId]) === JSON.stringify(record)) return;
-  await chrome.storage.session.set({ [SCRIPT_LEADS_KEY]: { ...records, [tabId]: record } }).catch(() => {});
+  if (tabIds.every((tabId) => JSON.stringify(records[tabId]) === JSON.stringify(record))) return;
+  const next = { ...records };
+  for (const tabId of tabIds) next[tabId] = record;
+  await chrome.storage.session.set({ [SCRIPT_LEADS_KEY]: next });
 }
 
 async function clearImpactScriptLeadForTab(tabId) {
