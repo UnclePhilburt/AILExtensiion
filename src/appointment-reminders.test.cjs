@@ -49,13 +49,29 @@ test('the computer uses the same windows and skips callbacks', () => {
   assert.equal(JSON.stringify(due), JSON.stringify([{ leadId: '30', name: 'Noon', startsAt: at(11, 0).toISOString(), kind: 'hour' }]));
 });
 
-test('Next and Best next bring a due appointment forward once; Previous does not', () => {
+test('Next and Best next never jump to a reminder; opening an appointment stays explicit', () => {
   const source = read('extension/src/content/impact-diagnostic.js');
-  assert.match(source, /if \(direction === "next" && await openDueReminder\(\)\) return;/);
-  assert.match(source, /async function openBestNextLead\(command\) \{\s*if \(await openDueReminder\(\)\) return;/);
+  assert.doesNotMatch(source, /openDueReminder/);
   assert.match(source, /if \(command\.type === "open-lead"\)/);
   assert.doesNotMatch(source, /command\.type === "open-lead" && command\.leadId/);
   assert.match(read('supabase/migrations/017_open_lead.sql'), /'open-lead'/);
   assert.match(read('phone-web/public/app.js'), /Appointment already scheduled/);
   assert.match(read('phone-web/public/workspace.html'), /id="showReminderLead"/);
+});
+
+test('dismissal survives refresh and reminder stages but allows a rescheduled appointment', () => {
+  const values = new Map();
+  const source = read('phone-web/public/app.js');
+  const context = vm.createContext({
+    currentUserId: 'one', paintAppointmentNotice() {},
+    localStorage: { getItem: key => values.get(key), setItem: (key, value) => values.set(key, value) }
+  });
+  vm.runInContext(source.slice(source.indexOf('function reminderLeadId('), source.indexOf('function appointmentNoticeFor(')), context);
+  const item = { impact_lead_id: '123', starts_at: '2026-10-01T12:00:00Z', kind: 'hour' };
+  assert.equal(context.reminderDismissed(item), false);
+  context.dismissAppointmentReminder(item);
+  assert.equal(context.reminderDismissed({ ...item, kind: 'starting' }), true);
+  assert.equal(context.reminderDismissed({ ...item, starts_at: '2026-10-02T12:00:00Z' }), false);
+  context.currentUserId = 'two';
+  assert.equal(context.reminderDismissed(item), false);
 });

@@ -1020,51 +1020,8 @@
     return Array.isArray(leads) ? leads : [];
   }
 
-  const REMINDER_SEEN_KEY = "impact.appointmentReminderSeen";
-
-  function reminderStamp(item) {
-    const now = new Date();
-    return `${item.leadId}:${item.kind}:${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
-  }
-
-  async function readReminderSeen() {
-    const stored = await chrome.storage.session.get(REMINDER_SEEN_KEY).catch(() => ({}));
-    const list = stored[REMINDER_SEEN_KEY];
-    return new Set(Array.isArray(list) ? list : []);
-  }
-
-  async function markReminderSeen(item) {
-    if (!item?.leadId || !item.kind) return;
-    const seen = await readReminderSeen();
-    seen.add(reminderStamp(item));
-    await chrome.storage.session.set({ [REMINDER_SEEN_KEY]: [...seen].slice(-40) }).catch(() => {});
-  }
-
-  // One jump per stage (morning, about an hour, a few minutes before). Next and
-  // Best next bring that appointment to the front. Previous leaves the list alone.
-  async function openDueReminder() {
-    const stored = await chrome.storage.session.get("impact.appointmentReminders").catch(() => ({}));
-    const reminders = Array.isArray(stored["impact.appointmentReminders"]) ? stored["impact.appointmentReminders"] : [];
-    const current = getCurrentLeadId();
-    const seen = await readReminderSeen();
-    const currentDue = reminders.find((item) => item?.leadId === current && item.kind && !seen.has(reminderStamp(item)));
-    if (currentDue) await markReminderSeen(currentDue);
-    const blocked = new Set(await otherPhoneBlocked());
-    const due = reminders.find((item) => item?.leadId && item.leadId !== current && !blocked.has(String(item.leadId)) && item.kind && !seen.has(reminderStamp(item)));
-    if (!due) return false;
-    await markReminderSeen(due);
-    const queue = await readInboxQueue();
-    const queued = queue.find((item) => item.leadId === due.leadId && item.url);
-    const url = queued?.url || new URL(`/Lead/InboxDetail?LeadId=${encodeURIComponent(due.leadId)}`, location.origin).href;
-    const who = due.name ? `${due.name} — ` : "";
-    const why = due.kind === "starting" ? "appointment in the next few minutes" : due.kind === "hour" ? "appointment within the hour. Text a reminder" : "appointment today. Text a reminder this morning";
-    await chrome.runtime.sendMessage({ type: "impact/commandResult", message: `${who}${why}.` }).catch(() => {});
-    location.assign(url);
-    return true;
-  }
-
   async function openInboxNeighbor(direction) {
-    if (direction === "next" && await openDueReminder()) return;
+
     const blocked = await otherPhoneBlocked();
     const choice = neighborInQueue(await readInboxQueue(), getCurrentLeadId(), direction, blocked);
     if (choice.status === "open") {
@@ -1103,7 +1060,7 @@
   }
 
   async function openBestNextLead(command) {
-    if (await openDueReminder()) return;
+
     const queue = await readInboxQueue();
     const currentLeadId = getCurrentLeadId();
     const blocked = await otherPhoneBlocked();
