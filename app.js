@@ -114,6 +114,7 @@ bridgeTokenInput.addEventListener("input", persistBridgeSettings);
 previousLeadButton.addEventListener("click", showPreviousLead);
 nextLeadButton.addEventListener("click", showNextLead);
 showReminderLeadButton?.addEventListener("click", () => { void showReminderLead(); });
+document.querySelector('#dismissAppointmentReminder')?.addEventListener('click', () => dismissAppointmentReminder(dueReminder));
 installLeadSwipe(leadCard, {
   enabled: () => signedIn && displayedLead?.available && loadPhoneSettings(localStorage).swipeLeads && !navigationPending() && pendingCall?.leadKey === getLeadKey(displayedLead) && !pendingCall?.resultSentAt && !awaitingResultSince && !leadCard.querySelector(".profileBio[open]") && !displayedLead?.appointmentOptions,
   currentKey: () => displayedLeadKey,
@@ -398,7 +399,9 @@ async function stateForSend() {
   const state = await withTimeout(cloudState(), 10000, NETWORK_MESSAGE);
   if (!signedIn) throw new Error(SIGN_IN_MESSAGE);
   applyCloudState(state, startedAt);
-  return state;
+  // applyCloudState selects this phone's lead and preserves a newer response
+  // if another refresh finished while this request was in flight.
+  return currentCloudState || slotView(state, thisPhoneSlot());
 }
 
 async function ensureSession() {
@@ -541,8 +544,31 @@ function reminderLeadId(item) {
   return String(item?.impact_lead_id || item?.leadId || "");
 }
 
+function reminderDismissalKey(item) {
+  return `${reminderLeadId(item)}:${item?.starts_at || item?.startsAt || item?.at || ''}`;
+}
+
+function dismissedReminders() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(`impact.dismissedReminders.${currentUserId}`) || '[]');
+    return Array.isArray(saved) ? saved : [];
+  } catch { return []; }
+}
+
+function reminderDismissed(item) {
+  return dismissedReminders().includes(reminderDismissalKey(item));
+}
+
+function dismissAppointmentReminder(item) {
+  if (!item) return;
+  const saved = [...new Set([...dismissedReminders(), reminderDismissalKey(item)])].slice(-100);
+  localStorage.setItem(`impact.dismissedReminders.${currentUserId}`, JSON.stringify(saved));
+  paintAppointmentNotice();
+}
+
 function appointmentNoticeFor(lead) {
   if (!lead?.available) return null;
+  if (dueReminder && reminderLeadId(dueReminder) === String(lead.leadId || '') && reminderDismissed(dueReminder)) return null;
   const timed = dueReminder && reminderLeadId(dueReminder) === String(lead.leadId || "") ? dueReminder : null;
   let upcoming = false;
   if (!timed) {
@@ -559,6 +585,14 @@ function appointmentNoticeFor(lead) {
     ? reminderText(timed.kind, "")
     : (typeof APPOINTMENT_ALERT === "string" ? APPOINTMENT_ALERT : "Appointment already scheduled. Don't call unless you need to.");
   section.append(title, detail);
+  if (timed) {
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.textContent = 'Close ×';
+    close.setAttribute('aria-label', 'Dismiss appointment reminder');
+    close.addEventListener('click', () => dismissAppointmentReminder(timed));
+    section.append(close);
+  }
   return section;
 }
 
@@ -579,7 +613,7 @@ function paintAppointmentNotice() {
 function renderReminderBanner() {
   if (!appointmentReminder || !appointmentReminderText || !showReminderLeadButton) return;
   const id = reminderLeadId(dueReminder);
-  const other = Boolean(dueReminder && id && id !== String(displayedLead?.leadId || ""));
+  const other = Boolean(dueReminder && !reminderDismissed(dueReminder) && id && id !== String(displayedLead?.leadId || ""));
   appointmentReminder.hidden = !other;
   if (!other) return;
   appointmentReminder.dataset.kind = dueReminder.kind || "";
@@ -594,7 +628,7 @@ async function refreshAppointmentReminders() {
     const to = new Date(Date.now() + 16 * 60 * 60 * 1000).toISOString();
     const { data, error } = await client.from("scheduled_events").select("impact_lead_id,lead_name,starts_at,all_day,kind").gte("starts_at", from).lte("starts_at", to).limit(80);
     if (error || !signedIn) return;
-    const next = dueReminders(data || [])[0] || null;
+    const next = dueReminders(data || []).find((item) => !reminderDismissed(item)) || null;
     const changed = reminderLeadId(next) !== reminderLeadId(dueReminder) || next?.kind !== dueReminder?.kind;
     dueReminder = next;
     if (changed && displayedLead?.available) paintAppointmentNotice();

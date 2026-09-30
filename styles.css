@@ -197,6 +197,8 @@ html[data-bg] .wsBand { background-color: transparent; background-image: radial-
 .workspace .appointmentAlert.starting { border-color: #f0b2a8; background: #fff1ee; color: #8a3328; }
 .workspace .appointmentReminder { display: grid; gap: 10px; margin: 0 0 14px; padding: 14px 16px; border-radius: 18px; background: #fff8ee; border: 1px solid #f0d7b0; color: #6d4a16; box-shadow: 0 8px 22px #8a5a1414; }
 .workspace .appointmentReminder[hidden] { display: none; }
+.workspace #dismissAppointmentReminder { justify-self: end; padding: 8px 12px; }
+.workspace .appointmentAlert button { margin-top: 8px; padding: 8px 12px; border: 1px solid currentColor; border-radius: 8px; background: transparent; color: inherit; cursor: pointer; }
 .workspace .appointmentReminder p { margin: 0; font-size: 15px; line-height: 1.4; }
 .workspace .appointmentReminder button { border: 0; border-radius: 14px; background: #8a5a14; color: #fff; }
 .workspace .appointmentReminder[data-kind="starting"] { background: #fff1ee; border-color: #f0b2a8; color: #8a3328; }
