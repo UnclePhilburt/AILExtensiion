@@ -29,7 +29,7 @@ test('A/B assignment is stable per lead and each message has correct placeholder
   assert.equal(context.textVariant('user', 'lead', 'experiment'), first);
   const variants = new Set(Array.from({ length: 100 }, (_, i) => context.textVariant('user', String(i), 'experiment')));
   assert.equal(variants.size, 2);
-  assert.equal(context.textFirstName('SMITH, JANE'), 'JANE');
+  assert.equal(context.textFirstName('SMITH, JANE'), 'Jane');
   assert.equal(context.fillText('Hi {firstName}, {agentName} with {company}: {topic}', { firstName: 'Jane', agentName: 'Cody', company: 'AIL', topic: 'life insurance' }), 'Hi Jane, Cody with AIL: life insurance');
   assert.match(context.smsLink('(314) 555-0100', 'A & B?', true), /^sms:3145550100&body=A%20%26%20B%3F$/);
   assert.throws(() => context.smsLink('123', 'hello'), /valid mobile/);
@@ -86,4 +86,18 @@ test('message action includes recipient and edited draft, with setup below the p
   const reopen = h.find('Open in Messages');
   reopen.events.click();
   assert.equal(reopen.href, 'sms:3145550100&body=Updated%20message%20%26%20next%20steps');
+});
+
+test('natural message defaults normalize names and upgrade saved original templates', () => {
+  const { context: c } = harness();
+  assert.equal(c.textFirstName('DOE, ANNE-MARIE'), 'Anne-Marie');
+  assert.equal(c.textFirstName('McKenzie Smith'), 'McKenzie');
+  for (const type of ['Child Safe Kit', 'ChildSafe', 'Will Kit', 'Response Card']) {
+    const templates = c.textTemplates(type);
+    assert.doesNotMatch(templates.A + templates.B, /STOP|opt out/i);
+    if (/Child/.test(type)) assert.match(templates.A, /American Income Life with the Child Safe Program/);
+  }
+  const old = 'Hi {firstName}, this is {agentName} with {company}. I am reaching out about {topic}. Is there a good time for a brief conversation? Reply STOP to opt out.';
+  assert.equal(c.textTemplates('Child Safe Kit', {A:old}).A, c.textTemplates('Child Safe Kit').A);
+  assert.equal(c.textTemplates('General', {A:'My custom wording'}).A, 'My custom wording');
 });

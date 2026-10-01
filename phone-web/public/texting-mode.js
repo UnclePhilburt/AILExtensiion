@@ -1,9 +1,26 @@
 import { chooseTextVariant, textingTimeHint } from './text-learning.js';
 // Drafts survive locally; confirmed sends and reported outcomes sync to Supabase.
-export const DEFAULT_TEXTS = {
+const LEGACY_TEXTS = {
   A: 'Hi {firstName}, this is {agentName} with {company}. I am reaching out about {topic}. Is there a good time for a brief conversation? Reply STOP to opt out.',
   B: 'Hi {firstName}, {agentName} here with {company}, reaching out about {topic}. Would earlier or later in the day work better for a brief conversation? Reply STOP to opt out.'
 };
+export const DEFAULT_TEXTS = {
+  A: 'Hi {firstName}, this is {agentName} with {company}. I wanted to check in about {topic}. When would be a good time to talk?',
+  B: 'Hey {firstName}, this is {agentName} with {company}. Do you have a few minutes to go over {topic} sometime today?'
+};
+export function textTemplates(type, saved) {
+  const childSafe = /child[\s-]*safe/i.test(type);
+  const defaults = childSafe ? {
+    A: 'Hi {firstName}, this is {agentName} from American Income Life with the Child Safe Program. I wanted to touch base about the Child Safe Kit. When would be a good time to talk?',
+    B: 'Hey {firstName}, this is {agentName} from American Income Life with the Child Safe Program. Do you have a few minutes to go over the Child Safe Kit sometime today?'
+  } : DEFAULT_TEXTS;
+  const result = { ...defaults, topic: textTopic(type), ...saved };
+  for (const variant of ['A', 'B']) {
+    if (!saved?.[variant] || saved[variant] === LEGACY_TEXTS[variant]) result[variant] = defaults[variant];
+    result[variant] = result[variant].replace(/\s*Reply STOP to opt out\.?/gi, '').trim();
+  }
+  return result;
+}
 export function textHash(value) {
   let hash = 2166136261;
   for (const char of String(value)) { hash ^= char.charCodeAt(0); hash = Math.imul(hash, 16777619); }
@@ -15,7 +32,10 @@ export function textVariant(userId, leadId, experiment) {
 export function textFirstName(name) {
   const value = String(name || '').trim();
   const given = value.includes(',') ? value.split(',').slice(1).join(' ').trim() : value;
-  return given.split(/\s+/)[0] || 'there';
+  const first = given.split(/\s+/)[0] || 'there';
+  // Preserve intentional mixed case, including names such as McKenzie.
+  if (first !== first.toUpperCase() && first !== first.toLowerCase()) return first;
+  return first.toLowerCase().replace(/(^|[-'’])\p{L}/gu, part => part.toUpperCase());
 }
 export function textTopic(type) {
   if (/will\s*kit/i.test(type)) return 'the will kit';
@@ -109,7 +129,7 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
       root.append(panel);
     }
     const type = lead?.requestType || 'General';
-    const templates = state.templates[type] || { ...DEFAULT_TEXTS, topic: textTopic(type) };
+    const templates = textTemplates(type, state.templates[type]);
     const experiment = textHash(JSON.stringify([type, templates, state.company]));
     const settings = el('details'); settings.append(el('summary', `Edit A/B messages · ${type}`));
     const fields = {};
