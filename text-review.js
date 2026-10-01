@@ -20,7 +20,7 @@ function render() {
   const avatar=el('span',initials,'reviewAvatar'); avatar.setAttribute('aria-hidden','true');
   identity.append(el('h3',name(row.name)),el('p',row.number,'reviewNumber'));person.append(avatar,identity);
   const badge=el('span',row.appointment?'Appointment':row.replied===true?'Replied':row.replied===false?'No reply':'To review','reviewBadge');badge.setAttribute('data-outcome',row.replied===true?'replied':row.replied===false?'no-reply':'unreviewed');person.append(badge);card.append(person);
-  card.append(el('p',new Date(row.sentAt).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+' · '+(row.variant==='custom'?'Custom text':'Version '+row.variant)+(row.offerPolicy==='same-day'?' · Same-day offer':'')+(row.timingCohort==='after5-same-day-eligible'?' · After 5 test':''),'reviewMeta'));
+  card.append(el('p',new Date(row.sentAt).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+' · '+(row.variant==='custom'?'Custom text':'Version '+row.variant)+(row.campaignStep?' · '+({intro:'Sunday',tuesday:'Tuesday',thursday:'Thursday',saturday:'Saturday'}[row.campaignStep]||row.campaignStep)+' plan':'')+(row.offerPolicy==='same-day'?' · Same-day offer':'')+(row.timingCohort==='after5-same-day-eligible'?' · After 5 test':''),'reviewMeta'));
   card.append(el('p',row.body,'reviewSnippet'));
   const actions=el('div','','reviewActions');
   for(const [label,value] of [['Replied',true],['No reply',false]]) {
@@ -52,7 +52,7 @@ async function load() {
   for(let offset=0;;offset+=500) {
    const {data,error}=await client.from('text_messages').select('*').eq('user_id',user).order('sent_at',{ascending:false}).order('id',{ascending:false}).range(offset,offset+499);
    if(error)throw error;if(owner!==user||token!==generation)return;
-   loaded.push(...data.map(r=>({id:r.id,leadId:r.lead_id,name:r.lead_name,number:r.phone,body:r.body,variant:r.variant,sentAt:Date.parse(r.sent_at),replied:r.replied,appointment:r.appointment,timingCohort:r.timing_cohort,offerPolicy:r.offer_policy})));
+   loaded.push(...data.map(r=>({id:r.id,leadId:r.lead_id,name:r.lead_name,number:r.phone,body:r.body,variant:r.variant,sentAt:Date.parse(r.sent_at),replied:r.replied,appointment:r.appointment,timingCohort:r.timing_cohort,offerPolicy:r.offer_policy,campaignStep:r.campaign_step})));
    if(data.length<500)break;
   }
   rows=loaded;$('#status').textContent='';
