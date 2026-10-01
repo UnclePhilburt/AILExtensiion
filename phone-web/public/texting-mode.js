@@ -1,4 +1,5 @@
-// Text drafts and experiment results stay on this device, separately from calls.
+import { chooseTextVariant, textingTimeHint } from './text-learning.js';
+// Drafts survive locally; confirmed sends and reported outcomes sync to Supabase.
 export const DEFAULT_TEXTS = {
   A: 'Hi {firstName}, this is {agentName} with {company}. I am reaching out about {topic}. Is there a good time for a brief conversation? Reply STOP to opt out.',
   B: 'Hi {firstName}, {agentName} here with {company}, reaching out about {topic}. Would earlier or later in the day work better for a brief conversation? Reply STOP to opt out.'
@@ -32,39 +33,81 @@ export function smsLink(number, body, apple = false) {
 export function textStats(records, experiment) {
   return ['A', 'B'].map(variant => {
     const rows = records.filter(r => r.experiment === experiment && r.variant === variant && r.sentAt);
-    return { variant, sent: rows.length, replies: rows.filter(r => r.replied).length, appointments: rows.filter(r => r.appointment).length };
+    return { variant, sent: rows.length, reviewed: rows.filter(r => typeof r.replied === 'boolean').length, replies: rows.filter(r => r.replied).length, appointments: rows.filter(r => r.appointment).length };
   });
 }
 
-export function createTextingMode(root, { storage, getUser, getSlot, getLead, getAgent, registerCall }) {
+export function createTextingMode(root, { storage, getUser, getSlot, getLead, getAgent, registerCall, isEnabled = () => true, tracking = null }) {
   if (!root) return { sync() {} };
   let rendered = '', busy = false;
+  let refreshAt = 0, refreshing = false, trackingError = '', checkin = null, activeUser = '';
   const key = () => `impact.texting.v1.${getUser()}`;
   function read() {
     try { return JSON.parse(storage.getItem(key()) || 'null') || { enabled: false, company: 'American Income Life — Schaefer Organization', templates: {}, records: [], pending: {} }; }
     catch { return { enabled: false, company: 'American Income Life — Schaefer Organization', templates: {}, records: [], pending: {} }; }
   }
   function save(value) { storage.setItem(key(), JSON.stringify(value)); }
+  async function refresh() {
+    if (!tracking || refreshing || Date.now() - refreshAt < 60000 || !getUser() || !isEnabled()) return;
+    const user = getUser(); refreshing = true; refreshAt = Date.now();
+    try {
+      for (const record of read().records.filter(r => r.sentAt && !r.cloudSaved)) {
+        if (getUser() !== user) return;
+        await tracking.save(record, user);
+        if (getUser() !== user) return;
+        const s = read(); const saved = s.records.find(r => r.id === record.id); if (saved) saved.cloudSaved = true; save(s);
+      }
+      const rows = await tracking.list();
+      if (getUser() !== user) return;
+      const s = read();
+      const ids = new Set(rows.map(r => r.id));
+      s.records = [...rows, ...s.records.filter(r => !ids.has(r.id))]; save(s);
+      if (!checkin && !busy) checkin = await tracking.checkin();
+      if (getUser() !== user) { checkin = null; return; }
+      trackingError = '';
+    } catch (error) { if (getUser() === user) trackingError = error.message; }
+    finally { refreshing = false; if (getUser() === user) sync(true); }
+  }
   const el = (tag, text, cls) => { const item = document.createElement(tag); if (text) item.textContent = text; if (cls) item.className = cls; return item; };
   function button(text, action) { const b = el('button', text); b.type = 'button'; b.addEventListener('click', action); return b; }
   function sync(force = false) {
     const lead = getLead();
-    root.hidden = !getUser();
+    if (activeUser !== getUser()) { activeUser = getUser(); checkin = null; refreshAt = 0; trackingError = ''; rendered = ''; }
+    root.hidden = !getUser() || !isEnabled();
     if (!getUser()) { root.replaceChildren(); rendered = ''; return; }
+    if (!isEnabled()) return;
+    void refresh();
     const identity = `${getUser()}:${getSlot()}:${lead?.leadId || ''}`;
     if (!force && rendered === identity) return;
     if (busy) return;
     rendered = identity;
     const state = read();
     const heading = el('h2', 'Texting mode');
-    const toggle = el('input'); toggle.type = 'checkbox'; toggle.checked = state.enabled;
-    const toggleLabel = el('label', 'Prepare a text before calling '); toggleLabel.append(toggle);
-    toggle.addEventListener('change', () => { const s = read(); s.enabled = toggle.checked; save(s); sync(true); });
-    root.replaceChildren(heading, toggleLabel);
-    if (!state.enabled) return;
+    const settingsLink = el('a', 'Texting mode settings'); settingsLink.href = 'settings.html?from=workspace';
+    root.replaceChildren(heading, settingsLink);
     root.append(el('p', 'Review the draft, send it yourself in Messages, then confirm below. Confirming registers a call in IMPACT and opens its call-result screen. Text results below are tracked separately.'));
     const status = el('p', '', 'textingStatus'); status.setAttribute('role', 'status'); root.append(status);
     const notify = message => { status.textContent = message; };
+    if (trackingError) notify(trackingError);
+    else if (!tracking) notify('Cloud mode is required to save and learn from texting activity.');
+    if (checkin) {
+      const item = checkin;
+      const panel = el('section');
+      panel.append(el('h3', `Did ${item.name} reply?`), el('p', `${item.number} · sent ${new Date(item.sentAt).toLocaleString()}`), el('p', item.body));
+      for (const [label, replied, appointment] of [['Yes, replied',true,undefined], ['No reply',false,undefined], ['Booked an appointment',true,true], ['Not sure / ask later',null,undefined]]) {
+        panel.append(button(label, async () => {
+          try {
+            if (replied !== null) {
+              await tracking.outcome(item.id, replied, appointment);
+              const s = read(); const row = s.records.find(r => r.id === item.id);
+              if (row) { row.replied = replied; if (appointment) row.appointment = true; } save(s);
+            }
+            checkin = null; sync(true);
+          } catch (error) { notify(error.message); }
+        }));
+      }
+      root.append(panel);
+    }
     const type = lead?.requestType || 'General';
     const templates = state.templates[type] || { ...DEFAULT_TEXTS, topic: textTopic(type) };
     const experiment = textHash(JSON.stringify([type, templates, state.company]));
@@ -85,6 +128,9 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
     if (pending) {
       root.append(el('h3', `Prepared text · ${pending.name} · ${pending.variant}`), el('p', pending.body));
       const sent = state.records.find(r => r.id === pending.id)?.sentAt;
+      const actual = el('textarea'); actual.value = pending.body;
+      actual.setAttribute('aria-label', 'Message actually sent'); actual.readOnly = Boolean(sent);
+      root.append(el('p', 'If you changed the wording in Messages, paste the actual text below before confirming. Edited messages are tracked separately from A/B.'), actual);
       if (!sent) {
         const reopen = el('a', 'Reopen draft in Messages', 'download');
         reopen.href = smsLink(pending.number, pending.body, /iPhone|iPad|iPod/.test(navigator.userAgent));
@@ -95,14 +141,26 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
       }
       const confirm = button(pending.registered ? 'IMPACT registration requested' : sent ? 'Register in IMPACT' : 'I sent it — register in IMPACT', async () => {
         if (busy || pending.registered) return;
-        if (getLead()?.leadId !== pending.leadId) { notify('Return to this text’s lead in IMPACT before registering it. No call was recorded.'); return; }
+        const owner = getUser();
         busy = true; confirm.disabled = true;
         try {
           const s = read(); let record = s.records.find(r => r.id === pending.id);
-          if (!record) { record = { ...pending, sentAt: Date.now() }; s.records.push(record); }
+          if (!actual.value.trim()) throw new Error('Enter the message you actually sent.');
+          if (!record) { record = { ...pending, body:actual.value.trim(), variant:actual.value.trim() === pending.body ? pending.variant : 'custom', sentAt: Date.now(), localHour:new Date().getHours(), timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone }; s.records.push(record); }
           save(s);
+          if (!tracking) throw new Error('Switch to Cloud mode to save this text before registering it.');
+          if (!record.cloudSaved) {
+            await tracking.save(record, owner);
+            if (getUser() !== owner) throw new Error('Your account changed. Reopen your workspace.');
+            const savedState = read(); const savedRecord = savedState.records.find(r => r.id === record.id);
+            if (savedRecord) savedRecord.cloudSaved = true; save(savedState);
+          }
+          if (getLead()?.leadId !== pending.leadId || getSlot() !== pending.slot) {
+            notify('Text saved. Return to this lead and its phone slot in IMPACT before registering the call.');
+            return;
+          }
           const accepted = await registerCall(pending);
-          if (accepted) { const latest = read(); if (latest.pending[slot]?.id === pending.id) latest.pending[slot].registered = true; save(latest); }
+          if (accepted && getUser() === owner) { const latest = read(); if (latest.pending[slot]?.id === pending.id) latest.pending[slot].registered = true; save(latest); }
           else notify('Text saved. IMPACT did not accept the request. Check the connection and lead before retrying.');
         } catch (error) { notify(error.message); }
         finally { busy = false; confirm.disabled = false; if (read().pending[slot]?.registered) sync(true); }
@@ -114,7 +172,8 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
       const select = el('select'); select.setAttribute('aria-label', 'Mobile number to text');
       for (const phone of phones) { const option = el('option', phone.number); option.value = phone.number; select.append(option); }
       select.value = phones[0]?.number || '';
-      const variant = textVariant(getUser(), lead.leadId, experiment);
+      const prior = state.records.find(r => r.leadId === lead.leadId && r.experiment === experiment);
+      const variant = prior?.variant && ['A','B'].includes(prior.variant) ? prior.variant : chooseTextVariant(state.records, experiment, textVariant(getUser(), lead.leadId, experiment));
       const body = fillText(templates[variant], { firstName: textFirstName(lead.leadName), agentName: state.agent || getAgent(), company: state.company, topic: templates.topic });
       const preview = el('textarea'); preview.value = body; preview.readOnly = true; preview.setAttribute('aria-label', `Version ${variant} message preview`);
       root.append(el('h3', `Version ${variant} · ${lead.leadName}`), select, preview);
@@ -128,7 +187,7 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
           const s = read();
           if (s.records.some(r => r.leadId === lead.leadId && r.experiment === experiment && r.sentAt)) { event.preventDefault(); notify('You already marked a text sent to this lead in this comparison.'); return; }
           link.href = smsLink(select.value, body, /iPhone|iPad|iPod/.test(navigator.userAgent));
-          s.pending[slot] = { id: crypto.randomUUID(), leadId: lead.leadId, name: lead.leadName, number: select.value, phoneType: 'Mobile', slot, body, variant, experiment, registered: false };
+          s.pending[slot] = { id: crypto.randomUUID(), leadId: lead.leadId, name: lead.leadName, number: select.value, phoneType: 'Mobile', requestType:type, slot, body, variant, experiment, registered: false };
           save(s); setTimeout(() => sync(true), 0);
         } catch (error) { event.preventDefault(); notify(error.message); }
       });
@@ -136,15 +195,22 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
       if (!phones.length) { link.hidden = true; notify('No mobile number is listed for this lead.'); }
     } else root.append(el('p', 'Open a lead in IMPACT to prepare a message.'));
     root.append(el('h3', 'A/B results · current templates'));
-    for (const row of textStats(state.records, experiment)) root.append(el('p', `${row.variant}: ${row.sent} confirmed sent · ${row.replies} replies · ${row.appointments} appointments`));
-    root.append(el('p', 'Results are entered by you and stored only in this browser on this phone. Opening Messages is not proof of sending. A/B compares groups of leads; each lead keeps one version.'));
+    for (const row of textStats(state.records, experiment)) root.append(el('p', `${row.variant}: ${row.sent} confirmed sent · ${row.reviewed} outcomes checked · ${row.replies} replies · ${row.appointments} appointments`));
+    root.append(el('p', textingTimeHint(state.records, experiment, Intl.DateTimeFormat().resolvedOptions().timeZone)));
+    root.append(el('p', 'Confirmed texts, numbers, wording, sending time and reported results sync privately to your account in Supabase. Time means when you confirm sending on this device. Unknown outcomes are not counted as no replies. Comparisons use up to 5,000 recent texts and suggest wording only after both versions have 20 checked outcomes.'));
     const history = el('details'); history.append(el('summary', 'Record replies and appointments'));
     for (const record of state.records.filter(r => r.sentAt).slice(-30).reverse()) {
       const row = el('div', `${record.name} · ${record.variant} · ${new Date(record.sentAt).toLocaleDateString()}`);
       for (const [field, label] of [['replied','Replied'], ['appointment','Appointment booked']]) {
         const input = el('input'); input.type = 'checkbox'; input.checked = Boolean(record[field]);
         const labelEl = el('label', label); labelEl.append(input); row.append(labelEl);
-        input.addEventListener('change', () => { const s = read(); const found = s.records.find(r => r.id === record.id); if (found) found[field] = input.checked; save(s); sync(true); });
+        input.addEventListener('change', async () => {
+          try {
+            if (!tracking) throw new Error('Cloud mode is required to save results.');
+            await tracking.outcome(record.id, field === 'replied' ? input.checked : undefined, field === 'appointment' ? input.checked : undefined);
+            const s = read(); const found = s.records.find(r => r.id === record.id); if (found) found[field] = input.checked; save(s); sync(true);
+          } catch (error) { input.checked = Boolean(record[field]); notify(error.message); }
+        });
       }
       history.append(row);
     } root.append(history);

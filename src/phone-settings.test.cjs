@@ -12,7 +12,7 @@ function memoryStorage(initial = {}) {
   const data = { ...initial };
   return { data, getItem: (k) => (k in data ? data[k] : null), setItem: (k, v) => { data[k] = String(v); }, removeItem: (k) => { delete data[k]; } };
 }
-const DEFAULTS = { swipeLeads: true, keepAwake: true, vibrate: true, confirmResults: true, textSize: 'normal', showHeadsUp: true, showDoNotKnock: true, autoSkipQuietHours: false, showEncouragement: true, encourageAfterResults: true, organization: 'shaefinator', darkMode: false, beigeLeadCard: false, bestNextLead: false, scriptOverlay: false, firstName: '', shareAlongside: true, phoneSlot: '1', phoneLineId: '' };
+const DEFAULTS = { textingMode: false, swipeLeads: true, keepAwake: true, vibrate: true, confirmResults: true, textSize: 'normal', showHeadsUp: true, showDoNotKnock: true, autoSkipQuietHours: false, showEncouragement: true, encourageAfterResults: true, organization: 'shaefinator', darkMode: false, beigeLeadCard: false, bestNextLead: false, scriptOverlay: false, firstName: '', shareAlongside: true, phoneSlot: '1', phoneLineId: '' };
 
 test('defaults: everything on, Normal text, one JSON key', () => {
   assert.equal(store.SETTINGS_KEY, 'impact.phoneSettings');
@@ -92,7 +92,7 @@ test('the settings page has a control for every setting, and the back link only 
   for (const id of ['bgGrid', 'firstName', 'shareAlongside', 'swipeLeads', 'scriptOverlay', 'darkMode', 'beigeLeadCard', 'bestNextLead', 'keepAwake', 'vibrate', 'confirmResults', 'textSize', 'organization', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'resetSettings', 'savedHint', 'settingsBack']) assert.match(html, new RegExp(`id="${id}"`), id);
   assert.doesNotMatch(html, /Bad Number/, 'Bad Number is not wired to IMPACT, so it is not offered');
   const js = read('settings.js');
-  assert.match(js, /const SWITCHES = \['swipeLeads', 'keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard', 'bestNextLead', 'scriptOverlay', 'shareAlongside'\];/);
+  assert.match(js, /const SWITCHES = \['textingMode', 'swipeLeads', 'keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard', 'bestNextLead', 'scriptOverlay', 'shareAlongside'\];/);
   assert.match(js, /BACK\[new URLSearchParams\(location\.search\)\.get\('from'\)\] \|\| BACK\.workspace/);
   assert.match(js, /'workspace-local': \['workspace\.html\?mode=local'/);
 });

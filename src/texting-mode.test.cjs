@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(require('node:path').join(__dirname, '../phone-web/public/texting-mode.js'), 'utf8').replace(/^export /gm, '');
+const source = fs.readFileSync(require('node:path').join(__dirname, '../phone-web/public/texting-mode.js'), 'utf8').replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
 function harness() {
   const make = (tag) => ({ tag, children: [], events: {}, value: '', checked: false,
     append(...items) { this.children.push(...items); }, replaceChildren(...items) { this.children = items; },
@@ -13,11 +13,11 @@ function harness() {
   let lead = { available: true, leadId: '123', leadName: 'SMITH, JANE', requestType: 'Response Card', phones: [{ label: 'Mobile', number: '3145550100' }] };
   const calls = [];
   const context = vm.createContext({ document: { createElement: make }, navigator: { userAgent: 'iPhone' }, crypto: require('node:crypto'), setTimeout: fn => fn() });
-  vm.runInContext(source, context);
+  vm.runInContext(fs.readFileSync(require('node:path').join(__dirname, '../phone-web/public/text-learning.js'), 'utf8').replace(/^export /gm, ''), context); vm.runInContext(source, context);
   const root = make('section');
   const seed = { enabled: true, company: 'American Income Life', agent: 'Cody', templates: {}, records: [], pending: {} };
   storage.setItem('impact.texting.v1.user', JSON.stringify(seed));
-  const mode = context.createTextingMode(root, { storage, getUser: () => 'user', getSlot: () => '2', getLead: () => lead, getAgent: () => 'Cody', registerCall: async draft => { calls.push(draft); return true; } });
+  const mode = context.createTextingMode(root, { storage, getUser: () => 'user', getSlot: () => '2', getLead: () => lead, getAgent: () => 'Cody', tracking: { save: async () => {}, list: async () => [], checkin: async () => null }, registerCall: async draft => { calls.push(draft); return true; } });
   const all = () => { const rows = []; const walk = node => { rows.push(node); node.children.forEach(walk); }; walk(root); return rows; };
   const find = text => all().find(node => node.textContent === text);
   mode.sync();
@@ -58,7 +58,7 @@ test('a changed lead never gets the previous draft registered against it', async
   const h = harness(); prepare(h); h.move();
   await h.find('I sent it — register in IMPACT').events.click();
   assert.equal(h.calls.length, 0);
-  assert.equal(h.state().records.length, 0);
+  assert.equal(h.state().records.length, 1, 'the confirmed text still saves against the original lead');
 });
 test('draft and duplicate protection survive reload, and stats exclude unsent drafts', async () => {
   const h = harness(); prepare(h); h.mode.sync(true);

@@ -16,6 +16,7 @@ export const ORGANIZATIONS = [
 ];
 
 export const DEFAULT_SETTINGS = Object.freeze({
+  textingMode: false,
   swipeLeads: true,
   keepAwake: true, // Screen Wake Lock on the Workspace page (where supported)
   vibrate: true, // short buzz when a result / Previous / Next tap is sent
@@ -37,7 +38,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   , phoneLineId: '' // the calling number this phone dials, if one was chosen
 });
 
-const BOOLEAN_KEYS = ['swipeLeads', 'keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard', 'bestNextLead', 'scriptOverlay', 'shareAlongside'];
+const BOOLEAN_KEYS = ['textingMode', 'swipeLeads', 'keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard', 'bestNextLead', 'scriptOverlay', 'shareAlongside'];
 
 // A short personal name. Empty clears it. Anything with numbers or symbols is ignored.
 export function cleanFirstName(value) {

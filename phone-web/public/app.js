@@ -1,5 +1,6 @@
 import { buildLeadProfile } from './lead-profile.js';
-import { createTextingMode } from './texting-mode.js?v=1';
+import { createTextingMode } from './texting-mode.js?v=2';
+import { textTracking } from './text-tracking.js';
 import { installLeadSwipe } from './lead-swipe.js?v=5';
 import { createScriptOverlay } from './script-overlay.js?v=5';
 import { client, accessToken } from './auth-runtime.js';
@@ -94,6 +95,8 @@ const textingMode = typeof createTextingMode === 'function' ? createTextingMode(
   getSlot: thisPhoneSlot,
   getLead: () => displayedLead,
   getAgent: () => loadPhoneSettings(localStorage).firstName,
+  isEnabled: () => loadPhoneSettings(localStorage).textingMode,
+  tracking: useCloud && typeof textTracking !== 'undefined' ? textTracking : null,
   registerCall: (draft) => sendComputerCommand('call', {
     leadId: draft.leadId, phoneType: draft.phoneType, phoneNumber: draft.number, slot: draft.slot
   })

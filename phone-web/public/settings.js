@@ -121,7 +121,7 @@ firstName.addEventListener('change', () => {
 });
 
 // Switches
-const SWITCHES = ['swipeLeads', 'keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard', 'bestNextLead', 'scriptOverlay', 'shareAlongside'];
+const SWITCHES = ['textingMode', 'swipeLeads', 'keepAwake', 'vibrate', 'confirmResults', 'showHeadsUp', 'showDoNotKnock', 'autoSkipQuietHours', 'showEncouragement', 'encourageAfterResults', 'darkMode', 'beigeLeadCard', 'bestNextLead', 'scriptOverlay', 'shareAlongside'];
 for (const key of SWITCHES) {
   document.querySelector(`#${key}`).addEventListener('change', (event) => {
     savePhoneSettings(localStorage, { [key]: event.target.checked });
