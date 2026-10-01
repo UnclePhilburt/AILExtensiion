@@ -743,7 +743,18 @@ async function sendComputerCommand(type, details = {}) {
     details = { slot, ...details };
     if (useCloud) {
       const command = { type, leadId: displayedLead?.leadId, ...details };
-      const state = await stateForSend();
+      const sendUser=currentUserId;
+      let state = await stateForSend();
+      if(type==='call' && state?.lead?.leadId && command.leadId && state.lead.leadId!==command.leadId){
+        showFeedback('Reopening the matching IMPACT lead…','loading',12000);
+        await withTimeout(cloudSend(state,{type:'open-lead',slot,leadId:state.lead.leadId,targetLeadId:command.leadId}),12000,NETWORK_MESSAGE);
+        for(let attempt=0;attempt<12;attempt++){
+          await new Promise(resolve=>setTimeout(resolve,500));
+          state=slotView(await withTimeout(cloudState(),10000,NETWORK_MESSAGE),slot);
+          if(!signedIn||currentUserId!==sendUser||thisPhoneSlot()!==slot)throw new Error('Account or phone changed. Tap Call again.');
+          if(state?.lead?.leadId===command.leadId)break;
+        }
+      }
       const problem = checkBeforeSend(state, command, Date.now());
       if (problem) throw new Error(problem);
       // The same id on a retry lets the server ignore a duplicate.
