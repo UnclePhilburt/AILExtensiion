@@ -633,9 +633,10 @@
     if (!/^\/Lead\/Inbox\/?$/.test(location.pathname)) return;
     let importing=false, owner='', autoStarted=false;
     const panel=document.createElement('section'); panel.id='impactPlanImport';
-    panel.style.cssText='padding:12px;margin:10px;background:#eef5ed;border:1px solid #a5bfa8;border-radius:8px;color:#163c30;font:14px system-ui';
-    const button=document.createElement('button');button.type='button';button.textContent='Import inbox into follow-up plan';
+    panel.style.cssText='position:relative;z-index:1000;padding:16px;margin:10px;background:#eef5ed;border:1px solid #a5bfa8;border-radius:8px;color:#163c30;font:14px system-ui';
+    const button=document.createElement('button');button.type='button';button.textContent='Import inbox';
     const status=document.createElement('span');status.style.marginLeft='12px';panel.append(button,status);
+    button.style.cssText='background:#173e32;color:white;border:0;border-radius:8px;padding:12px 20px;font:bold 15px system-ui;cursor:pointer';
     document.body.prepend(panel);
     const request=message=>chrome.runtime.sendMessage(message).then(result=>{if(!result?.ok)throw new Error(result?.error||'Could not reach Companion.');return result;});
     const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -649,7 +650,7 @@
       if(importing)return;importing=true;button.disabled=true;let added=0,read=0;
       try {
         const ready=await request({type:'impact/planStatus'});owner=ready.userId;
-        if(!ready.enabled)throw new Error('Enable Follow-up plan on the Companion website first.');
+        if(!ready.enabled)throw new Error('Open Follow-up plan on the Companion website once, then try Import inbox again.');
         for(let i=0;i<40&&!inboxListReady();i++)await pause(250);
         if(!inboxListReady())throw new Error('Wait for the inbox to load, then import again.');
         const first=document.querySelector('#LeadTable_first');
