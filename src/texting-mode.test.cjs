@@ -32,7 +32,7 @@ test('A/B assignment is stable per lead and each message has correct placeholder
   assert.equal(context.textFirstName('SMITH, JANE'), 'Jane');
   assert.equal(context.fillText('Hi {firstName}, {agentName} with {company}: {topic}', { firstName: 'Jane', agentName: 'Cody', company: 'AIL', topic: 'life insurance' }), 'Hi Jane, Cody with AIL: life insurance');
   assert.match(context.smsLink('(314) 555-0100', 'A & B?', true), /^sms:3145550100&body=A%20%26%20B%3F$/);
-  assert.throws(() => context.smsLink('123', 'hello'), /valid mobile/);
+  assert.throws(() => context.smsLink('123', 'hello'), /valid phone/);
 });
 async function prepare(h) {
   await h.find('Open in Messages').events.click({ preventDefault() {} });
@@ -147,4 +147,24 @@ test('assumptive preview resolves actual dates and times before opening Messages
  assert.doesNotMatch(preview.value, /checking|meetingTime/i);
  assert.equal(h.state().pending['2'],undefined);
  assert.ok(h.find('Copy message'));
+});
+
+test('Home-only leads can open a text and register against the Home number', async () => {
+ let opened='';
+ const h=harness({getLead:()=>({available:true,leadId:'home-lead',leadName:'DOE, JANE',phones:[{label:'Home',number:'3145550123'}]}),openMessage:href=>{opened=href;}});
+ await prepare(h);
+ assert.match(opened,/^sms:3145550123/);
+ assert.equal(h.state().pending['2'].phoneType,'Home');
+ await h.find('I sent it').events.click();
+ assert.equal(h.calls[0].phoneType,'Home');
+ assert.equal(h.calls[0].number,'3145550123');
+});
+test('number picker defaults to Mobile but allows selecting Home', async () => {
+ const h=harness({getLead:()=>({available:true,leadId:'both',leadName:'Jane',phones:[{label:'Home',number:'3145550123'},{label:'Mobile',number:'3145550100'}]})});
+ const picker=h.all().find(n=>n.tag==='select');
+ assert.equal(picker.value,'3145550100');
+ picker.value='3145550123';
+ await prepare(h);
+ assert.equal(h.state().pending['2'].number,'3145550123');
+ assert.equal(h.state().pending['2'].phoneType,'Home');
 });
