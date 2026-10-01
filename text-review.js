@@ -7,19 +7,26 @@ const name = value => String(value || 'Unnamed lead').split(',').reverse().join(
 const visible = () => reviewRows(rows,$('#search').value,$('#filter').value);
 function render() {
  const filtered=visible(), remaining=unreviewedTexts(filtered);
+ $('#totalCount').textContent=rows.length; $('#replyCount').textContent=rows.filter(r=>r.replied===true).length; $('#pendingCount').textContent=unreviewedTexts(rows).length;
  $('#counts').textContent=filtered.length+' texts · '+filtered.filter(r=>r.replied===true).length+' replied · '+remaining.length+' unreviewed';
  $('#bulk').textContent='Mark remaining no reply ('+remaining.length+')'; $('#bulk').disabled=busy||!remaining.length;
  $('#refresh').disabled=busy; $('#search').disabled=busy; $('#filter').disabled=busy;
  $('#texts').replaceChildren();
  if (!filtered.length) $('#texts').append(el('p',rows.length?'No matching texts.':'No confirmed texts yet. Texts appear after you tap I sent it.'));
  for(const row of filtered.slice(0,shown)) {
-  const card=el('article','','textReviewRow'); card.append(el('h2',name(row.name)),el('p',row.number));
-  card.append(el('p',new Date(row.sentAt).toLocaleString()+' · '+(row.variant==='custom'?'Custom text':'Version '+row.variant)+' · '+(row.appointment?'Appointment booked':row.replied===true?'Replied':row.replied===false?'No reply':'Unreviewed'),'reviewMeta'));
+  const card=el('article','','textReviewRow');
+  const person=el('div','','reviewPerson'), identity=el('div','','reviewIdentity');
+  const initials=name(row.name).split(/\s+/).slice(0,2).map(p=>p[0]).join('');
+  const avatar=el('span',initials,'reviewAvatar'); avatar.setAttribute('aria-hidden','true');
+  identity.append(el('h3',name(row.name)),el('p',row.number,'reviewNumber'));person.append(avatar,identity);
+  const badge=el('span',row.appointment?'Appointment':row.replied===true?'Replied':row.replied===false?'No reply':'To review','reviewBadge');badge.setAttribute('data-outcome',row.replied===true?'replied':row.replied===false?'no-reply':'unreviewed');person.append(badge);card.append(person);
+  card.append(el('p',new Date(row.sentAt).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+' · '+(row.variant==='custom'?'Custom text':'Version '+row.variant),'reviewMeta'));
+  card.append(el('p',row.body,'reviewSnippet'));
   const actions=el('div','','reviewActions');
   for(const [label,value] of [['Replied',true],['No reply',false]]) {
    const button=el('button',label); button.type='button'; button.disabled=busy||(!value&&row.appointment); button.setAttribute('aria-pressed',String(row.replied===value)); button.setAttribute('aria-label',label+' — '+name(row.name)+' '+row.number); button.addEventListener('click',()=>void saveOutcome(row,value)); actions.append(button);
   }
-  const details=el('details',''); details.append(el('summary','View message'),el('p',row.body,'reviewBody'));card.append(actions,details);$('#texts').append(card);
+  const details=el('details',''); details.append(el('summary','Full message'),el('p',row.body,'reviewBody'));card.append(details,actions);$('#texts').append(card);
  }
  $('#more').hidden=filtered.length<=shown; $('#more').disabled=busy;
 }
