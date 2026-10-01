@@ -287,3 +287,17 @@ html[data-theme="dark"] .workspace #nextLead:not(:disabled) { background: #31543
 html[data-theme="dark"] .workspace .controls button { background: #27322c; border-color: #405046; color: #e2ece5; }
 html[data-theme="dark"][data-lead-paper="beige"] .workspace .leadCard { background: #332c22; border-color: #5d4c33; }
 html[data-theme="dark"][data-lead-paper="beige"] .workspace .leadCard h2 { color: #f4e4c7; }
+
+.textingMode { display: grid; gap: 12px; }
+.textingMode[hidden] { display: none; }
+.textingMode h2,.textingMode h3,.textingMode p { margin: 0; }
+.textingMode p { font-size: 14px; line-height: 1.5; }
+.textingMode label { display: block; margin: 12px 0; }
+.textingMode input:not([type="checkbox"]),.textingMode textarea,.textingMode select { display: block; width: 100%; box-sizing: border-box; padding: 12px; margin: 8px 0; border: 1px solid #91a79d; border-radius: 10px; background: var(--surface, #fff); color: #123b3a; font: inherit; }
+.textingMode textarea { min-height: 140px; resize: vertical; }
+.textingMode input[type="checkbox"] { width: 22px; height: 22px; vertical-align: middle; }
+.textingMode button { padding: 12px; margin: 4px 0; border: 1px solid #91a79d; border-radius: 10px; cursor: pointer; }
+.textingMode button:disabled { opacity: .55; cursor: default; }
+.textingMode summary { cursor: pointer; font-weight: 700; padding: 10px 0; }
+.textingMode .download { display: block; padding: 14px; background: #17684e; color: white; border-radius: 10px; text-align: center; }
+.textingMode .textingStatus { font-weight: 600; }
