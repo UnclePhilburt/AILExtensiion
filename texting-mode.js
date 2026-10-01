@@ -85,7 +85,7 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
     const heading = el('h2', 'Texting mode');
     const settingsLink = el('a', 'Texting mode settings'); settingsLink.href = 'settings.html?from=workspace';
     root.replaceChildren(heading, settingsLink);
-    root.append(el('p', 'Review the draft, send it yourself in Messages, then confirm below. Confirming registers a call in IMPACT and opens its call-result screen. Text results below are tracked separately.'));
+    root.append(el('p', 'Open the prepared text in your messaging app, send it, then tap I sent it. If your app leaves the message blank, use Copy message and paste it.'));
     const status = el('p', '', 'textingStatus'); status.setAttribute('role', 'status'); root.append(status);
     const notify = message => { status.textContent = message; };
     if (trackingError) notify(trackingError);
@@ -121,25 +121,26 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
       const s = read(); s.company = fields.company.value.trim(); s.agent = fields.agent.value.trim();
       if (!s.company || !s.agent || !fields.A.value.trim() || !fields.B.value.trim() || !fields.topic.value.trim()) { notify('Fill in your name, company, topic, and both messages.'); return; }
       s.templates[type] = { A: fields.A.value.trim(), B: fields.B.value.trim(), topic: fields.topic.value.trim() }; save(s); sync(true);
-    })); root.append(settings);
+    }));
     if (!state.company || !(state.agent || getAgent())) { settings.open = true; notify('Enter your name and company, then save your templates.'); }
     const slot = getSlot();
     const pending = state.pending[slot];
     if (pending) {
-      root.append(el('h3', `Prepared text · ${pending.name} · ${pending.variant}`), el('p', pending.body));
+      root.append(el('h3', pending.name), el('p', `To: ${pending.number} · Version ${pending.variant}`));
       const sent = state.records.find(r => r.id === pending.id)?.sentAt;
       const actual = el('textarea'); actual.value = pending.body;
       actual.setAttribute('aria-label', 'Message actually sent'); actual.readOnly = Boolean(sent);
       root.append(el('p', 'If you changed the wording in Messages, paste the actual text below before confirming. Edited messages are tracked separately from A/B.'), actual);
       if (!sent) {
-        const reopen = el('a', 'Reopen draft in Messages', 'download');
-        reopen.href = smsLink(pending.number, pending.body, /iPhone|iPad|iPod/.test(navigator.userAgent));
-        root.append(reopen, button('Copy prepared message', async () => {
-          try { await navigator.clipboard.writeText(pending.body); notify('Copied. Paste into Messages.'); }
+        const reopen = el('a', 'Open in Messages', 'download');
+        reopen.href = smsLink(pending.number, actual.value, /iPhone|iPad|iPod/.test(navigator.userAgent));
+        reopen.addEventListener('click', () => { reopen.href = smsLink(pending.number, actual.value, /iPhone|iPad|iPod/.test(navigator.userAgent)); });
+        root.append(reopen, button('Copy message', async () => {
+          try { await navigator.clipboard.writeText(actual.value); notify('Copied. Paste into Messages.'); }
           catch { notify('Select and copy the prepared message above.'); }
         }));
       }
-      const confirm = button(pending.registered ? 'IMPACT registration requested' : sent ? 'Register in IMPACT' : 'I sent it — register in IMPACT', async () => {
+      const confirm = button(pending.registered ? 'Text saved' : sent ? 'Retry IMPACT update' : 'I sent it', async () => {
         if (busy || pending.registered) return;
         const owner = getUser();
         busy = true; confirm.disabled = true;
@@ -176,10 +177,10 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
       const variant = prior?.variant && ['A','B'].includes(prior.variant) ? prior.variant : chooseTextVariant(state.records, experiment, textVariant(getUser(), lead.leadId, experiment));
       const body = fillText(templates[variant], { firstName: textFirstName(lead.leadName), agentName: state.agent || getAgent(), company: state.company, topic: templates.topic });
       const preview = el('textarea'); preview.value = body; preview.readOnly = true; preview.setAttribute('aria-label', `Version ${variant} message preview`);
-      root.append(el('h3', `Version ${variant} · ${lead.leadName}`), select, preview);
+      root.append(el('h3', lead.leadName), el('p', `To: mobile number · Version ${variant}`), select, preview);
       const consent = el('input'); consent.type = 'checkbox';
       const consentLabel = el('label', 'I have permission to text this person and have checked for opt-outs. '); consentLabel.append(consent); root.append(consentLabel);
-      const link = el('a', 'Open text in Messages', 'download'); link.href = '#';
+      const link = el('a', 'Open in Messages', 'download'); link.href = '#';
       link.addEventListener('click', event => {
         if (!consent.checked || !state.company || !(state.agent || getAgent())) { event.preventDefault(); notify('Save your name and company and confirm permission before opening the text.'); return; }
         if (getLead()?.leadId !== lead.leadId) { event.preventDefault(); notify('The lead changed. Prepare its new draft.'); return; }
@@ -194,10 +195,14 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
       root.append(link, button('Copy message', async () => { try { await navigator.clipboard.writeText(body); notify('Copied. Paste it into Messages if the draft does not fill automatically.'); } catch { notify('Select and copy the message above.'); } }));
       if (!phones.length) { link.hidden = true; notify('No mobile number is listed for this lead.'); }
     } else root.append(el('p', 'Open a lead in IMPACT to prepare a message.'));
-    root.append(el('h3', 'A/B results · current templates'));
-    for (const row of textStats(state.records, experiment)) root.append(el('p', `${row.variant}: ${row.sent} confirmed sent · ${row.reviewed} outcomes checked · ${row.replies} replies · ${row.appointments} appointments`));
-    root.append(el('p', textingTimeHint(state.records, experiment, Intl.DateTimeFormat().resolvedOptions().timeZone)));
-    root.append(el('p', 'Confirmed texts, numbers, wording, sending time and reported results sync privately to your account in Supabase. Time means when you confirm sending on this device. Unknown outcomes are not counted as no replies. Comparisons use up to 5,000 recent texts and suggest wording only after both versions have 20 checked outcomes.'));
+    root.append(settings);
+    const results = el('details'); results.append(el('summary', 'Texting results and timing'));
+    root.append(results);
+    results.append(el('p', 'Confirming a sent text also requests the IMPACT call-counter update.'));
+    results.append(el('h3', 'A/B results · current templates'));
+    for (const row of textStats(state.records, experiment)) results.append(el('p', `${row.variant}: ${row.sent} confirmed sent · ${row.reviewed} outcomes checked · ${row.replies} replies · ${row.appointments} appointments`));
+    results.append(el('p', textingTimeHint(state.records, experiment, Intl.DateTimeFormat().resolvedOptions().timeZone)));
+    results.append(el('p', 'Confirmed texts, numbers, wording, sending time and reported results sync privately to your account in Supabase. Time means when you confirm sending on this device. Unknown outcomes are not counted as no replies. Comparisons use up to 5,000 recent texts and suggest wording only after both versions have 20 checked outcomes.'));
     const history = el('details'); history.append(el('summary', 'Record replies and appointments'));
     for (const record of state.records.filter(r => r.sentAt).slice(-30).reverse()) {
       const row = el('div', `${record.name} · ${record.variant} · ${new Date(record.sentAt).toLocaleDateString()}`);

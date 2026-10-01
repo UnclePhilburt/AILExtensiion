@@ -1,5 +1,5 @@
 import { buildLeadProfile } from './lead-profile.js';
-import { createTextingMode } from './texting-mode.js?v=2';
+import { createTextingMode } from './texting-mode.js?v=3';
 import { textTracking } from './text-tracking.js';
 import { installLeadSwipe } from './lead-swipe.js?v=5';
 import { createScriptOverlay } from './script-overlay.js?v=5';
@@ -130,7 +130,7 @@ nextLeadButton.addEventListener("click", showNextLead);
 showReminderLeadButton?.addEventListener("click", () => { void showReminderLead(); });
 document.querySelector('#dismissAppointmentReminder')?.addEventListener('click', () => dismissAppointmentReminder(dueReminder));
 installLeadSwipe(leadCard, {
-  enabled: () => signedIn && displayedLead?.available && loadPhoneSettings(localStorage).swipeLeads && !navigationPending() && pendingCall?.leadKey === getLeadKey(displayedLead) && !pendingCall?.resultSentAt && !awaitingResultSince && !leadCard.querySelector(".profileBio[open]") && !displayedLead?.appointmentOptions,
+  enabled: () => signedIn && displayedLead?.available && !loadPhoneSettings(localStorage).textingMode && loadPhoneSettings(localStorage).swipeLeads && !navigationPending() && pendingCall?.leadKey === getLeadKey(displayedLead) && !pendingCall?.resultSentAt && !awaitingResultSince && !leadCard.querySelector(".profileBio[open]") && !displayedLead?.appointmentOptions,
   currentKey: () => displayedLeadKey,
   navigate: (direction) => {
     if (direction === 'callback') { showFeedback('Callback scheduling is not connected yet. Set it in IMPACT on your computer.'); return; }
@@ -1008,8 +1008,9 @@ function renderHeadsUp(lead) {
 
 function updateNavButtons() {
   const callStarted = Boolean(displayedLead?.available && calledLeadKey === getLeadKey(displayedLead));
-  scriptOverlay.sync({ enabled: loadPhoneSettings(localStorage).scriptOverlay, calling: callStarted && !pendingCall?.resultSentAt, lead: displayedLead });
-  callResults.hidden = !callStarted;
+  const settings = loadPhoneSettings(localStorage);
+  scriptOverlay.sync({ enabled: settings.scriptOverlay && !settings.textingMode, calling: callStarted && !pendingCall?.resultSentAt, lead: displayedLead });
+  callResults.hidden = settings.textingMode || !callStarted;
   leadCard.classList.toggle("profileAfterCall", callStarted);
   const scheduled = hasScheduledAppointment(displayedLead?.callHistory);
   const ready = callStarted && Boolean(displayedLead?.leadId);
