@@ -4,19 +4,20 @@ const LEGACY_TEXTS = {
   A: 'Hi {firstName}, this is {agentName} with {company}. I am reaching out about {topic}. Is there a good time for a brief conversation? Reply STOP to opt out.',
   B: 'Hi {firstName}, {agentName} here with {company}, reaching out about {topic}. Would earlier or later in the day work better for a brief conversation? Reply STOP to opt out.'
 };
+const PREVIOUS_ZOOM_TEXTS = ['Hi {firstName}, this is {agentName} with {company}. I wanted to set up a Zoom meeting to go over {topic}. What day and time works for you?','Hey {firstName}, this is {agentName} with {company}. Would earlier or later in the day work better for a Zoom meeting to go over {topic}?','Hi {firstName}, this is {agentName} from American Income Life with the Child Safe Program. I wanted to set up a Zoom meeting to go over the Child Safe Kit with you. What day and time works for you?','Hey {firstName}, this is {agentName} from American Income Life with the Child Safe Program. Would earlier or later in the day work better for a Zoom meeting to go over the Child Safe Kit?'];
 export const DEFAULT_TEXTS = {
-  A: 'Hi {firstName}, this is {agentName} with {company}. I wanted to set up a Zoom meeting to go over {topic}. What day and time works for you?',
-  B: 'Hey {firstName}, this is {agentName} with {company}. Would earlier or later in the day work better for a Zoom meeting to go over {topic}?'
+  A: 'Hi {firstName}, this is {agentName} with {company}. I have {meetingTimeA} or {meetingTimeB} open for a Zoom meeting to go over {topic}. Which time works best for you?',
+  B: 'Hey {firstName}, this is {agentName} with {company}. What time are you usually available for a Zoom meeting to go over {topic}?'
 };
 export function textTemplates(type, saved) {
   const childSafe = /child[\s-]*safe/i.test(type);
   const defaults = childSafe ? {
-    A: 'Hi {firstName}, this is {agentName} from American Income Life with the Child Safe Program. I wanted to set up a Zoom meeting to go over the Child Safe Kit with you. What day and time works for you?',
-    B: 'Hey {firstName}, this is {agentName} from American Income Life with the Child Safe Program. Would earlier or later in the day work better for a Zoom meeting to go over the Child Safe Kit?'
+    A: 'Hi {firstName}, this is {agentName} from American Income Life with the Child Safe Program. I have {meetingTimeA} or {meetingTimeB} open for a Zoom meeting to go over the Child Safe Kit with you. Which time works best for you?',
+    B: 'Hey {firstName}, this is {agentName} from American Income Life with the Child Safe Program. What time are you usually available for a Zoom meeting to go over the Child Safe Kit?'
   } : DEFAULT_TEXTS;
   const result = { ...defaults, topic: textTopic(type), ...saved };
   for (const variant of ['A', 'B']) {
-    if (!saved?.[variant] || saved[variant] === LEGACY_TEXTS[variant]) result[variant] = defaults[variant];
+    if (!saved?.[variant] || saved[variant] === LEGACY_TEXTS[variant] || PREVIOUS_ZOOM_TEXTS.includes(saved[variant])) result[variant] = defaults[variant];
     result[variant] = result[variant].replace(/\s*Reply STOP to opt out\.?/gi, '').trim();
   }
   return result;
@@ -43,7 +44,29 @@ export function textTopic(type) {
   return 'life insurance information';
 }
 export function fillText(template, values) {
-  return String(template).replace(/\{(firstName|agentName|company|topic)\}/g, (_, key) => values[key] || '');
+  return String(template).replace(/\{(firstName|agentName|company|topic|meetingTimeA|meetingTimeB)\}/g, (_, key) => values[key] || '');
+}
+// One-hour meetings, with at least one hour of notice, in the phone's local time.
+export function availableTextMeetings(rows, now = Date.now()) {
+  const slots = [];
+  const meetings = rows.filter(row => row.kind !== 'callback');
+  for (let day = 0; day < 7 && slots.length < 2; day++) {
+    for (let hour = 14; hour <= 19 && slots.length < 2; hour++) {
+      const start = new Date(now); start.setDate(start.getDate() + day); start.setHours(hour, 0, 0, 0);
+      const time = start.getTime();
+      if (time < now + 3600000) continue;
+      if (meetings.some(row => {
+        const busy = new Date(row.starts_at);
+        if (row.all_day) return busy.toDateString() === start.toDateString();
+        return time < busy.getTime() + 3600000 && time + 3600000 > busy.getTime();
+      })) continue;
+      slots.push(time);
+    }
+  }
+  return slots;
+}
+export function meetingTimeLabel(time) {
+  return new Date(time).toLocaleString('en-US', { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit', timeZoneName:'short' });
 }
 export function smsLink(number, body, apple = false) {
   const clean = String(number || '').replace(/[^\d+]/g, '');
@@ -57,7 +80,7 @@ export function textStats(records, experiment) {
   });
 }
 
-export function createTextingMode(root, { storage, getUser, getSlot, getLead, getAgent, registerCall, isEnabled = () => true, tracking = null }) {
+export function createTextingMode(root, { storage, getUser, getSlot, getLead, getAgent, registerCall, isEnabled = () => true, tracking = null, getMeetings = null, openMessage = href => { window.location.href = href; } }) {
   if (!root) return { sync() {} };
   let rendered = '', busy = false;
   let refreshAt = 0, refreshing = false, trackingError = '', checkin = null, activeUser = '';
@@ -136,7 +159,8 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
     for (const [id, label, value] of [['company','Agency / company name',state.company], ['agent','Your name',state.agent || getAgent()], ['topic','Topic for this lead type',templates.topic], ['A','Version A',templates.A], ['B','Version B',templates.B]]) {
       const wrapper = el('label', label); const field = el(id === 'A' || id === 'B' ? 'textarea' : 'input'); field.value = value || ''; field.maxLength = 1200; wrapper.append(field); settings.append(wrapper); fields[id] = field;
     }
-    settings.append(el('p', 'Draft wording: review with your agency before use. Placeholders: {firstName}, {agentName}, {company}, {topic}. Saving changed templates starts a separate comparison.'));
+    settings.append(el('p', 'Version A checks meetings saved in your Companion calendar before offering two times between 2 and 8 p.m. Callbacks do not block times. Meetings are treated as one hour long. Version B asks when the client is usually available.'));
+    settings.append(el('p', 'Draft wording: review with your agency before use. Placeholders: {firstName}, {agentName}, {company}, {topic}, {meetingTimeA}, {meetingTimeB}. Saving changed templates starts a separate comparison.'));
     settings.append(button('Save templates', () => {
       const s = read(); s.company = fields.company.value.trim(); s.agent = fields.agent.value.trim();
       if (!s.company || !s.agent || !fields.A.value.trim() || !fields.B.value.trim() || !fields.topic.value.trim()) { notify('Fill in your name, company, topic, and both messages.'); return; }
@@ -154,7 +178,22 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
       if (!sent) {
         const reopen = el('a', 'Open in Messages', 'download');
         reopen.href = smsLink(pending.number, actual.value, /iPhone|iPad|iPod/.test(navigator.userAgent));
-        reopen.addEventListener('click', () => { reopen.href = smsLink(pending.number, actual.value, /iPhone|iPad|iPod/.test(navigator.userAgent)); });
+        reopen.addEventListener('click', async event => {
+          event.preventDefault();
+          if (busy) return;
+          busy = true;
+          try {
+            const owner = getUser();
+            if (pending.offeredSlots?.length) {
+              if (!getMeetings) throw new Error('Connect your calendar to check these meeting times.');
+              const rows = await getMeetings();
+              if (pending.offeredSlots.some(time => !availableTextMeetings(rows, time - 3600000).includes(time))) throw new Error('An offered time is no longer available. Discard this draft and prepare a new one.');
+              if (pending.offeredSlots.some(time => time < Date.now() + 3600000)) throw new Error('These times need updating. Discard this draft and prepare a new one.');
+            }
+            if (owner !== getUser()) throw new Error('Your account changed. Reopen your workspace.');
+            openMessage(smsLink(pending.number, actual.value, /iPhone|iPad|iPod/.test(navigator.userAgent)));
+          } catch (error) { notify(error.message); } finally { busy = false; }
+        });
         root.append(reopen, button('Copy message', async () => {
           try { await navigator.clipboard.writeText(actual.value); notify('Copied. Paste into Messages.'); }
           catch { notify('Select and copy the prepared message above.'); }
@@ -195,24 +234,38 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
       select.value = phones[0]?.number || '';
       const prior = state.records.find(r => r.leadId === lead.leadId && r.experiment === experiment);
       const variant = prior?.variant && ['A','B'].includes(prior.variant) ? prior.variant : chooseTextVariant(state.records, experiment, textVariant(getUser(), lead.leadId, experiment));
-      const body = fillText(templates[variant], { firstName: textFirstName(lead.leadName), agentName: state.agent || getAgent(), company: state.company, topic: templates.topic });
+      const body = fillText(templates[variant], { firstName: textFirstName(lead.leadName), agentName: state.agent || getAgent(), company: state.company, topic: templates.topic, meetingTimeA: "[checking available times]", meetingTimeB: "[checking available times]" });
       const preview = el('textarea'); preview.value = body; preview.readOnly = true; preview.setAttribute('aria-label', `Version ${variant} message preview`);
       root.append(el('h3', lead.leadName), el('p', `To: mobile number · Version ${variant}`), select, preview);
       const consent = el('input'); consent.type = 'checkbox';
       const consentLabel = el('label', 'I have permission to text this person and have checked for opt-outs. '); consentLabel.append(consent); root.append(consentLabel);
       const link = el('a', 'Open in Messages', 'download'); link.href = '#';
-      link.addEventListener('click', event => {
+      link.addEventListener('click', async event => {
+        event.preventDefault();
+        if (busy) return;
         if (!consent.checked || !state.company || !(state.agent || getAgent())) { event.preventDefault(); notify('Save your name and company and confirm permission before opening the text.'); return; }
         if (getLead()?.leadId !== lead.leadId) { event.preventDefault(); notify('The lead changed. Prepare its new draft.'); return; }
         try {
           const s = read();
           if (s.records.some(r => r.leadId === lead.leadId && r.experiment === experiment && r.sentAt)) { event.preventDefault(); notify('You already marked a text sent to this lead in this comparison.'); return; }
-          link.href = smsLink(select.value, body, /iPhone|iPad|iPod/.test(navigator.userAgent));
-          s.pending[slot] = { id: crypto.randomUUID(), leadId: lead.leadId, name: lead.leadName, number: select.value, phoneType: 'Mobile', requestType:type, slot, body, variant, experiment, registered: false };
-          save(s); setTimeout(() => sync(true), 0);
-        } catch (error) { event.preventDefault(); notify(error.message); }
+          let preparedBody = body, offeredSlots = [];
+          if (/\{meetingTime[AB]\}/.test(templates[variant])) {
+            if (!getMeetings) throw new Error('Connect your Companion calendar before offering meeting times.');
+            busy = true; notify('Checking your meetings…');
+            const owner = getUser();
+            offeredSlots = availableTextMeetings(await getMeetings());
+            if (owner !== getUser() || getLead()?.leadId !== lead.leadId || getSlot() !== slot) throw new Error('The lead or account changed. Prepare a new message.');
+            if (offeredSlots.length < 2) throw new Error('There are not two open meeting times in the next seven days. Check your calendar or edit the message.');
+            preparedBody = fillText(templates[variant], { firstName:textFirstName(lead.leadName), agentName:state.agent || getAgent(), company:state.company, topic:templates.topic, meetingTimeA:meetingTimeLabel(offeredSlots[0]), meetingTimeB:meetingTimeLabel(offeredSlots[1]) });
+          }
+          link.href = smsLink(select.value, preparedBody, /iPhone|iPad|iPod/.test(navigator.userAgent));
+          const latest = read();
+          latest.pending[slot] = { id: crypto.randomUUID(), leadId: lead.leadId, name: lead.leadName, number: select.value, phoneType: 'Mobile', requestType:type, slot, body: preparedBody, offeredSlots, variant, experiment, registered: false };
+          save(latest); busy = false; sync(true); openMessage(link.href);
+        } catch (error) { notify(error.message); } finally { busy = false; }
       });
-      root.append(link, button('Copy message', async () => { try { await navigator.clipboard.writeText(body); notify('Copied. Paste it into Messages if the draft does not fill automatically.'); } catch { notify('Select and copy the message above.'); } }));
+      root.append(link);
+      if (!/\{meetingTime[AB]\}/.test(templates[variant])) root.append(button('Copy message', async () => { try { await navigator.clipboard.writeText(body); notify('Copied. Paste it into Messages if the draft does not fill automatically.'); } catch { notify('Select and copy the message above.'); } }));
       if (!phones.length) { link.hidden = true; notify('No mobile number is listed for this lead.'); }
     } else root.append(el('p', 'Open a lead in IMPACT to prepare a message.'));
     root.append(settings);
