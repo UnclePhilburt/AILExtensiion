@@ -95,6 +95,8 @@ test('natural message defaults normalize names and upgrade saved original templa
   for (const type of ['Child Safe Kit', 'ChildSafe', 'Will Kit', 'Response Card']) {
     const templates = c.textTemplates(type);
     assert.doesNotMatch(templates.A + templates.B, /STOP|opt out/i);
+    assert.match(templates.A, /Zoom meeting/);
+    assert.match(templates.B, /Zoom meeting/);
     if (/Child/.test(type)) assert.match(templates.A, /American Income Life with the Child Safe Program/);
   }
   const old = 'Hi {firstName}, this is {agentName} with {company}. I am reaching out about {topic}. Is there a good time for a brief conversation? Reply STOP to opt out.';
