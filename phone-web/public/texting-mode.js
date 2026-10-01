@@ -237,13 +237,11 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
       const body = fillText(templates[variant], { firstName: textFirstName(lead.leadName), agentName: state.agent || getAgent(), company: state.company, topic: templates.topic, meetingTimeA: "[checking available times]", meetingTimeB: "[checking available times]" });
       const preview = el('textarea'); preview.value = body; preview.readOnly = true; preview.setAttribute('aria-label', `Version ${variant} message preview`);
       root.append(el('h3', lead.leadName), el('p', `To: mobile number · Version ${variant}`), select, preview);
-      const consent = el('input'); consent.type = 'checkbox';
-      const consentLabel = el('label', 'I have permission to text this person and have checked for opt-outs. '); consentLabel.append(consent); root.append(consentLabel);
       const link = el('a', 'Open in Messages', 'download'); link.href = '#';
       link.addEventListener('click', async event => {
         event.preventDefault();
         if (busy) return;
-        if (!consent.checked || !state.company || !(state.agent || getAgent())) { event.preventDefault(); notify('Save your name and company and confirm permission before opening the text.'); return; }
+        if (!state.company || !(state.agent || getAgent())) { event.preventDefault(); notify('Save your name and company before opening the text.'); return; }
         if (getLead()?.leadId !== lead.leadId) { event.preventDefault(); notify('The lead changed. Prepare its new draft.'); return; }
         try {
           const s = read();

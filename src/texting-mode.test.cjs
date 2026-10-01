@@ -35,8 +35,6 @@ test('A/B assignment is stable per lead and each message has correct placeholder
   assert.throws(() => context.smsLink('123', 'hello'), /valid mobile/);
 });
 async function prepare(h) {
-  const consent = h.all().find(n => n.textContent?.startsWith('I have permission')).children[0];
-  consent.checked = true;
   await h.find('Open in Messages').events.click({ preventDefault() {} });
 }
 test('opening a text does not count a send or call; confirming sends only one Phone 2 registration', async () => {
@@ -64,7 +62,6 @@ test('draft and duplicate protection survive reload, and stats exclude unsent dr
   const h = harness(); await prepare(h); h.mode.sync(true);
   await h.find('I sent it').events.click();
   h.find('Done with this text').events.click();
-  const consent = h.all().find(n => n.textContent?.startsWith('I have permission')).children[0]; consent.checked = true;
   let prevented = false;
   await h.find('Open in Messages').events.click({ preventDefault() { prevented = true; } });
   assert.equal(prevented, true);
