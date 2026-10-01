@@ -1,5 +1,5 @@
 import { buildLeadProfile } from './lead-profile.js';
-import { createTextingMode } from './texting-mode.js?v=5';
+import { createTextingMode } from './texting-mode.js?v=6';
 import { textTracking } from './text-tracking.js';
 import { installLeadSwipe } from './lead-swipe.js?v=5';
 import { createScriptOverlay } from './script-overlay.js?v=5';
@@ -97,6 +97,15 @@ const textingMode = typeof createTextingMode === 'function' ? createTextingMode(
   getAgent: () => loadPhoneSettings(localStorage).firstName,
   isEnabled: () => loadPhoneSettings(localStorage).textingMode,
   tracking: useCloud && typeof textTracking !== 'undefined' ? textTracking : null,
+  getMeetings: async () => {
+    if (!useCloud) throw new Error('Cloud mode is required to check your meetings.');
+    const from = new Date(); from.setHours(0,0,0,0);
+    const to = new Date(from); to.setDate(to.getDate() + 8);
+    const { data, error } = await client.from('scheduled_events').select('kind,starts_at,all_day').eq('user_id', currentUserId).gte('starts_at', from.toISOString()).lt('starts_at', to.toISOString()).limit(2000);
+    if (error) throw new Error('Could not check your meetings. Try again before offering times.');
+    if (data.length >= 2000) throw new Error('Too many calendar entries to safely check availability.');
+    return data;
+  },
   registerCall: (draft) => sendComputerCommand('call', {
     leadId: draft.leadId, phoneType: draft.phoneType, phoneNumber: draft.number, slot: draft.slot
   })

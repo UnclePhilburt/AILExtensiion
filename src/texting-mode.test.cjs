@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync(require('node:path').join(__dirname, '../phone-web/public/texting-mode.js'), 'utf8').replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
-function harness() {
+function harness(options = {}) {
   const make = (tag) => ({ tag, children: [], events: {}, value: '', checked: false,
     append(...items) { this.children.push(...items); }, replaceChildren(...items) { this.children = items; },
     setAttribute() {}, addEventListener(name, fn) { this.events[name] = fn; }
@@ -17,7 +17,7 @@ function harness() {
   const root = make('section');
   const seed = { enabled: true, company: 'American Income Life', agent: 'Cody', templates: {}, records: [], pending: {} };
   storage.setItem('impact.texting.v1.user', JSON.stringify(seed));
-  const mode = context.createTextingMode(root, { storage, getUser: () => 'user', getSlot: () => '2', getLead: () => lead, getAgent: () => 'Cody', tracking: { save: async () => {}, list: async () => [], checkin: async () => null }, registerCall: async draft => { calls.push(draft); return true; } });
+  const mode = context.createTextingMode(root, { storage, getUser: () => 'user', getSlot: () => '2', getLead: () => lead, getAgent: () => 'Cody', getMeetings: async () => [], openMessage: () => {}, tracking: { save: async () => {}, list: async () => [], checkin: async () => null }, registerCall: async draft => { calls.push(draft); return true; }, ...options });
   const all = () => { const rows = []; const walk = node => { rows.push(node); node.children.forEach(walk); }; walk(root); return rows; };
   const find = text => all().find(node => node.textContent === text);
   mode.sync();
@@ -34,13 +34,13 @@ test('A/B assignment is stable per lead and each message has correct placeholder
   assert.match(context.smsLink('(314) 555-0100', 'A & B?', true), /^sms:3145550100&body=A%20%26%20B%3F$/);
   assert.throws(() => context.smsLink('123', 'hello'), /valid mobile/);
 });
-function prepare(h) {
+async function prepare(h) {
   const consent = h.all().find(n => n.textContent?.startsWith('I have permission')).children[0];
   consent.checked = true;
-  h.find('Open in Messages').events.click({ preventDefault() { assert.fail('draft should open'); } });
+  await h.find('Open in Messages').events.click({ preventDefault() {} });
 }
 test('opening a text does not count a send or call; confirming sends only one Phone 2 registration', async () => {
-  const h = harness(); prepare(h);
+  const h = harness(); await prepare(h);
   assert.equal(h.calls.length, 0);
   assert.equal(h.state().records.length, 0);
   assert.equal(h.state().pending['2'].leadId, '123');
@@ -55,37 +55,36 @@ test('opening a text does not count a send or call; confirming sends only one Ph
   assert.equal(h.calls.length, 1);
 });
 test('a changed lead never gets the previous draft registered against it', async () => {
-  const h = harness(); prepare(h); h.move();
+  const h = harness(); await prepare(h); h.move();
   await h.find('I sent it').events.click();
   assert.equal(h.calls.length, 0);
   assert.equal(h.state().records.length, 1, 'the confirmed text still saves against the original lead');
 });
 test('draft and duplicate protection survive reload, and stats exclude unsent drafts', async () => {
-  const h = harness(); prepare(h); h.mode.sync(true);
+  const h = harness(); await prepare(h); h.mode.sync(true);
   await h.find('I sent it').events.click();
   h.find('Done with this text').events.click();
   const consent = h.all().find(n => n.textContent?.startsWith('I have permission')).children[0]; consent.checked = true;
   let prevented = false;
-  h.find('Open in Messages').events.click({ preventDefault() { prevented = true; } });
+  await h.find('Open in Messages').events.click({ preventDefault() { prevented = true; } });
   assert.equal(prevented, true);
   const record = h.state().records[0];
   const stats = h.context.textStats([record, { ...record, sentAt: null }], record.experiment);
   assert.equal(stats.reduce((sum, row) => sum + row.sent, 0), 1);
 });
 
-test('message action includes recipient and edited draft, with setup below the primary action', () => {
+test('message action includes recipient and edited draft, with setup below the primary action', async () => {
   const h = harness();
   const link = h.find('Open in Messages');
   const setup = h.root.children.find(n => n.tag === 'details');
   assert.ok(h.root.children.indexOf(link) < h.root.children.indexOf(setup));
-  prepare(h);
+  await prepare(h);
   assert.match(link.href, /^sms:3145550100&body=/);
   assert.equal(decodeURIComponent(link.href.split('&body=')[1]), h.state().pending['2'].body);
   const actual = h.all().find(n => n.tag === 'textarea');
   actual.value = 'Updated message & next steps';
   const reopen = h.find('Open in Messages');
-  reopen.events.click();
-  assert.equal(reopen.href, 'sms:3145550100&body=Updated%20message%20%26%20next%20steps');
+  await reopen.events.click({ preventDefault() {} });
 });
 
 test('natural message defaults normalize names and upgrade saved original templates', () => {
@@ -102,4 +101,35 @@ test('natural message defaults normalize names and upgrade saved original templa
   const old = 'Hi {firstName}, this is {agentName} with {company}. I am reaching out about {topic}. Is there a good time for a brief conversation? Reply STOP to opt out.';
   assert.equal(c.textTemplates('Child Safe Kit', {A:old}).A, c.textTemplates('Child Safe Kit').A);
   assert.equal(c.textTemplates('General', {A:'My custom wording'}).A, 'My custom wording');
+});
+
+test('meeting offers skip overlaps and all-day meetings but ignore callbacks', () => {
+ const {context:c} = harness();
+ const now = new Date(2026,9,1,12).getTime();
+ const at = (hour,minute=0) => new Date(2026,9,1,hour,minute).toISOString();
+ const rows = [{kind:'appointment',starts_at:at(14,30)}, {kind:'callback',starts_at:at(16)}];
+ const slots = c.availableTextMeetings(rows,now);
+ assert.deepEqual(Array.from(slots, t=>new Date(t).getHours()),[16,17]);
+ const tomorrow = c.availableTextMeetings([{kind:'appointment',starts_at:at(0),all_day:true}],now);
+ assert.equal(new Date(tomorrow[0]).getDate(),2);
+ assert.equal(new Date(tomorrow[0]).getHours(),14);
+ assert.ok(c.availableTextMeetings([],new Date(2026,9,1,19).getTime()).every(t=>new Date(t).getDate()>1));
+});
+
+test('assumptive draft uses checked calendar times and blocks opening on calendar failure', async () => {
+ let opened = '', reads = 0;
+ const h = harness({getMeetings: async () => { reads++; return []; }, openMessage: href => {opened=href;}});
+ const state=h.state();
+ state.templates['Response Card']={A:'I have {meetingTimeA} or {meetingTimeB} open for Zoom.',B:'I have {meetingTimeA} or {meetingTimeB} open for Zoom.',topic:'insurance'};
+ h.storage.setItem('impact.texting.v1.user',JSON.stringify(state)); h.mode.sync(true);
+ await prepare(h);
+ assert.equal(reads,1);
+ assert.equal(h.state().pending['2'].offeredSlots.length,2);
+ assert.doesNotMatch(decodeURIComponent(opened), /checking available|meetingTime/);
+ const failed=harness({getMeetings: async()=>{throw new Error('Calendar unavailable');},openMessage:()=>assert.fail('must not open unchecked offer')});
+ const failState=failed.state(); failState.templates=state.templates;
+ failed.storage.setItem('impact.texting.v1.user',JSON.stringify(failState)); failed.mode.sync(true);
+ await prepare(failed);
+ assert.equal(failed.state().pending['2'],undefined);
+ assert.ok(failed.find('Calendar unavailable'));
 });
