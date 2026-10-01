@@ -1,3 +1,4 @@
+import { planImportMessage } from './plan-import.js';
 import { LOG_LIMIT, STORAGE_KEYS } from "../shared/storage-keys.js";
 import { parseBridgeUrl } from "../shared/bridge-config.js";
 import { accessToken, client } from "../shared/auth-runtime.js";
@@ -71,6 +72,9 @@ const allowScriptLeadInContentScripts = () => chrome.storage.session.setAccessLe
 void allowScriptLeadInContentScripts();
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (['impact/planStatus','impact/planImport'].includes(message?.type)) {
+    planImportMessage(message,sender).then(sendResponse).catch(error=>sendResponse({ok:false,error:error.message}));return true;
+  }
   if (message?.type === 'impact/authStatus') {
     accessToken().then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
     return true;

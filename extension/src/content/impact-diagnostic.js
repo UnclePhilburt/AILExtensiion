@@ -83,6 +83,7 @@
     return false;
   });
 
+  installPlanImport();
   startAutoPublishWatcher();
   startPhoneCommandWatcher();
   chrome.runtime.sendMessage({ type: "impact/windowSlot" }, (response) => paintPhoneWindowBadge(response?.slot));
@@ -626,6 +627,75 @@
       seen.add(candidate.url);
       return true;
     });
+  }
+
+  function installPlanImport() {
+    if (!/^\/Lead\/Inbox\/?$/.test(location.pathname)) return;
+    let importing=false, owner='', autoStarted=false;
+    const panel=document.createElement('section'); panel.id='impactPlanImport';
+    panel.style.cssText='padding:12px;margin:10px;background:#eef5ed;border:1px solid #a5bfa8;border-radius:8px;color:#163c30;font:14px system-ui';
+    const button=document.createElement('button');button.type='button';button.textContent='Import inbox into follow-up plan';
+    const status=document.createElement('span');status.style.marginLeft='12px';panel.append(button,status);
+    document.body.prepend(panel);
+    const request=message=>chrome.runtime.sendMessage(message).then(result=>{if(!result?.ok)throw new Error(result?.error||'Could not reach Companion.');return result;});
+    const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    const pageKey=()=>Array.from(document.querySelectorAll('#LeadTable a[href*="/Lead/InboxDetail?LeadId="]')).map(a=>a.getAttribute('href')).join('|');
+    async function changePage(control) {
+      const before=pageKey();control.click();
+      for(let i=0;i<80;i++){await pause(150);if(pageKey()&&pageKey()!==before)return;}
+      throw new Error('The inbox page did not finish loading. Import again to resume safely.');
+    }
+    async function run() {
+      if(importing)return;importing=true;button.disabled=true;let added=0,read=0;
+      try {
+        const ready=await request({type:'impact/planStatus'});owner=ready.userId;
+        if(!ready.enabled)throw new Error('Enable Follow-up plan on the Companion website first.');
+        for(let i=0;i<40&&!inboxListReady();i++)await pause(250);
+        if(!inboxListReady())throw new Error('Wait for the inbox to load, then import again.');
+        const first=document.querySelector('#LeadTable_first');
+        if(first&&!first.classList.contains('disabled')&&!first.closest('.disabled'))await changePage(first);
+        const info=()=>{const m=(document.querySelector('#LeadTable_info')?.textContent||'').replace(/,/g,'').match(/Showing\s+(\d+)\s+to\s+(\d+)\s+of\s+(\d+)/i);return m?{start:+m[1],end:+m[2],total:+m[3]}:null;};
+        let range=info();
+        for(let n=0;range&&range.start>1&&n<100;n++){const prev=document.querySelector('#LeadTable_previous');if(!prev)throw new Error('Go to the first inbox page, then import again.');await changePage(prev);range=info();}
+        if(!range||range.start>1)throw new Error('Could not verify inbox page totals. Use the standard IMPACT inbox table and try again.');
+        const expected=range.total;
+        const seen=new Set();let pages=0;
+        while(true) {
+          if(++pages>100)throw new Error('Import paused after 100 pages. Narrow your inbox filter and import the remaining leads.');
+          const links=collectInboxLeadQueue();
+          if(!links.length)throw new Error('No inbox leads found. Check your inbox filters.');
+          let fresh=0;
+          for(const item of links) {
+            if(seen.has(item.leadId))continue;seen.add(item.leadId);fresh++;
+            status.textContent='Reading lead '+(read+1)+' · '+added+' new leads saved. Keep this inbox open.';
+            const url=toSameOriginUrl(item.url);if(!url||url.pathname!=='/Lead/InboxDetail')throw new Error('Unexpected lead link; import stopped.');
+            const response=await fetch(url.href,{credentials:'include',signal:AbortSignal.timeout(12000)});
+            if(!response.ok)throw new Error('Could not read a lead. Import again to resume.');
+            const doc=new DOMParser().parseFromString(await response.text(),'text/html');
+            const lead=collectLocalLeadPreview(doc,'follow-up-import');lead.leadId=item.leadId;
+            if(!lead.available||!lead.leadName||!lead.phones?.length)throw new Error('A lead is missing details or phone numbers. Open it in IMPACT, then retry the import.');
+            const result=await request({type:'impact/planImport',expectedUser:owner,leads:[{leadId:lead.leadId,leadName:lead.leadName,requestType:lead.requestType,phones:lead.phones,callHistory:lead.callHistory}],note:'Import in progress: '+(read+1)+' read'});
+            added+=result.added;read++;await pause(200);
+          }
+          const next=document.querySelector('#LeadTable_next');
+          if(!next||next.classList.contains('disabled')||next.closest('.disabled')||next.getAttribute('aria-disabled')==='true')break;
+          if(!fresh)throw new Error('Inbox pagination repeated a page. Import stopped; saved leads are safe.');
+          await changePage(next);
+        }
+        if(read!==expected)throw new Error('Imported '+read+' of '+expected+' leads. The inbox changed or pagination stopped; import again to finish.');
+        await request({type:'impact/planImport',expectedUser:owner,leads:[],note:'Import complete: '+read+' leads read, '+added+' new leads added.'});
+        status.textContent='Done: '+read+' leads checked · '+added+' new leads added. Open Follow-up plan on your phone.';
+      }catch(error){status.textContent=error.message+' Saved leads will not be duplicated.';}
+      finally{importing=false;button.disabled=false;}
+    }
+    button.addEventListener('click',()=>void run());
+    async function autoCheck(){
+      if(autoStarted||importing)return;
+      const sunday=new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',weekday:'short'}).format(new Date())==='Sun';
+      if(!sunday)return;
+      try{const ready=await request({type:'impact/planStatus'});if(ready.enabled&&inboxListReady()){autoStarted=true;void run();}}catch{}
+    }
+    setTimeout(autoCheck,4000);setInterval(autoCheck,30000);
   }
 
   function startAutoPublishWatcher() {
