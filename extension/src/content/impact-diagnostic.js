@@ -633,11 +633,22 @@
     if (!/^\/Lead\/Inbox\/?$/.test(location.pathname)) return;
     let importing=false, owner='', autoStarted=false;
     const panel=document.createElement('section'); panel.id='impactPlanImport';
-    panel.style.cssText='position:relative;z-index:1000;padding:16px;margin:10px;background:#eef5ed;border:1px solid #a5bfa8;border-radius:8px;color:#163c30;font:14px system-ui';
+    panel.style.cssText='position:relative;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:16px;margin:10px 0;background:#eef5ed;border:1px solid #a5bfa8;border-radius:8px;color:#163c30;font:14px system-ui';
     const button=document.createElement('button');button.type='button';button.textContent='Import inbox';
-    const status=document.createElement('span');status.style.marginLeft='12px';panel.append(button,status);
+    const status=document.createElement('span');status.style.cssText='flex:1;min-width:160px;overflow-wrap:anywhere';panel.append(button,status);
     button.style.cssText='background:#173e32;color:white;border:0;border-radius:8px;padding:12px 20px;font:bold 15px system-ui;cursor:pointer';
-    document.body.prepend(panel);
+    // Keep the bar in the inbox content, below IMPACT's fixed navigation.
+    // The table may arrive after this content script runs.
+    const mountImportPanel=()=>{
+      const table=document.querySelector('#LeadTable');
+      if(!table)return false;
+      (table.closest('.dataTables_wrapper')||table).before(panel);
+      return true;
+    };
+    if(!mountImportPanel()){
+      const observer=new MutationObserver(()=>{if(mountImportPanel())observer.disconnect();});
+      observer.observe(document.body,{childList:true,subtree:true});
+    }
     const request=message=>chrome.runtime.sendMessage(message).then(result=>{if(!result?.ok)throw new Error(result?.error||'Could not reach Companion.');return result;});
     const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
     const pageKey=()=>Array.from(document.querySelectorAll('#LeadTable a[href*="/Lead/InboxDetail?LeadId="]')).map(a=>a.getAttribute('href')).join('|');
