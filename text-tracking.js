@@ -5,14 +5,17 @@ function check(error) {
   throw new Error(error.message || 'Text tracking could not sync. Try again.');
 }
 function fromRow(row) {
-  return { id:row.id, leadId:row.lead_id, name:row.lead_name, number:row.phone, body:row.body, variant:row.variant, experiment:row.experiment, requestType:row.request_type, slot:row.slot, sentAt:Date.parse(row.sent_at), localHour:row.local_hour, timeZone:row.time_zone, replied:row.replied, appointment:row.appointment, cloudSaved:true };
+  return { id:row.id, leadId:row.lead_id, name:row.lead_name, number:row.phone, body:row.body, variant:row.variant, experiment:row.experiment, requestType:row.request_type, slot:row.slot, sentAt:Date.parse(row.sent_at), localHour:row.local_hour, timeZone:row.time_zone, replied:row.replied, appointment:row.appointment, timingCohort:row.timing_cohort, offerPolicy:row.offer_policy, offeredSlots:row.offered_slots || [], cloudSaved:true };
 }
 export const textTracking = {
+  async experimentsReady() { const {data,error}=await client.rpc('companion_text_experiments_ready'); return !error && data===true; },
   async save(record, expectedUser) {
     const { data:auth, error:authError } = await client.auth.getUser(); check(authError);
     if (!auth?.user) throw new Error('Sign in before saving text activity.');
     if (expectedUser && auth.user.id !== expectedUser) throw new Error('Your account changed. Sign back in before syncing this text.');
     const row = { user_id:auth.user.id, id:record.id, lead_id:record.leadId, lead_name:record.name, phone:String(record.number).replace(/[^\d+]/g,''), body:record.body, variant:record.variant, experiment:record.experiment, request_type:record.requestType || '', slot:record.slot, sent_at:new Date(record.sentAt).toISOString(), local_hour:record.localHour ?? new Date(record.sentAt).getHours(), time_zone:record.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone };
+    if (await this.experimentsReady()) { row.timing_cohort=record.timingCohort || 'legacy'; row.offer_policy=record.offerPolicy || 'legacy'; row.offered_slots=record.offeredSlots || []; }
+    else if (['C','D'].includes(record.variant)) throw new Error('Apply database migration 023 before saving C/D texts.');
     // A stable draft ID makes reconnect/retry safe without changing the original text.
     const { error } = await client.from('text_messages').upsert(row,{onConflict:'user_id,id',ignoreDuplicates:true}); check(error);
   },

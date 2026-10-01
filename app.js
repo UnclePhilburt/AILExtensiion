@@ -1,6 +1,6 @@
 import { buildLeadProfile } from './lead-profile.js';
-import { createTextingMode } from './texting-mode.js?v=14';
-import { textTracking } from './text-tracking.js';
+import { createTextingMode } from './texting-mode.js?v=15';
+import { textTracking } from './text-tracking.js?v=2';
 import { installLeadSwipe } from './lead-swipe.js?v=5';
 import { createScriptOverlay } from './script-overlay.js?v=5';
 import { client, accessToken } from './auth-runtime.js';
