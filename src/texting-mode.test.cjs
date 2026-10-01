@@ -37,38 +37,53 @@ test('A/B assignment is stable per lead and each message has correct placeholder
 function prepare(h) {
   const consent = h.all().find(n => n.textContent?.startsWith('I have permission')).children[0];
   consent.checked = true;
-  h.find('Open text in Messages').events.click({ preventDefault() { assert.fail('draft should open'); } });
+  h.find('Open in Messages').events.click({ preventDefault() { assert.fail('draft should open'); } });
 }
 test('opening a text does not count a send or call; confirming sends only one Phone 2 registration', async () => {
   const h = harness(); prepare(h);
   assert.equal(h.calls.length, 0);
   assert.equal(h.state().records.length, 0);
   assert.equal(h.state().pending['2'].leadId, '123');
-  const confirm = h.find('I sent it — register in IMPACT');
+  const confirm = h.find('I sent it');
   await confirm.events.click();
   assert.equal(h.calls.length, 1);
   assert.equal(h.calls[0].slot, '2');
   assert.equal(h.state().records.length, 1);
   assert.ok(h.state().records[0].sentAt);
-  assert.equal(h.find('IMPACT registration requested').disabled, true);
-  await h.find('IMPACT registration requested').events.click();
+  assert.equal(h.find('Text saved').disabled, true);
+  await h.find('Text saved').events.click();
   assert.equal(h.calls.length, 1);
 });
 test('a changed lead never gets the previous draft registered against it', async () => {
   const h = harness(); prepare(h); h.move();
-  await h.find('I sent it — register in IMPACT').events.click();
+  await h.find('I sent it').events.click();
   assert.equal(h.calls.length, 0);
   assert.equal(h.state().records.length, 1, 'the confirmed text still saves against the original lead');
 });
 test('draft and duplicate protection survive reload, and stats exclude unsent drafts', async () => {
   const h = harness(); prepare(h); h.mode.sync(true);
-  await h.find('I sent it — register in IMPACT').events.click();
+  await h.find('I sent it').events.click();
   h.find('Done with this text').events.click();
   const consent = h.all().find(n => n.textContent?.startsWith('I have permission')).children[0]; consent.checked = true;
   let prevented = false;
-  h.find('Open text in Messages').events.click({ preventDefault() { prevented = true; } });
+  h.find('Open in Messages').events.click({ preventDefault() { prevented = true; } });
   assert.equal(prevented, true);
   const record = h.state().records[0];
   const stats = h.context.textStats([record, { ...record, sentAt: null }], record.experiment);
   assert.equal(stats.reduce((sum, row) => sum + row.sent, 0), 1);
+});
+
+test('message action includes recipient and edited draft, with setup below the primary action', () => {
+  const h = harness();
+  const link = h.find('Open in Messages');
+  const setup = h.root.children.find(n => n.tag === 'details');
+  assert.ok(h.root.children.indexOf(link) < h.root.children.indexOf(setup));
+  prepare(h);
+  assert.match(link.href, /^sms:3145550100&body=/);
+  assert.equal(decodeURIComponent(link.href.split('&body=')[1]), h.state().pending['2'].body);
+  const actual = h.all().find(n => n.tag === 'textarea');
+  actual.value = 'Updated message & next steps';
+  const reopen = h.find('Open in Messages');
+  reopen.events.click();
+  assert.equal(reopen.href, 'sms:3145550100&body=Updated%20message%20%26%20next%20steps');
 });

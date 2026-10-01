@@ -16,6 +16,7 @@
     set('data-theme', s.darkMode === true ? 'dark' : null);
     set('data-lead-paper', s.beigeLeadCard === true ? 'beige' : null);
     set('data-best-next', s.bestNextLead === true ? '' : null);
+    set('data-texting-mode', s.textingMode === true ? '' : null);
   }
   window.impactApplySavedSettings = apply;
   apply();

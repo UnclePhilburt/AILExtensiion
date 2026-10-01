@@ -92,6 +92,7 @@ export function displayAttributes(settings) {
     'data-hide-dnk': s.showDoNotKnock ? null : '',
     'data-theme': s.darkMode ? 'dark' : null,
     'data-lead-paper': s.beigeLeadCard ? 'beige' : null,
-    'data-best-next': s.bestNextLead ? '' : null
+    'data-best-next': s.bestNextLead ? '' : null,
+    'data-texting-mode': s.textingMode ? '' : null
   };
 }
