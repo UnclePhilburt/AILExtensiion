@@ -111,6 +111,7 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
     } catch (error) { if (getUser() === user) trackingError = error.message; }
     finally { refreshing = false; if (getUser() === user) sync(true); }
   }
+  const displayName = name => String(name || '').split(',').reverse().join(' ').trim().split(/\s+/).map(textFirstName).join(' ');
   const el = (tag, text, cls) => { const item = document.createElement(tag); if (text) item.textContent = text; if (cls) item.className = cls; return item; };
   function button(text, action) { const b = el('button', text); b.type = 'button'; b.addEventListener('click', action); return b; }
   function sync(force = false) {
@@ -125,17 +126,19 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
     if (busy) return;
     rendered = identity;
     const state = read();
-    const heading = el('h2', 'Texting mode');
-    const settingsLink = el('a', 'Texting mode settings'); settingsLink.href = 'settings.html?from=workspace';
-    root.replaceChildren(heading, settingsLink);
-    root.append(el('p', 'Open the prepared text in your messaging app, send it, then tap I sent it. If your app leaves the message blank, use Copy message and paste it.'));
+    const heading = el('h2', 'Text a lead');
+    const settingsLink = el('a', 'Settings'); settingsLink.href = 'settings.html?from=workspace';
+    const header = el('div', '', 'textingHeader'); header.append(heading, settingsLink);
+    root.replaceChildren(header);
+    const more = el('details', '', 'textingMore'); more.append(el('summary', 'Messages & results'));
+    let checkinPanel = null;
     const status = el('p', '', 'textingStatus'); status.setAttribute('role', 'status'); root.append(status);
     const notify = message => { status.textContent = message; };
     if (trackingError) notify(trackingError);
     else if (!tracking) notify('Cloud mode is required to save and learn from texting activity.');
     if (checkin) {
       const item = checkin;
-      const panel = el('section');
+      const panel = el('details', '', 'textingCheckin'); panel.append(el('summary', `Quick check-in · ${textFirstName(item.name)}`));
       panel.append(el('h3', `Did ${item.name} reply?`), el('p', `${item.number} · sent ${new Date(item.sentAt).toLocaleString()}`), el('p', item.body));
       for (const [label, replied, appointment] of [['Yes, replied',true,undefined], ['No reply',false,undefined], ['Booked an appointment',true,true], ['Not sure / ask later',null,undefined]]) {
         panel.append(button(label, async () => {
@@ -149,7 +152,7 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
           } catch (error) { notify(error.message); }
         }));
       }
-      root.append(panel);
+      checkinPanel = panel;
     }
     const type = lead?.requestType || 'General';
     const templates = textTemplates(type, state.templates[type]);
@@ -170,13 +173,17 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
     const slot = getSlot();
     const pending = state.pending[slot];
     if (pending) {
-      root.append(el('h3', pending.name), el('p', `To: ${pending.number} · Version ${pending.variant}`));
+      root.append(el('h3', displayName(pending.name), 'textingName'), el('p', pending.number, 'textingRecipient'));
       const sent = state.records.find(r => r.id === pending.id)?.sentAt;
       const actual = el('textarea'); actual.value = pending.body;
       actual.setAttribute('aria-label', 'Message actually sent'); actual.readOnly = Boolean(sent);
-      root.append(el('p', 'If you changed the wording in Messages, paste the actual text below before confirming. Edited messages are tracked separately from A/B.'), actual);
+      const message = el('p', pending.body, 'textingBubble'); root.append(message);
+      const edit = el('details'); edit.append(el('summary', 'Edit sent wording'), el('p', 'Changed it in Messages? Paste what you sent here.'), actual);
+      actual.addEventListener('input', () => { message.textContent = actual.value; });
+      more.append(edit);
+      if (!sent) root.append(el('p', 'After sending, tap I sent it.', 'textingHint'));
       if (!sent) {
-        const reopen = el('a', 'Open in Messages', 'download');
+        const reopen = el('a', 'Open in Messages', 'textingSecondary');
         reopen.href = smsLink(pending.number, actual.value, /iPhone|iPad|iPod/.test(navigator.userAgent));
         reopen.addEventListener('click', async event => {
           event.preventDefault();
@@ -194,10 +201,12 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
             openMessage(smsLink(pending.number, actual.value, /iPhone|iPad|iPod/.test(navigator.userAgent)));
           } catch (error) { notify(error.message); } finally { busy = false; }
         });
-        root.append(reopen, button('Copy message', async () => {
+        const secondary = el('div', '', 'textingActions');
+        secondary.append(reopen, button('Copy message', async () => {
           try { await navigator.clipboard.writeText(actual.value); notify('Copied. Paste into Messages.'); }
-          catch { notify('Select and copy the prepared message above.'); }
+          catch { edit.open = true; more.open = true; notify('Select and copy the message under Edit sent wording.'); }
         }));
+        root.append(secondary);
       }
       const confirm = button(pending.registered ? 'Text saved' : sent ? 'Retry IMPACT update' : 'I sent it', async () => {
         if (busy || pending.registered) return;
@@ -225,8 +234,9 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
         } catch (error) { notify(error.message); }
         finally { busy = false; confirm.disabled = false; if (read().pending[slot]?.registered) sync(true); }
       });
-      confirm.disabled = Boolean(pending.registered); root.append(confirm);
-      root.append(button(sent ? 'Done with this text' : 'Discard draft (not sent)', () => { const s = read(); delete s.pending[slot]; save(s); sync(true); }));
+      confirm.disabled = Boolean(pending.registered); confirm.className = 'textingPrimary'; root.append(confirm);
+      const finish = button(sent ? 'Done with this text' : 'Discard draft (not sent)', () => { const s = read(); delete s.pending[slot]; save(s); sync(true); });
+      if (sent) root.append(finish); else more.append(finish);
     } else if (lead?.available) {
       const phones = (lead.phones || []).filter(p => p.label === 'Mobile');
       const select = el('select'); select.setAttribute('aria-label', 'Mobile number to text');
@@ -235,8 +245,12 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
       const prior = state.records.find(r => r.leadId === lead.leadId && r.experiment === experiment);
       const variant = prior?.variant && ['A','B'].includes(prior.variant) ? prior.variant : chooseTextVariant(state.records, experiment, textVariant(getUser(), lead.leadId, experiment));
       const body = fillText(templates[variant], { firstName: textFirstName(lead.leadName), agentName: state.agent || getAgent(), company: state.company, topic: templates.topic, meetingTimeA: "[checking available times]", meetingTimeB: "[checking available times]" });
-      const preview = el('textarea'); preview.value = body; preview.readOnly = true; preview.setAttribute('aria-label', `Version ${variant} message preview`);
-      root.append(el('h3', lead.leadName), el('p', `To: mobile number · Version ${variant}`), select, preview);
+      const preview = el('textarea', '', 'textingPreview'); preview.value = body; preview.readOnly = true; preview.setAttribute('aria-label', `Version ${variant} message preview`);
+      root.append(el('h3', displayName(lead.leadName), 'textingName'));
+      if (phones.length > 1) root.append(select);
+      else if (phones.length) root.append(el('p', phones[0].number, 'textingRecipient'));
+      root.append(preview);
+      if (/\{meetingTime[AB]\}/.test(templates[variant])) root.append(el('p', 'Open Messages to fill in two available meeting times.', 'textingHint'));
       const link = el('a', 'Open in Messages', 'download'); link.href = '#';
       link.addEventListener('click', async event => {
         event.preventDefault();
@@ -266,9 +280,10 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
       if (!/\{meetingTime[AB]\}/.test(templates[variant])) root.append(button('Copy message', async () => { try { await navigator.clipboard.writeText(body); notify('Copied. Paste it into Messages if the draft does not fill automatically.'); } catch { notify('Select and copy the message above.'); } }));
       if (!phones.length) { link.hidden = true; notify('No mobile number is listed for this lead.'); }
     } else root.append(el('p', 'Open a lead in IMPACT to prepare a message.'));
-    root.append(settings);
+    more.append(settings);
+    if (settings.open) more.open = true;
     const results = el('details'); results.append(el('summary', 'Texting results and timing'));
-    root.append(results);
+    more.append(results);
     results.append(el('p', 'Confirming a sent text also requests the IMPACT call-counter update.'));
     results.append(el('h3', 'A/B results · current templates'));
     for (const row of textStats(state.records, experiment)) results.append(el('p', `${row.variant}: ${row.sent} confirmed sent · ${row.reviewed} outcomes checked · ${row.replies} replies · ${row.appointments} appointments`));
@@ -289,7 +304,9 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
         });
       }
       history.append(row);
-    } root.append(history);
+    } more.append(history);
+    root.append(more);
+    if (checkinPanel) root.append(checkinPanel);
   }
   return { sync };
 }
