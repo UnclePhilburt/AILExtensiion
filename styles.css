@@ -315,3 +315,24 @@ html[data-theme="dark"][data-lead-paper="beige"] .workspace .leadCard h2 { color
 .textingMode .download { font-weight: 700; text-decoration: none; }
 .textingMode details { border-top: 1px solid #91a79d; padding-top: 8px; }
 .textingMode .textingStatus:empty { display: none; }
+
+/* A quiet compose surface with secondary tasks out of the main flow. */
+.textingMode { gap: 10px; }
+.textingMode .textingHeader { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:8px; }
+.textingMode .textingHeader h2 { font-size:14px; font-weight:600; opacity:.7; }
+.textingMode .textingHeader a { font-size:13px; color:inherit; }
+.textingMode .textingName { font-size:22px; line-height:1.25; }
+.textingMode .textingRecipient, .textingMode .textingHint { opacity:.72; font-size:13px; }
+.textingMode .textingPreview, .textingMode .textingBubble { border:0; border-radius:16px; padding:16px; background:#edf4ef; color:#183a2d; font-size:16px; line-height:1.6; margin:6px 0; }
+.textingMode .textingPreview { min-height:180px; resize:vertical; }
+.textingMode .textingBubble { white-space:pre-wrap; overflow-wrap:anywhere; }
+.textingMode .textingActions { display:flex; justify-content:center; align-items:center; gap:20px; }
+.textingMode .textingActions button, .textingMode .textingSecondary { border:0; background:transparent; color:inherit; padding:12px 0; font:inherit; font-size:14px; text-decoration:underline; }
+.textingMode .textingPrimary, .textingMode .download { border:0; border-radius:14px; background:#17684e; color:#fff; padding:16px; font:inherit; font-weight:700; text-align:center; }
+.textingMode .textingMore { margin-top:8px; }
+.textingMode .textingMore > summary, .textingMode .textingCheckin > summary { font-size:14px; font-weight:500; }
+.textingMode .textingMore > details { margin-top:12px; }
+[data-texting-mode] .workspace .wsHeader > h1, [data-texting-mode] .workspace .wsHeader > .encLine { display:none; }
+html[data-theme="dark"] .textingMode .textingPreview, html[data-theme="dark"] .textingMode .textingBubble { background:#293b31; color:#e2ece5; }
+
+.textingMode > button:not(.textingPrimary) { border:0; background:transparent; color:inherit; padding:8px; font-size:14px; text-decoration:underline; }
