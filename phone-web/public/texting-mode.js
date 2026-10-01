@@ -139,6 +139,7 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
     const settingsLink = el('a', 'Settings'); settingsLink.href = 'settings.html?from=workspace';
     const header = el('div', '', 'textingHeader'); header.append(heading, settingsLink);
     root.replaceChildren(header);
+    const reviewLink = el('a', 'Review texts'); reviewLink.href = 'text-review.html';
     const more = el('details', '', 'textingMore'); more.append(el('summary', 'Messages & results'));
     let checkinPanel = null;
     const status = el('p', '', 'textingStatus'); status.setAttribute('role', 'status'); root.append(status);
@@ -355,7 +356,7 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
       }
       history.append(row);
     } more.append(history);
-    root.append(more);
+    root.append(reviewLink, more);
     if (checkinPanel) root.append(checkinPanel);
   }
   return { sync };
