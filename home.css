@@ -104,3 +104,6 @@ html[data-theme="dark"] :is(.homeChapter,.shelfLabel,.homeAccount,.homeStatus) {
 html[data-theme="dark"] :is(.shortcut,.homeAccount strong,.subtleLink) { color: #f2e7d3; }
 html[data-theme="dark"] .shortcutText small { color: #c4b9a6; }
 html[data-theme="dark"] .shortcut + .shortcut::before { border-color: #4e473b; }
+
+/* Separate the two primary home actions without changing hidden auth states. */
+.homeState > .workspaceLink + .workspaceLink { margin-top: 16px; }
