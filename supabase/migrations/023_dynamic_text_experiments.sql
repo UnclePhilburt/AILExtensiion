@@ -1,0 +1,10 @@
+begin;
+alter table public.text_messages drop constraint if exists text_messages_variant_check;
+alter table public.text_messages add constraint text_messages_variant_check check(variant in ('A','B','C','D','custom'));
+alter table public.text_messages add column if not exists timing_cohort text not null default 'legacy';
+alter table public.text_messages add column if not exists offered_slots jsonb not null default '[]'::jsonb;
+alter table public.text_messages add column if not exists offer_policy text not null default 'legacy';
+create or replace function public.companion_text_experiments_ready() returns boolean language sql stable security invoker set search_path='' as $$ select true $$;
+revoke all on function public.companion_text_experiments_ready() from public,anon;
+grant execute on function public.companion_text_experiments_ready() to authenticated;
+commit;

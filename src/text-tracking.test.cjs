@@ -15,6 +15,7 @@ test('text tracking is private, retry-safe, and prompts at most once daily acros
  grant select on companion_members to authenticated;
  insert into auth.users values('${a}'),('${b}'); insert into companion_members(user_id) values('${a}'),('${b}');`);
  await db.exec(sql);
+ await db.exec(fs.readFileSync(path.join(__dirname,'../supabase/migrations/023_dynamic_text_experiments.sql'),'utf8'));
  await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub','${a}',false);`);
  const insert=`insert into text_messages(id,lead_id,lead_name,phone,body,variant,experiment,slot,sent_at,local_hour,time_zone) values('${id}','lead','Test Lead','3145550100','Test message','A','test','2',now()-interval '2 days',14,'America/Chicago') on conflict(user_id,id) do nothing`;
  await db.exec(insert); await db.exec(insert);
@@ -30,6 +31,10 @@ test('text tracking is private, retry-safe, and prompts at most once daily acros
  assert.equal((await db.query('select replied from text_messages')).rows[0].replied,null);
  await db.exec('update text_messages set replied=false, reviewed_at=now()');
  assert.equal((await db.query('select replied from text_messages')).rows[0].replied,false);
+ assert.equal((await db.query('select companion_text_experiments_ready() as ready')).rows[0].ready,true);
+ await db.exec(insert.replace(id,'cccccccc-cccc-4ccc-8ccc-cccccccccccc').replace("'A','test'","'C','test'"));
+ await db.exec(insert.replace(id,'dddddddd-dddd-4ddd-8ddd-dddddddddddd').replace("'A','test'","'D','test'"));
+ assert.equal((await db.query("select * from text_messages where variant in ('C','D')")).rows.length,2);
  await db.exec(`reset role; update companion_members set enabled=false where user_id='${a}'; set role authenticated;`);
  assert.equal((await db.query('select * from text_messages')).rows.length,0);
  } finally {await db.close();}

@@ -1,4 +1,4 @@
-import { chooseTextVariant, textingTimeHint } from './text-learning.js';
+import { chooseTextVariant, textingTimeHint } from './text-learning.js?v=2';
 // Drafts survive locally; confirmed sends and reported outcomes sync to Supabase.
 const LEGACY_TEXTS = {
   A: 'Hi {firstName}, this is {agentName} with {company}. I am reaching out about {topic}. Is there a good time for a brief conversation? Reply STOP to opt out.',
@@ -19,8 +19,10 @@ export function textTemplates(type, saved) {
     A: 'Hi {firstName}, this is {agentName} from American Income Life with the Child Safe Program. I have {meetingTimeA} or {meetingTimeB} open for a Zoom meeting to go over the Child Safe Kit with you. Which time works best for you?',
     B: 'Hey {firstName}, this is {agentName} from American Income Life with the Child Safe Program. What time are you usually available for a Zoom meeting to go over the Child Safe Kit?'
   } : /will\s*kit/i.test(type) ? KIT_TEXTS : DEFAULT_TEXTS;
+  defaults.C = defaults.A;
+  defaults.D = defaults.A.split('I have')[0] + 'Would {meetingTimeA} or {meetingTimeB} work for a Zoom meeting about {topic}? If neither works, what time is usually best for you?';
   const result = { ...defaults, topic: textTopic(type), ...saved };
-  for (const variant of ['A', 'B']) {
+  for (const variant of ['A', 'B', 'C', 'D']) {
     if (!saved?.[variant] || saved[variant] === LEGACY_TEXTS[variant] || saved[variant] === KIT_TEXTS[variant] || PREVIOUS_ZOOM_TEXTS.includes(saved[variant])) result[variant] = defaults[variant];
     result[variant] = result[variant].replace(/\s*Reply STOP to opt out\.?/gi, '').trim();
   }
@@ -31,8 +33,8 @@ export function textHash(value) {
   for (const char of String(value)) { hash ^= char.charCodeAt(0); hash = Math.imul(hash, 16777619); }
   return (hash >>> 0).toString(16);
 }
-export function textVariant(userId, leadId, experiment) {
-  return parseInt(textHash(`${userId}:${leadId}:${experiment}`), 16) % 2 ? 'B' : 'A';
+export function textVariant(userId, leadId, experiment, variants=['A','B']) {
+  return variants[parseInt(textHash(`${userId}:${leadId}:${experiment}`), 16) % variants.length];
 }
 export function textFirstName(name) {
   const value = String(name || '').trim();
@@ -53,27 +55,45 @@ export function withoutOrganization(value) {
 export function fillText(template, values) {
   return withoutOrganization(String(template).replace(/\{(firstName|agentName|company|topic|meetingTimeA|meetingTimeB)\}/g, (_, key) => values[key] || ''));
 }
-// One-hour meetings, with at least one hour of notice, in the phone's local time.
-export function availableTextMeetings(rows, now = Date.now()) {
-  const slots = [];
-  const meetings = rows.filter(row => row.kind !== 'callback');
-  for (let day = 0; day < 7 && slots.length < 2; day++) {
-    for (let hour = 14; hour <= 19 && slots.length < 2; hour++) {
-      const start = new Date(now); start.setDate(start.getDate() + day); start.setHours(hour, 0, 0, 0);
-      const time = start.getTime();
-      if (time < now + 3600000) continue;
-      if (meetings.some(row => {
-        const busy = new Date(row.starts_at);
-        if (row.all_day) return busy.toDateString() === start.toDateString();
-        return time < busy.getTime() + 3600000 && time + 3600000 > busy.getTime();
-      })) continue;
-      slots.push(time);
-    }
-  }
-  return slots;
+export function centralParts(time) {
+ const parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'}).formatToParts(new Date(time)).map(p=>[p.type,p.value]));
+ return {year:+parts.year,month:+parts.month,day:+parts.day,hour:+parts.hour};
 }
-export function meetingTimeLabel(time) {
-  return new Date(time).toLocaleString('en-US', { weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit', timeZoneName:'short' });
+function centralTimestamp(year,month,day,hour) {
+ let guess=Date.UTC(year,month-1,day,hour);
+ for(let i=0;i<3;i++){const p=centralParts(guess);guess+=Date.UTC(year,month-1,day,hour)-Date.UTC(p.year,p.month-1,p.day,p.hour);}
+ return guess;
+}
+export function textMeetingSlots(rows, now=Date.now(), policy='standard') {
+ const p=centralParts(now), base=Date.UTC(p.year,p.month-1,p.day), slots=[];
+ for(let day=policy==='standard'&&p.hour>=17?1:0;day<7;day++) {
+  if(policy==='same-day'&&day>0)break;
+  const date=new Date(base+day*86400000), dow=date.getUTCDay();if(dow===0)continue;
+  for(let hour=dow===6?9:14;hour<=(dow===6?13:20);hour++) {
+   const time=centralTimestamp(date.getUTCFullYear(),date.getUTCMonth()+1,date.getUTCDate(),hour);
+   if(time<now+3600000)continue;
+   if(rows.some(row=>{
+    if(row.kind==='callback')return false;
+    const busy=Date.parse(row.starts_at);
+    if(row.all_day){const b=centralParts(busy),t=centralParts(time);return b.year===t.year&&b.month===t.month&&b.day===t.day;}
+    return time<busy+3600000&&time+3600000>busy;
+   }))continue;
+   slots.push(time);
+  }
+ }
+ return slots;
+}
+export function availableTextMeetings(rows,now=Date.now(),policy='standard') {
+ const slots=textMeetingSlots(rows,now,policy);if(!slots.length)return [];
+ const first=slots[0],p=centralParts(first);
+ const same=slots.filter(t=>{const q=centralParts(t);return q.year===p.year&&q.month===p.month&&q.day===p.day;});
+ const later=same.filter(t=>t>first), preferred=later.find(t=>centralParts(t).hour===19);
+ return later.length?[first,preferred||later[later.length-1]]:policy==='same-day'?[first]:slots.slice(0,2);
+}
+export function meetingTimeLabel(time,now=Date.now()) {
+ const p=centralParts(time),n=centralParts(now), diff=(Date.UTC(p.year,p.month-1,p.day)-Date.UTC(n.year,n.month-1,n.day))/86400000;
+ const day=diff===0?'today':diff===1?'tomorrow':new Date(time).toLocaleDateString('en-US',{timeZone:'America/Chicago',weekday:'short',month:'short',day:'numeric'});
+ return day+' at '+new Date(time).toLocaleTimeString('en-US',{timeZone:'America/Chicago',hour:'numeric',minute:'2-digit',timeZoneName:'short'});
 }
 export function smsLink(number, body, apple = false) {
   const clean = String(number || '').replace(/[^\d+]/g, '');
@@ -81,7 +101,7 @@ export function smsLink(number, body, apple = false) {
   return `sms:${clean}${apple ? '&' : '?'}body=${encodeURIComponent(body)}`;
 }
 export function textStats(records, experiment) {
-  return ['A', 'B'].map(variant => {
+  return ['A', 'B', 'C', 'D'].map(variant => {
     const rows = records.filter(r => r.experiment === experiment && r.variant === variant && r.sentAt);
     return { variant, sent: rows.length, reviewed: rows.filter(r => typeof r.replied === 'boolean').length, replies: rows.filter(r => r.replied).length, appointments: rows.filter(r => r.appointment).length };
   });
@@ -89,7 +109,7 @@ export function textStats(records, experiment) {
 
 export function createTextingMode(root, { storage, getUser, getSlot, getLead, getAgent, registerCall, isEnabled = () => true, tracking = null, getMeetings = null, activateLead = null, openMessage = href => { window.location.href = href; } }) {
   if (!root) return { sync() {} };
-  let rendered = '', busy = false, openingFollowup = '';
+  let rendered = '', busy = false, openingFollowup = '', fourVariants = false, calendarRows = null, calendarAt = 0;
   const numberKey = number => String(number || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
   let refreshAt = 0, refreshing = false, trackingError = '', checkin = null, activeUser = '';
   const key = () => `impact.texting.v1.${getUser()}`;
@@ -108,6 +128,8 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
         if (getUser() !== user) return;
         const s = read(); const saved = s.records.find(r => r.id === record.id); if (saved) saved.cloudSaved = true; save(s);
       }
+      fourVariants = tracking.experimentsReady ? await tracking.experimentsReady() : false;
+      if (getMeetings) { try { calendarRows = await getMeetings(); calendarAt = Date.now(); } catch { calendarRows = null; } }
       const rows = await tracking.list();
       if (getUser() !== user) return;
       const s = read();
@@ -124,7 +146,7 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
   function button(text, action) { const b = el('button', text); b.type = 'button'; b.addEventListener('click', action); return b; }
   function sync(force = false) {
     const lead = getLead();
-    if (activeUser !== getUser()) { activeUser = getUser(); openingFollowup = ''; checkin = null; refreshAt = 0; trackingError = ''; rendered = ''; }
+    if (activeUser !== getUser()) { activeUser = getUser(); fourVariants = false; calendarRows = null; calendarAt = 0; openingFollowup = ''; checkin = null; refreshAt = 0; trackingError = ''; rendered = ''; }
     root.hidden = !getUser() || !isEnabled();
     if (!getUser()) { root.replaceChildren(); rendered = ''; return; }
     if (!isEnabled()) return;
@@ -172,18 +194,19 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
     }
     const type = lead?.requestType || 'General';
     const templates = textTemplates(type, state.templates[type]);
-    const experiment = textHash(JSON.stringify([type, templates, state.company]));
-    const settings = el('details'); settings.append(el('summary', `Edit A/B messages · ${type}`));
+    const experiment = textHash(JSON.stringify(['central-schedule-v1',type, templates, state.company]));
+    const settings = el('details'); settings.append(el('summary', `Edit messages · ${type}`));
     const fields = {};
-    for (const [id, label, value] of [['company','Company name',state.company], ['agent','Your name',state.agent || getAgent()], ['topic','Topic for this lead type',templates.topic], ['A','Version A',templates.A], ['B','Version B',templates.B]]) {
-      const wrapper = el('label', label); const field = el(id === 'A' || id === 'B' ? 'textarea' : 'input'); field.value = value || ''; field.maxLength = 1200; wrapper.append(field); settings.append(wrapper); fields[id] = field;
+    for (const [id, label, value] of [['company','Company name',state.company], ['agent','Your name',state.agent || getAgent()], ['topic','Topic for this lead type',templates.topic], ['A','Version A',templates.A], ['B','B · Ask availability',templates.B], ['C','C · Same-day direct',templates.C], ['D','D · Same-day gentle',templates.D]]) {
+      const wrapper = el('label', label); const field = el(['A','B','C','D'].includes(id) ? 'textarea' : 'input'); field.value = value || ''; field.maxLength = 1200; wrapper.append(field); settings.append(wrapper); fields[id] = field;
     }
-    settings.append(el('p', 'Version A checks meetings saved in your Companion calendar before offering two times between 2 and 8 p.m. Callbacks do not block times. Meetings are treated as one hour long. Version B asks when the client is usually available.'));
+    if (!fourVariants) settings.append(el('p', 'C/D testing activates after database update 023. A/B remain available.'));
+    settings.append(el('p', 'Central Time: weekdays 2–9 p.m., Saturdays 9 a.m.–2 p.m., no Sundays. One hour per meeting, one hour notice. A offers the next working day after 5; B asks availability. C/D test same-day offers after 5 when two times remain. Callbacks do not block times.'));
     settings.append(el('p', 'Draft wording: review with your agency before use. Placeholders: {firstName}, {agentName}, {company}, {topic}, {meetingTimeA}, {meetingTimeB}. Saving changed templates starts a separate comparison.'));
     settings.append(button('Save templates', () => {
       const s = read(); s.company = fields.company.value.trim(); s.agent = fields.agent.value.trim();
       if (!s.company || !s.agent || !fields.A.value.trim() || !fields.B.value.trim() || !fields.topic.value.trim()) { notify('Fill in your name, company, topic, and both messages.'); return; }
-      s.templates[type] = { A: fields.A.value.trim(), B: fields.B.value.trim(), topic: fields.topic.value.trim() }; save(s); sync(true);
+      s.templates[type] = { A: fields.A.value.trim(), B: fields.B.value.trim(), C:fields.C.value.trim(), D:fields.D.value.trim(), topic: fields.topic.value.trim() }; save(s); sync(true);
     }));
     if (!state.company || !(state.agent || getAgent())) { settings.open = true; notify('Enter your name and company, then save your templates.'); }
     const slot = getSlot();
@@ -223,7 +246,7 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
             if (pending.offeredSlots?.length) {
               if (!getMeetings) throw new Error('Connect your calendar to check these meeting times.');
               const rows = await getMeetings();
-              if (pending.offeredSlots.some(time => !availableTextMeetings(rows, time - 3600000).includes(time))) throw new Error('An offered time is no longer available. Discard this draft and prepare a new one.');
+              if (pending.offeredSlots.some(time => !textMeetingSlots(rows, Date.now(), 'all').includes(time))) throw new Error('An offered time is no longer available. Discard this draft and prepare a new one.');
               if (pending.offeredSlots.some(time => time < Date.now() + 3600000)) throw new Error('These times need updating. Discard this draft and prepare a new one.');
             }
             if (owner !== getUser()) throw new Error('Your account changed. Reopen your workspace.');
@@ -244,7 +267,7 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
         try {
           const s = read(); let record = s.records.find(r => r.id === pending.id);
           if (!actual.value.trim()) throw new Error('Enter the message you actually sent.');
-          if (!record) { record = { ...pending, body:actual.value.trim(), variant:actual.value.trim() === pending.body ? pending.variant : 'custom', sentAt: Date.now(), localHour:new Date().getHours(), timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone }; s.records.push(record); }
+          if (!record) { record = { ...pending, body:actual.value.trim(), variant:actual.value.trim() === pending.body ? pending.variant : 'custom', sentAt: Date.now(), localHour:centralParts(Date.now()).hour, timeZone:'America/Chicago' }; s.records.push(record); }
           save(s);
           if (!tracking) throw new Error('Switch to Cloud mode to save this text before registering it.');
           if (!record.cloudSaved) {
@@ -279,7 +302,12 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
       }
 
       const prior = state.records.find(r => r.leadId === lead.leadId && r.experiment === experiment);
-      const variant = prior?.variant && ['A','B'].includes(prior.variant) ? prior.variant : chooseTextVariant(state.records, experiment, textVariant(getUser(), lead.leadId, experiment));
+      const afterFive = centralParts(Date.now()).hour >= 17;
+      const eligible = fourVariants && afterFive && calendarRows && Date.now()-calendarAt<60000 && availableTextMeetings(calendarRows,Date.now(),'same-day').length===2;
+      const variants = eligible ? ['A','B','C','D'] : ['A','B'];
+      const timingCohort = eligible ? 'after5-same-day-eligible' : 'standard';
+      const variant = prior?.variant && variants.includes(prior.variant) ? prior.variant : chooseTextVariant(state.records.filter(r=>r.timingCohort===timingCohort), experiment, textVariant(getUser(),lead.leadId,experiment+timingCohort,variants), Math.random, variants);
+      const offerPolicy = ['C','D'].includes(variant) ? 'same-day' : 'standard';
       let body = fillText(templates[variant], { firstName: textFirstName(lead.leadName), agentName: state.agent || getAgent(), company: state.company, topic: templates.topic, meetingTimeA: "", meetingTimeB: "" });
       const preview = el('textarea', '', 'textingPreview'); preview.value = body; preview.readOnly = true; preview.setAttribute('aria-label', `Version ${variant} message preview`);
       root.append(el('h3', displayName(lead.leadName), 'textingName'));
@@ -293,7 +321,7 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
         previewReady = false; preview.value = ''; preview.placeholder = 'Checking your calendar…';
         try {
           if (!getMeetings) throw new Error('Connect your Companion calendar to load meeting times.');
-          const slots = availableTextMeetings(await getMeetings());
+          const slots = availableTextMeetings(await getMeetings(), Date.now(), offerPolicy);
           if (getUser() !== previewOwner || getLead()?.leadId !== lead.leadId || getSlot() !== slot) return;
           if (slots.length < 2) throw new Error('No two open meeting times found in the next seven days. Check your calendar.');
           body = fillText(templates[variant], { firstName:textFirstName(lead.leadName), agentName:state.agent || getAgent(), company:state.company, topic:templates.topic, meetingTimeA:meetingTimeLabel(slots[0]), meetingTimeB:meetingTimeLabel(slots[1]) });
@@ -322,7 +350,7 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
           }
           link.href = smsLink(selectedNumber, preparedBody, /iPhone|iPad|iPod/.test(navigator.userAgent));
           const latest = read();
-          latest.pending[slot] = { id: crypto.randomUUID(), leadId: lead.leadId, name: lead.leadName, number: selectedNumber, phoneType: selectedPhone.label, requestType:type, slot, body: preparedBody, offeredSlots, variant, experiment, registered: false };
+          latest.pending[slot] = { id: crypto.randomUUID(), leadId: lead.leadId, name: lead.leadName, number: selectedNumber, phoneType: selectedPhone.label, requestType:type, slot, body: preparedBody, offeredSlots, variant, timingCohort, offerPolicy, experiment, registered: false };
           if (homeFollowup) delete latest.homeFollowups[lead.leadId];
           save(latest); busy = false; sync(true); openMessage(link.href);
         } catch (error) { notify(error.message); } finally { busy = false; }
@@ -336,10 +364,12 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
     const results = el('details'); results.append(el('summary', 'Texting results and timing'));
     more.append(results);
     results.append(el('p', 'Confirming a sent text also requests the IMPACT call-counter update.'));
-    results.append(el('h3', 'A/B results · current templates'));
+    results.append(el('h3', 'Message results · current templates'));
     for (const row of textStats(state.records, experiment)) results.append(el('p', `${row.variant}: ${row.sent} confirmed sent · ${row.reviewed} outcomes checked · ${row.replies} replies · ${row.appointments} appointments`));
-    results.append(el('p', textingTimeHint(state.records, experiment, Intl.DateTimeFormat().resolvedOptions().timeZone)));
-    results.append(el('p', 'Confirmed texts, numbers, wording, sending time and reported results sync privately to your account in Supabase. Time means when you confirm sending on this device. Unknown outcomes are not counted as no replies. Comparisons use up to 5,000 recent texts and suggest wording only after both versions have 20 checked outcomes.'));
+    results.append(el('h3', 'After 5 · same-day openings available'));
+    for (const row of textStats(state.records.filter(r => r.timingCohort === 'after5-same-day-eligible'), experiment)) results.append(el('p', `${row.variant}: ${row.reviewed} checked · ${row.replies} replies · ${row.appointments} appointments`));
+    results.append(el('p', textingTimeHint(state.records, experiment, 'America/Chicago')));
+    results.append(el('p', 'Confirmed texts, numbers, wording, sending time and reported results sync privately to your account in Supabase. Time means when you confirm sending on this device. Unknown outcomes are not counted as no replies. Comparisons use up to 5,000 recent texts and suggest wording only after every eligible version has 20 checked outcomes in the same timing group.'));
     const history = el('details'); history.append(el('summary', 'Record replies and appointments'));
     for (const record of state.records.filter(r => r.sentAt).slice(-30).reverse()) {
       const row = el('div', `${record.name} · ${record.variant} · ${new Date(record.sentAt).toLocaleDateString()}`);

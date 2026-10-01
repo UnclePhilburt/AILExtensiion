@@ -106,7 +106,7 @@ test('meeting offers skip overlaps and all-day meetings but ignore callbacks', (
  const at = (hour,minute=0) => new Date(2026,9,1,hour,minute).toISOString();
  const rows = [{kind:'appointment',starts_at:at(14,30)}, {kind:'callback',starts_at:at(16)}];
  const slots = c.availableTextMeetings(rows,now);
- assert.deepEqual(Array.from(slots, t=>new Date(t).getHours()),[16,17]);
+ assert.deepEqual(Array.from(slots, t=>new Date(t).getHours()),[16,19]);
  const tomorrow = c.availableTextMeetings([{kind:'appointment',starts_at:at(0),all_day:true}],now);
  assert.equal(new Date(tomorrow[0]).getDate(),2);
  assert.equal(new Date(tomorrow[0]).getHours(),14);
@@ -200,4 +200,25 @@ test('life insurance request comes before Zoom in both variants, while kit intro
  }
  assert.doesNotMatch(c.textTemplates('Child Safe Kit').A,/request to talk with an agent/);
  assert.doesNotMatch(c.textTemplates('Will Kit').A,/request to talk with an agent/);
+});
+
+test('Central schedule handles evening experiments, training, Saturday, Sunday and DST',()=>{
+ const {context:c}=harness();
+ const monday=Date.parse('2026-10-05T17:00:00-05:00');
+ const standard=c.availableTextMeetings([],monday);
+ assert.ok(standard.every(t=>c.centralParts(t).day===6));
+ assert.deepEqual(Array.from(standard,t=>c.centralParts(t).hour),[14,19]);
+ const same=c.availableTextMeetings([],monday,'same-day');
+ assert.ok(same.every(t=>c.centralParts(t).day===5));
+ assert.deepEqual(Array.from(same,t=>c.centralParts(t).hour),[18,19]);
+ const sat=c.availableTextMeetings([],Date.parse('2026-10-03T08:00:00-05:00'));
+ assert.deepEqual(Array.from(sat,t=>c.centralParts(t).hour),[9,13]);
+ const sun=c.availableTextMeetings([],Date.parse('2026-10-04T18:00:00-05:00'));
+ assert.ok(sun.every(t=>c.centralParts(t).day===5));
+ assert.ok(c.meetingTimeLabel(sun[0],Date.parse('2026-10-04T18:00:00-05:00')).startsWith('tomorrow'));
+ const winter=c.availableTextMeetings([],Date.parse('2026-11-01T18:00:00-06:00'));
+ assert.equal(new Date(winter[0]).toISOString(),'2026-11-02T20:00:00.000Z');
+ assert.ok(c.availableTextMeetings([],Date.parse('2026-10-05T19:00:00-05:00'),'same-day').length<2);
+ const variants=new Set(Array.from({length:200},(_,i)=>c.textVariant('user',String(i),'test',['A','B','C','D'])));
+ assert.equal(variants.size,4);
 });
