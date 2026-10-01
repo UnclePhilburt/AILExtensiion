@@ -41,6 +41,7 @@
       const accountId = (value) => { try { return (typeof value === 'string' ? JSON.parse(value) : value)?.user?.id; } catch { return null; } };
       if (!change.newValue || accountId(change.oldValue) !== accountId(change.newValue)) {
         sessionStorage.removeItem('impact.phoneCallContext');
+        sessionStorage.removeItem('impact.callRecovery');
         sessionStorage.removeItem('impact.virtualAppointmentContext');
         sessionStorage.removeItem('impact.pendingResultAdvance');
       }
@@ -794,6 +795,11 @@
 
     commandPollBusy = true;
     try {
+      const recovery=JSON.parse(sessionStorage.getItem('impact.callRecovery')||'null');
+      if(recovery?.phase==='pending'){
+        try{await recoverPhoneCall(recovery.command,recovery);}catch(error){if(JSON.parse(sessionStorage.getItem('impact.callRecovery')||'null')?.phase!=='clicked')sessionStorage.removeItem('impact.callRecovery');await chrome.runtime.sendMessage({type:'impact/commandResult',message:error.message});}
+        return;
+      }
       const response = await chrome.runtime.sendMessage({ type: "impact/getPhoneCommand" });
       if (response?.result && Object.prototype.hasOwnProperty.call(response.result, 'slot')) paintPhoneWindowBadge(response.result.slot);
       const command = response?.result?.command;
@@ -883,9 +889,10 @@
       if (command.type === "call") {
         try {
           void rememberWindowLead(getCurrentLeadId(), true);
-          clickLeadCallButton(command);
-          await log("info", "phone.callControlClicked", { phoneType: command.phoneType });
+          await recoverPhoneCall(command);
+          if(JSON.parse(sessionStorage.getItem("impact.callRecovery")||"null")?.phase==="clicked")await log("info", "phone.callControlClicked", { phoneType: command.phoneType });
         } catch (error) {
+          if(JSON.parse(sessionStorage.getItem("impact.callRecovery")||"null")?.phase!=="clicked")sessionStorage.removeItem("impact.callRecovery");
           await log("warn", "phone.callControlFailed", { reason: error.message });
           await chrome.runtime.sendMessage({ type: "impact/commandResult", message: error.message });
         }
@@ -1233,13 +1240,55 @@
     location.assign(new URL(href, location.origin).href);
   }
 
+  async function recoverPhoneCall(command, pending=null) {
+    const key='impact.callRecovery';
+    const previous=JSON.parse(sessionStorage.getItem(key)||'null');
+    if(command.id && previous?.command?.id===command.id && previous.phase==='clicked')return;
+    const at=Date.parse(command.requestedAt);
+    if(!pending&&(!Number.isFinite(at)||Date.now()-at>15000||at>Date.now()+5000))throw new Error('Call request expired. Tap Call again on your phone.');
+    if(!/^[0-9]{1,20}$/.test(String(command.leadId||'')))throw new Error('Call recovery needs a valid lead.');
+    const stored=await chrome.storage.local.get('impact.supabase.session');
+    const raw=stored['impact.supabase.session'];
+    const user=(typeof raw==='string'?JSON.parse(raw):raw)?.user?.id||'';
+    const lane=await chrome.runtime.sendMessage({type:'impact/windowSlot'});
+    const slot=command.slot||lane?.slot;
+    if(!user||!['1','2'].includes(slot)||lane?.slot!==slot)throw new Error('Call recovery stopped: this account or phone window is no longer connected.');
+    const recovery=pending||{command,slot,user,deadline:at+45000,phase:'pending',reloaded:false};
+    if(recovery.user!==user||recovery.slot!==slot||Date.now()>recovery.deadline)throw new Error('Call recovery timed out or the account changed. Tap Call again.');
+    sessionStorage.setItem(key,JSON.stringify(recovery));
+    const until=Math.min(Date.now()+3000,recovery.deadline);
+    let lastError;
+    do {
+      if(!sessionStorage.getItem(key))throw new Error('Call recovery stopped because your account changed.');
+      if(typeof windowSlot!=='undefined' && windowSlot && windowSlot!==slot)throw new Error('Call recovery stopped because this window changed phones.');
+      try {
+        clickLeadCallButton({...command,requestedAt:new Date().toISOString()});
+        recovery.phase='clicked';sessionStorage.setItem(key,JSON.stringify(recovery));
+        return;
+      }catch(error){
+        // Once the DOM click was attempted its outcome is uncertain: never repeat it.
+        if(JSON.parse(sessionStorage.getItem(key)||'null')?.phase==='clicked')throw error;
+        lastError=error;
+        if(/phone type is unknown|phone number no longer matches/.test(error.message))throw error;
+      }
+      await new Promise(resolve=>setTimeout(resolve,250));
+    }while(Date.now()<until);
+    if(!recovery.reloaded){
+      recovery.reloaded=true;sessionStorage.setItem(key,JSON.stringify(recovery));
+      await chrome.runtime.sendMessage({type:'impact/commandResult',message:'Reconnecting the correct IMPACT lead and retrying Call…'});
+      location.assign(new URL('/Lead/InboxDetail?LeadId='+encodeURIComponent(command.leadId),location.origin).href);
+      return;
+    }
+    throw new Error('Automatic call recovery could not finish. '+lastError.message);
+  }
+
   function clickLeadCallButton(command) {
     if (!command.leadId || command.leadId !== getCurrentLeadId()) throw new Error("Call skipped: the IMPACT lead changed.");
     if (!Number.isFinite(Date.parse(command.requestedAt)) || Date.now() - Date.parse(command.requestedAt) > 15000) throw new Error("Call skipped: request expired.");
     if (!["Mobile", "Home"].includes(command.phoneType)) throw new Error("Call skipped: phone type is unknown.");
     const panel = document.querySelector("#primaryPanel");
     if (!panel) throw new Error("Call skipped: lead panel is unavailable.");
-    const number = extractLabeledPhone(sanitizeText(panel.innerText || panel.textContent || ""), command.phoneType);
+    const number = collectPhoneEntries(panel,sanitizeText(panel.innerText || panel.textContent || "")).find(phone=>phone.label===command.phoneType)?.number;
     if (!number || toDialablePhone(number) !== toDialablePhone(command.phoneNumber)) throw new Error("Call skipped: phone number no longer matches.");
     const controls = Array.from(panel.querySelectorAll(".row.text-center .col-xs-3"))
       .filter((element) => new RegExp(`\\bCall\\s+${command.phoneType}\\b`, "i").test(sanitizeText(element.innerText || element.textContent || "")))
@@ -1249,6 +1298,8 @@
     const target = control.querySelector("button, a, [role='button'], [onclick]") || control;
     if (target.disabled || target.getAttribute("aria-disabled") === "true") throw new Error("Call skipped: IMPACT call control is disabled.");
     sessionStorage.setItem("impact.phoneCallContext", JSON.stringify({ leadId: command.leadId, startedAt: Date.now() }));
+    const recovery=JSON.parse(sessionStorage.getItem('impact.callRecovery')||'null');
+    if(recovery){recovery.phase='clicked';sessionStorage.setItem('impact.callRecovery',JSON.stringify(recovery));}
     clickWithoutDesktopDialer(target);
   }
 
