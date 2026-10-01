@@ -130,3 +130,9 @@ test('assumptive draft uses checked calendar times and blocks opening on calenda
  assert.equal(failed.state().pending['2'],undefined);
  assert.ok(failed.find('Calendar unavailable'));
 });
+
+test('drafts omit organization names from saved company settings and literal wording', () => {
+ const {context:c} = harness();
+ assert.equal(c.fillText('Hi Jane, Cody with {company}.', {company:'American Income Life — Schaefer Organization'}), 'Hi Jane, Cody with American Income Life.');
+ assert.equal(c.fillText('Cody from American Income Life - Schaefer Organization.', {}), 'Cody from American Income Life.');
+});
