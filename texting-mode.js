@@ -43,8 +43,11 @@ export function textTopic(type) {
   if (/child\s*safe/i.test(type)) return 'the child safety kit';
   return 'life insurance information';
 }
+export function withoutOrganization(value) {
+  return String(value || '').replace(/\s*[—–,-]?\s*Schaefer\s+Organization/gi, '').trim();
+}
 export function fillText(template, values) {
-  return String(template).replace(/\{(firstName|agentName|company|topic|meetingTimeA|meetingTimeB)\}/g, (_, key) => values[key] || '');
+  return withoutOrganization(String(template).replace(/\{(firstName|agentName|company|topic|meetingTimeA|meetingTimeB)\}/g, (_, key) => values[key] || ''));
 }
 // One-hour meetings, with at least one hour of notice, in the phone's local time.
 export function availableTextMeetings(rows, now = Date.now()) {
@@ -86,8 +89,8 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
   let refreshAt = 0, refreshing = false, trackingError = '', checkin = null, activeUser = '';
   const key = () => `impact.texting.v1.${getUser()}`;
   function read() {
-    try { return JSON.parse(storage.getItem(key()) || 'null') || { enabled: false, company: 'American Income Life — Schaefer Organization', templates: {}, records: [], pending: {} }; }
-    catch { return { enabled: false, company: 'American Income Life — Schaefer Organization', templates: {}, records: [], pending: {} }; }
+    try { return JSON.parse(storage.getItem(key()) || 'null') || { enabled: false, company: 'American Income Life', templates: {}, records: [], pending: {} }; }
+    catch { return { enabled: false, company: 'American Income Life', templates: {}, records: [], pending: {} }; }
   }
   function save(value) { storage.setItem(key(), JSON.stringify(value)); }
   async function refresh() {
@@ -126,6 +129,7 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
     if (busy) return;
     rendered = identity;
     const state = read();
+    state.company = withoutOrganization(state.company) || 'American Income Life';
     const heading = el('h2', 'Text a lead');
     const settingsLink = el('a', 'Settings'); settingsLink.href = 'settings.html?from=workspace';
     const header = el('div', '', 'textingHeader'); header.append(heading, settingsLink);
@@ -159,7 +163,7 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
     const experiment = textHash(JSON.stringify([type, templates, state.company]));
     const settings = el('details'); settings.append(el('summary', `Edit A/B messages · ${type}`));
     const fields = {};
-    for (const [id, label, value] of [['company','Agency / company name',state.company], ['agent','Your name',state.agent || getAgent()], ['topic','Topic for this lead type',templates.topic], ['A','Version A',templates.A], ['B','Version B',templates.B]]) {
+    for (const [id, label, value] of [['company','Company name',state.company], ['agent','Your name',state.agent || getAgent()], ['topic','Topic for this lead type',templates.topic], ['A','Version A',templates.A], ['B','Version B',templates.B]]) {
       const wrapper = el('label', label); const field = el(id === 'A' || id === 'B' ? 'textarea' : 'input'); field.value = value || ''; field.maxLength = 1200; wrapper.append(field); settings.append(wrapper); fields[id] = field;
     }
     settings.append(el('p', 'Version A checks meetings saved in your Companion calendar before offering two times between 2 and 8 p.m. Callbacks do not block times. Meetings are treated as one hour long. Version B asks when the client is usually available.'));
