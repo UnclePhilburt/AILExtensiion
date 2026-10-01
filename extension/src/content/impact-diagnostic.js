@@ -1289,7 +1289,8 @@
     const panel = document.querySelector("#primaryPanel");
     if (!panel) throw new Error("Call skipped: lead panel is unavailable.");
     const number = collectPhoneEntries(panel,sanitizeText(panel.innerText || panel.textContent || "")).find(phone=>phone.label===command.phoneType)?.number;
-    if (!number || toDialablePhone(number) !== toDialablePhone(command.phoneNumber)) throw new Error("Call skipped: phone number no longer matches.");
+    if (!number) throw new Error("Call skipped: IMPACT phone number has not loaded.");
+    if (toDialablePhone(number) !== toDialablePhone(command.phoneNumber)) throw new Error("Call skipped: phone number no longer matches.");
     const controls = Array.from(panel.querySelectorAll(".row.text-center .col-xs-3"))
       .filter((element) => new RegExp(`\\bCall\\s+${command.phoneType}\\b`, "i").test(sanitizeText(element.innerText || element.textContent || "")))
       .filter((element) => element.getClientRects().length && element.getAttribute("aria-disabled") !== "true");
