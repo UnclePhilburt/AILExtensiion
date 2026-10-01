@@ -1,4 +1,5 @@
 import { buildLeadProfile } from './lead-profile.js';
+import { createTextingMode } from './texting-mode.js?v=1';
 import { installLeadSwipe } from './lead-swipe.js?v=5';
 import { createScriptOverlay } from './script-overlay.js?v=5';
 import { client, accessToken } from './auth-runtime.js';
@@ -87,6 +88,16 @@ let timingOutcomesFetchedAt = 0;
 let quietHoursSkippedLeadKey = "";
 // The appointment that should be texted right now (morning, within the hour, or starting).
 let dueReminder = null;
+const textingMode = typeof createTextingMode === 'function' ? createTextingMode(document.querySelector('#textingMode'), {
+  storage: localStorage,
+  getUser: () => signedIn ? currentUserId : '',
+  getSlot: thisPhoneSlot,
+  getLead: () => displayedLead,
+  getAgent: () => loadPhoneSettings(localStorage).firstName,
+  registerCall: (draft) => sendComputerCommand('call', {
+    leadId: draft.leadId, phoneType: draft.phoneType, phoneNumber: draft.number, slot: draft.slot
+  })
+}) : null;
 
 const savedBridgeUrl = localStorage.getItem("impact.bridgeUrl") || "";
 const savedBridgeToken = localStorage.getItem("impact.bridgeToken") || "";
@@ -809,6 +820,7 @@ function scheduleQuietHoursSkip(lead, quietHoursWarning) {
 }
 
 function renderLead(lead, updatedAt, source, transition = "") {
+  textingMode?.sync();
   const historyCard = document.querySelector("#callHistory");
   const nextKey = getLeadKey(lead);
   if (leadCard.dataset.profileKey && nextKey !== leadCard.dataset.profileKey) {
