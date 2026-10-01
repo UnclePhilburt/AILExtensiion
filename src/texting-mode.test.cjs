@@ -159,12 +159,32 @@ test('Home-only leads can open a text and register against the Home number', asy
  assert.equal(h.calls[0].phoneType,'Home');
  assert.equal(h.calls[0].number,'3145550123');
 });
-test('number picker defaults to Mobile but allows selecting Home', async () => {
+test('cell is chosen automatically without a number picker', async () => {
  const h=harness({getLead:()=>({available:true,leadId:'both',leadName:'Jane',phones:[{label:'Home',number:'3145550123'},{label:'Mobile',number:'3145550100'}]})});
- const picker=h.all().find(n=>n.tag==='select');
- assert.equal(picker.value,'3145550100');
- picker.value='3145550123';
+ assert.equal(h.all().some(n=>n.tag==='select'),false);
+ await prepare(h);
+ assert.equal(h.state().pending['2'].number,'3145550100');
+ assert.equal(h.state().pending['2'].phoneType,'Mobile');
+});
+test('No reply automatically prepares the different Home number and tracks it separately', async () => {
+ const record={id:'old',leadId:'123',name:'Jane',number:'3145550100',body:'Original',sentAt:Date.now()-86400000,variant:'B',experiment:'old',slot:'2'};
+ const h=harness({getLead:()=>({available:true,leadId:'123',leadName:'Jane',phones:[{label:'Mobile',number:'3145550100'},{label:'Home',number:'3145550123'}]}),tracking:{save:async()=>{},list:async()=>[record],checkin:async()=>record,outcome:async()=>{}}});
+ await new Promise(resolve=>setImmediate(resolve));
+ await h.find('No reply').events.click();
+ assert.equal(h.all().some(n=>n.tag==='select'),false);
  await prepare(h);
  assert.equal(h.state().pending['2'].number,'3145550123');
  assert.equal(h.state().pending['2'].phoneType,'Home');
+ assert.equal(h.state().homeFollowups['123'],undefined);
+ await h.find('I sent it').events.click();
+ assert.equal(h.calls[0].phoneType,'Home');
+ assert.equal(h.state().records.length,2);
+});
+test('No reply does not offer the same number again when Home and Mobile match', async () => {
+ const record={id:'old',leadId:'123',name:'Jane',number:'+13145550100',body:'Original',sentAt:Date.now()-86400000,variant:'B',experiment:'old',slot:'2'};
+ const h=harness({getLead:()=>({available:true,leadId:'123',leadName:'Jane',phones:[{label:'Mobile',number:'3145550100'},{label:'Home',number:'(314) 555-0100'}]}),tracking:{save:async()=>{},list:async()=>[record],checkin:async()=>record,outcome:async()=>{}}});
+ await new Promise(resolve=>setImmediate(resolve));
+ await h.find('No reply').events.click();
+ assert.equal(h.find('Open in Messages').hidden,true);
+ assert.ok(h.find('No different Home number is available.'));
 });

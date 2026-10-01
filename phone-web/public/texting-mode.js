@@ -83,9 +83,10 @@ export function textStats(records, experiment) {
   });
 }
 
-export function createTextingMode(root, { storage, getUser, getSlot, getLead, getAgent, registerCall, isEnabled = () => true, tracking = null, getMeetings = null, openMessage = href => { window.location.href = href; } }) {
+export function createTextingMode(root, { storage, getUser, getSlot, getLead, getAgent, registerCall, isEnabled = () => true, tracking = null, getMeetings = null, activateLead = null, openMessage = href => { window.location.href = href; } }) {
   if (!root) return { sync() {} };
-  let rendered = '', busy = false;
+  let rendered = '', busy = false, openingFollowup = '';
+  const numberKey = number => String(number || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
   let refreshAt = 0, refreshing = false, trackingError = '', checkin = null, activeUser = '';
   const key = () => `impact.texting.v1.${getUser()}`;
   function read() {
@@ -119,7 +120,7 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
   function button(text, action) { const b = el('button', text); b.type = 'button'; b.addEventListener('click', action); return b; }
   function sync(force = false) {
     const lead = getLead();
-    if (activeUser !== getUser()) { activeUser = getUser(); checkin = null; refreshAt = 0; trackingError = ''; rendered = ''; }
+    if (activeUser !== getUser()) { activeUser = getUser(); openingFollowup = ''; checkin = null; refreshAt = 0; trackingError = ''; rendered = ''; }
     root.hidden = !getUser() || !isEnabled();
     if (!getUser()) { root.replaceChildren(); rendered = ''; return; }
     if (!isEnabled()) return;
@@ -150,7 +151,13 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
             if (replied !== null) {
               await tracking.outcome(item.id, replied, appointment);
               const s = read(); const row = s.records.find(r => r.id === item.id);
-              if (row) { row.replied = replied; if (appointment) row.appointment = true; } save(s);
+              if (row) { row.replied = replied; if (appointment) row.appointment = true; }
+              if (replied === false) {
+                s.homeFollowups ||= {};
+                s.homeFollowups[item.leadId] = { leadId:item.leadId, name:item.name, number:item.number };
+                if (s.pending[getSlot()]?.registered) delete s.pending[getSlot()];
+              }
+              save(s);
             }
             checkin = null; sync(true);
           } catch (error) { notify(error.message); }
@@ -176,6 +183,19 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
     if (!state.company || !(state.agent || getAgent())) { settings.open = true; notify('Enter your name and company, then save your templates.'); }
     const slot = getSlot();
     const pending = state.pending[slot];
+    const followup = Object.values(state.homeFollowups || {})[0];
+    if (!pending && followup && String(lead?.leadId) !== String(followup.leadId)) {
+      notify('Opening ' + displayName(followup.name) + ' to prepare the Home-number follow-up…');
+      if (activateLead && openingFollowup !== followup.leadId) {
+        openingFollowup = followup.leadId;
+        const owner = getUser();
+        Promise.resolve(activateLead(followup.leadId)).catch(error => {
+          if (getUser() === owner) { openingFollowup = ''; notify(error.message); }
+        });
+      }
+    }
+    if (followup && String(lead?.leadId) === String(followup.leadId)) openingFollowup = '';
+
     if (pending) {
       root.append(el('h3', displayName(pending.name), 'textingName'), el('p', pending.number, 'textingRecipient'));
       const sent = state.records.find(r => r.id === pending.id)?.sentAt;
@@ -243,16 +263,22 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
       if (sent) root.append(finish); else more.append(finish);
     } else if (lead?.available) {
       const phones = (lead.phones || []).filter(p => ['Mobile', 'Home'].includes(p.label) && p.number).sort((a, b) => Number(b.label === 'Mobile') - Number(a.label === 'Mobile'));
-      const select = el('select'); select.setAttribute('aria-label', 'Phone number to text');
-      for (const phone of phones) { const option = el('option', `${phone.label} · ${phone.number}`); option.value = phone.number; select.append(option); }
-      select.value = phones[0]?.number || '';
+      const homeFollowup = state.homeFollowups?.[lead.leadId];
+      const home = phones.find(phone => phone.label === 'Home' && numberKey(phone.number) !== numberKey(homeFollowup?.number));
+      const homeAlreadySent = home && state.records.some(record => record.leadId === lead.leadId && record.sentAt && numberKey(record.number) === numberKey(home.number));
+      const selectedPhone = homeFollowup ? (homeAlreadySent ? null : home) : phones[0];
+      const selectedNumber = selectedPhone?.number || '';
+      if (homeFollowup && !selectedPhone) {
+        const latest = read(); delete latest.homeFollowups[lead.leadId]; save(latest);
+        notify(homeAlreadySent ? 'The Home number has already been texted.' : 'No different Home number is available.');
+      }
+
       const prior = state.records.find(r => r.leadId === lead.leadId && r.experiment === experiment);
       const variant = prior?.variant && ['A','B'].includes(prior.variant) ? prior.variant : chooseTextVariant(state.records, experiment, textVariant(getUser(), lead.leadId, experiment));
       let body = fillText(templates[variant], { firstName: textFirstName(lead.leadName), agentName: state.agent || getAgent(), company: state.company, topic: templates.topic, meetingTimeA: "", meetingTimeB: "" });
       const preview = el('textarea', '', 'textingPreview'); preview.value = body; preview.readOnly = true; preview.setAttribute('aria-label', `Version ${variant} message preview`);
       root.append(el('h3', displayName(lead.leadName), 'textingName'));
-      if (phones.length > 1) root.append(select);
-      else if (phones.length) root.append(el('p', `${phones[0].label} · ${phones[0].number}`, 'textingRecipient'));
+      if (selectedPhone) root.append(el('p', `${selectedPhone.label} · ${selectedNumber}`, 'textingRecipient'));
       root.append(preview);
       const needsTimes = /\{meetingTime[AB]\}/.test(templates[variant]);
       let previewReady = !needsTimes;
@@ -278,7 +304,7 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
         if (getLead()?.leadId !== lead.leadId) { event.preventDefault(); notify('The lead changed. Prepare its new draft.'); return; }
         try {
           const s = read();
-          if (s.records.some(r => r.leadId === lead.leadId && r.experiment === experiment && r.sentAt)) { event.preventDefault(); notify('You already marked a text sent to this lead in this comparison.'); return; }
+          if (s.records.some(r => r.leadId === lead.leadId && r.experiment === experiment && r.sentAt && (!homeFollowup || numberKey(r.number) === numberKey(selectedNumber)))) { event.preventDefault(); notify('You already marked a text sent to this lead in this comparison.'); return; }
           let preparedBody = body, offeredSlots = [];
           if (/\{meetingTime[AB]\}/.test(templates[variant])) {
             if (!getMeetings) throw new Error('Connect your Companion calendar before offering meeting times.');
@@ -289,15 +315,16 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
             if (offeredSlots.length < 2) throw new Error('There are not two open meeting times in the next seven days. Check your calendar or edit the message.');
             preparedBody = fillText(templates[variant], { firstName:textFirstName(lead.leadName), agentName:state.agent || getAgent(), company:state.company, topic:templates.topic, meetingTimeA:meetingTimeLabel(offeredSlots[0]), meetingTimeB:meetingTimeLabel(offeredSlots[1]) });
           }
-          link.href = smsLink(select.value, preparedBody, /iPhone|iPad|iPod/.test(navigator.userAgent));
+          link.href = smsLink(selectedNumber, preparedBody, /iPhone|iPad|iPod/.test(navigator.userAgent));
           const latest = read();
-          latest.pending[slot] = { id: crypto.randomUUID(), leadId: lead.leadId, name: lead.leadName, number: select.value, phoneType: phones.find(phone => phone.number === select.value)?.label, requestType:type, slot, body: preparedBody, offeredSlots, variant, experiment, registered: false };
+          latest.pending[slot] = { id: crypto.randomUUID(), leadId: lead.leadId, name: lead.leadName, number: selectedNumber, phoneType: selectedPhone.label, requestType:type, slot, body: preparedBody, offeredSlots, variant, experiment, registered: false };
+          if (homeFollowup) delete latest.homeFollowups[lead.leadId];
           save(latest); busy = false; sync(true); openMessage(link.href);
         } catch (error) { notify(error.message); } finally { busy = false; }
       });
       root.append(link);
       root.append(button('Copy message', async () => { try { if (!previewReady) { await loadPreviewTimes(); if (!previewReady) return; } await navigator.clipboard.writeText(body); notify('Copied. Paste it into Messages if the draft does not fill automatically.'); } catch { notify('Select and copy the message above.'); } }));
-      if (!phones.length) { link.hidden = true; notify('No home or mobile number is listed for this lead.'); }
+      if (!selectedPhone) { link.hidden = true; if (!homeFollowup) notify('No home or mobile number is listed for this lead.'); }
     } else root.append(el('p', 'Open a lead in IMPACT to prepare a message.'));
     more.append(settings);
     if (settings.open) more.open = true;
