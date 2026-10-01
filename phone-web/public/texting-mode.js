@@ -248,13 +248,28 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
       select.value = phones[0]?.number || '';
       const prior = state.records.find(r => r.leadId === lead.leadId && r.experiment === experiment);
       const variant = prior?.variant && ['A','B'].includes(prior.variant) ? prior.variant : chooseTextVariant(state.records, experiment, textVariant(getUser(), lead.leadId, experiment));
-      const body = fillText(templates[variant], { firstName: textFirstName(lead.leadName), agentName: state.agent || getAgent(), company: state.company, topic: templates.topic, meetingTimeA: "[checking available times]", meetingTimeB: "[checking available times]" });
+      let body = fillText(templates[variant], { firstName: textFirstName(lead.leadName), agentName: state.agent || getAgent(), company: state.company, topic: templates.topic, meetingTimeA: "", meetingTimeB: "" });
       const preview = el('textarea', '', 'textingPreview'); preview.value = body; preview.readOnly = true; preview.setAttribute('aria-label', `Version ${variant} message preview`);
       root.append(el('h3', displayName(lead.leadName), 'textingName'));
       if (phones.length > 1) root.append(select);
       else if (phones.length) root.append(el('p', phones[0].number, 'textingRecipient'));
       root.append(preview);
-      if (/\{meetingTime[AB]\}/.test(templates[variant])) root.append(el('p', 'Open Messages to fill in two available meeting times.', 'textingHint'));
+      const needsTimes = /\{meetingTime[AB]\}/.test(templates[variant]);
+      let previewReady = !needsTimes;
+      const previewOwner = getUser();
+      async function loadPreviewTimes() {
+        if (!needsTimes) return;
+        previewReady = false; preview.value = ''; preview.placeholder = 'Checking your calendar…';
+        try {
+          if (!getMeetings) throw new Error('Connect your Companion calendar to load meeting times.');
+          const slots = availableTextMeetings(await getMeetings());
+          if (getUser() !== previewOwner || getLead()?.leadId !== lead.leadId || getSlot() !== slot) return;
+          if (slots.length < 2) throw new Error('No two open meeting times found in the next seven days. Check your calendar.');
+          body = fillText(templates[variant], { firstName:textFirstName(lead.leadName), agentName:state.agent || getAgent(), company:state.company, topic:templates.topic, meetingTimeA:meetingTimeLabel(slots[0]), meetingTimeB:meetingTimeLabel(slots[1]) });
+          preview.value = body; previewReady = true;
+        } catch (error) { preview.placeholder = 'Meeting times could not load.'; notify(error.message); }
+      }
+      void loadPreviewTimes();
       const link = el('a', 'Open in Messages', 'download'); link.href = '#';
       link.addEventListener('click', async event => {
         event.preventDefault();
@@ -281,7 +296,7 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
         } catch (error) { notify(error.message); } finally { busy = false; }
       });
       root.append(link);
-      if (!/\{meetingTime[AB]\}/.test(templates[variant])) root.append(button('Copy message', async () => { try { await navigator.clipboard.writeText(body); notify('Copied. Paste it into Messages if the draft does not fill automatically.'); } catch { notify('Select and copy the message above.'); } }));
+      root.append(button('Copy message', async () => { try { if (!previewReady) { await loadPreviewTimes(); if (!previewReady) return; } await navigator.clipboard.writeText(body); notify('Copied. Paste it into Messages if the draft does not fill automatically.'); } catch { notify('Select and copy the message above.'); } }));
       if (!phones.length) { link.hidden = true; notify('No mobile number is listed for this lead.'); }
     } else root.append(el('p', 'Open a lead in IMPACT to prepare a message.'));
     more.append(settings);

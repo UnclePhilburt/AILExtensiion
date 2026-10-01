@@ -120,7 +120,7 @@ test('assumptive draft uses checked calendar times and blocks opening on calenda
  state.templates['Response Card']={A:'I have {meetingTimeA} or {meetingTimeB} open for Zoom.',B:'I have {meetingTimeA} or {meetingTimeB} open for Zoom.',topic:'insurance'};
  h.storage.setItem('impact.texting.v1.user',JSON.stringify(state)); h.mode.sync(true);
  await prepare(h);
- assert.equal(reads,1);
+ assert.ok(reads >= 2, "preview loads availability and opening rechecks it");
  assert.equal(h.state().pending['2'].offeredSlots.length,2);
  assert.doesNotMatch(decodeURIComponent(opened), /checking available|meetingTime/);
  const failed=harness({getMeetings: async()=>{throw new Error('Calendar unavailable');},openMessage:()=>assert.fail('must not open unchecked offer')});
@@ -135,4 +135,16 @@ test('drafts omit organization names from saved company settings and literal wor
  const {context:c} = harness();
  assert.equal(c.fillText('Hi Jane, Cody with {company}.', {company:'American Income Life — Schaefer Organization'}), 'Hi Jane, Cody with American Income Life.');
  assert.equal(c.fillText('Cody from American Income Life - Schaefer Organization.', {}), 'Cody from American Income Life.');
+});
+
+test('assumptive preview resolves actual dates and times before opening Messages', async () => {
+ const h=harness(); const state=h.state();
+ state.templates['Response Card']={A:'Zoom at {meetingTimeA} or {meetingTimeB}?', B:'Zoom at {meetingTimeA} or {meetingTimeB}?', topic:'insurance'};
+ h.storage.setItem('impact.texting.v1.user',JSON.stringify(state)); h.mode.sync(true);
+ await new Promise(resolve=>setImmediate(resolve));
+ const preview=h.all().find(n=>n.className==='textingPreview');
+ assert.match(preview.value, /Zoom at .+\d.+ or .+\d/);
+ assert.doesNotMatch(preview.value, /checking|meetingTime/i);
+ assert.equal(h.state().pending['2'],undefined);
+ assert.ok(h.find('Copy message'));
 });
