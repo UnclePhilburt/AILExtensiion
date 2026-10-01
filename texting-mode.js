@@ -5,14 +5,14 @@ const LEGACY_TEXTS = {
   B: 'Hi {firstName}, {agentName} here with {company}, reaching out about {topic}. Would earlier or later in the day work better for a brief conversation? Reply STOP to opt out.'
 };
 export const DEFAULT_TEXTS = {
-  A: 'Hi {firstName}, this is {agentName} with {company}. I wanted to check in about {topic}. When would be a good time to talk?',
-  B: 'Hey {firstName}, this is {agentName} with {company}. Do you have a few minutes to go over {topic} sometime today?'
+  A: 'Hi {firstName}, this is {agentName} with {company}. I wanted to set up a Zoom meeting to go over {topic}. What day and time works for you?',
+  B: 'Hey {firstName}, this is {agentName} with {company}. Would earlier or later in the day work better for a Zoom meeting to go over {topic}?'
 };
 export function textTemplates(type, saved) {
   const childSafe = /child[\s-]*safe/i.test(type);
   const defaults = childSafe ? {
-    A: 'Hi {firstName}, this is {agentName} from American Income Life with the Child Safe Program. I wanted to touch base about the Child Safe Kit. When would be a good time to talk?',
-    B: 'Hey {firstName}, this is {agentName} from American Income Life with the Child Safe Program. Do you have a few minutes to go over the Child Safe Kit sometime today?'
+    A: 'Hi {firstName}, this is {agentName} from American Income Life with the Child Safe Program. I wanted to set up a Zoom meeting to go over the Child Safe Kit with you. What day and time works for you?',
+    B: 'Hey {firstName}, this is {agentName} from American Income Life with the Child Safe Program. Would earlier or later in the day work better for a Zoom meeting to go over the Child Safe Kit?'
   } : DEFAULT_TEXTS;
   const result = { ...defaults, topic: textTopic(type), ...saved };
   for (const variant of ['A', 'B']) {
