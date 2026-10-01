@@ -288,7 +288,7 @@
     const text = sanitizeText(panel.innerText || panel.textContent || "");
     return {
       available: true,
-      leadName: extractLeadName(text),
+      leadName: extractContactName(panel, text),
       leadId: root === document ? getCurrentLeadId() : "",
       requestType: collectRequestType(panel),
       callHistory: collectCallHistory(panel),
@@ -658,7 +658,7 @@
       throw new Error('The inbox page did not finish loading. Import again to resume safely.');
     }
     async function run() {
-      if(importing)return;importing=true;button.disabled=true;let added=0,read=0;
+      if(importing)return;importing=true;button.disabled=true;let added=0,read=0;const skipped=[];
       try {
         const ready=await request({type:'impact/planStatus'});owner=ready.userId;
         if(!ready.enabled)throw new Error('Open Follow-up plan on the Companion website once, then try Import inbox again.');
@@ -685,7 +685,12 @@
             if(!response.ok)throw new Error('Could not read a lead. Import again to resume.');
             const doc=new DOMParser().parseFromString(await response.text(),'text/html');
             const lead=collectLocalLeadPreview(doc,'follow-up-import');lead.leadId=item.leadId;
-            if(!lead.available||!lead.leadName||!lead.phones?.length)throw new Error('A lead is missing details or phone numbers. Open it in IMPACT, then retry the import.');
+            if(!lead.available)throw new Error('IMPACT did not return the contact panel for lead '+item.leadId+'. Your session may have expired. Refresh IMPACT, sign in if needed, then retry.');
+            if(!lead.leadName||!lead.phones?.length){
+              skipped.push({id:item.leadId,reason:!lead.leadName?'name not recognized':'phone field not recognized'});read++;
+              status.textContent='Continuing import · lead '+item.leadId+': '+skipped[skipped.length-1].reason;
+              continue;
+            }
             const result=await request({type:'impact/planImport',expectedUser:owner,leads:[{leadId:lead.leadId,leadName:lead.leadName,requestType:lead.requestType,phones:lead.phones,callHistory:lead.callHistory}],note:'Import in progress: '+(read+1)+' read'});
             added+=result.added;read++;await pause(200);
           }
@@ -695,8 +700,9 @@
           await changePage(next);
         }
         if(read!==expected)throw new Error('Imported '+read+' of '+expected+' leads. The inbox changed or pagination stopped; import again to finish.');
-        await request({type:'impact/planImport',expectedUser:owner,leads:[],note:'Import complete: '+read+' leads read, '+added+' new leads added.'});
-        status.textContent='Done: '+read+' leads checked · '+added+' new leads added. Open Follow-up plan on your phone.';
+        await request({type:'impact/planImport',expectedUser:owner,leads:[],note:'Import checked '+read+' leads, '+added+' new leads added.'+(skipped.length?' '+skipped.length+' need review: '+skipped.map(x=>x.id+' ('+x.reason+')').join(', '):'')});
+        status.textContent='Done: '+read+' leads checked · '+added+' new leads added.';
+        if(skipped.length){status.append(document.createTextNode(' '+skipped.length+' need review: '));for(const item of skipped){const link=document.createElement('a');link.href='/Lead/InboxDetail?LeadId='+encodeURIComponent(item.id);link.textContent='Lead '+item.id+' — '+item.reason;link.style.display='block';link.target='_blank';link.rel='noopener';status.append(link);}}else status.append(document.createTextNode(' Open Follow-up plan on your phone.'));
       }catch(error){status.textContent=error.message+' Saved leads will not be duplicated.';}
       finally{importing=false;button.disabled=false;}
     }
@@ -2027,9 +2033,29 @@
     return sanitizeText(beforeMap.replace(/editpublic/gi, " ").replace(/\bplace\b/gi, " "));
   }
 
+  function extractContactName(panel, text) {
+    const contact=panel.querySelector('a[href*="EditRefferralLead"], a[href*="EditReferralLead"], a[href*="EditLead"]') || panel.querySelector('p.list-group-item-text')?.closest('a');
+    const name=contact?.querySelector('span');
+    return sanitizeText(name?.innerText || name?.textContent || '') || extractLeadName(text);
+  }
+
   function collectPhoneEntries(panel, text) {
     const entries = [];
+    for(const field of panel.querySelectorAll('span, label, dt')) {
+      const labelText=sanitizeText(field.innerText||field.textContent||'');
+      if(!/^(Mobile|Cell(?:ular)?|Home)(?:\s*(Phone|Number))?\s*:?$/i.test(labelText))continue;
+      const value=field.nextElementSibling;
+      const number=extractFirstPhone(value?.innerText||value?.textContent||'');
+      if(number)entries.push({label:/home/i.test(labelText)?'Home':'Mobile',number,dialHref:'tel:'+toDialablePhone(number),source:'contact-field'});
+    }
 
+    for(const row of panel.querySelectorAll('p.list-group-item-text, .form-group, tr')) {
+      const value=sanitizeText(row.innerText || row.textContent || '');
+      for(const label of ['Mobile','Home']) {
+        const phone=extractLabeledPhone(value,label);
+        if(phone)entries.push({label,number:phone,dialHref:'tel:'+toDialablePhone(phone),source:'contact-row'});
+      }
+    }
     for (const label of ["Mobile", "Home"]) {
       const labeledPhone = extractLabeledPhone(text, label);
       if (labeledPhone) {
@@ -2044,14 +2070,14 @@
 
     for (const element of panel.querySelectorAll("a[href^='tel:'], a[id*='phone' i], a[href*='Call' i]")) {
       const href = element.getAttribute("href") || "";
-      const textValue = sanitizeText(element.innerText || element.textContent || "");
+      const textValue = sanitizeText((element.innerText || element.textContent || "")+" "+(element.getAttribute("aria-label")||"")+" "+(element.getAttribute("title")||""));
       const phone = extractFirstPhone(`${href} ${textValue}`);
       if (!phone) {
         continue;
       }
 
       entries.push({
-        label: /mobile/i.test(textValue) ? "Mobile" : /home/i.test(textValue) ? "Home" : "Phone",
+        label: /mobile|cell/i.test(textValue) ? "Mobile" : "Home",
         number: phone,
         dialHref: `tel:${toDialablePhone(phone)}`,
         source: "call-link"
@@ -2062,8 +2088,9 @@
   }
 
   function extractLabeledPhone(text, label) {
-    const match = text.match(new RegExp(`${escapeRegExp(label)}:\\s*(${PHONE_PATTERN.source})`, "i"));
-    return normalizeDisplayPhone(match?.[1] || "");
+    const aliases=label==='Mobile'?'(?:Mobile|Cell(?:ular)?)':'Home';
+    const match=text.match(new RegExp(aliases+'(?:\\s*(?:Phone|Number))?\\s*:?\\s*('+PHONE_PATTERN.source+')','i'));
+    return normalizeDisplayPhone(match?.[1] || '');
   }
 
   function extractFirstPhone(value) {

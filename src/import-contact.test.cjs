@@ -1,0 +1,10 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const vm=require('node:vm');const fs=require('node:fs');
+const source=fs.readFileSync('extension/src/content/impact-diagnostic.js','utf8');
+const block=(a,b)=>source.slice(source.indexOf(a),source.indexOf(b,source.indexOf(a)));
+const ctx=vm.createContext({});
+vm.runInContext(source.match(/  const PHONE_PATTERN = .*;/)[0]+block('  function extractLeadName','  // Optional')+block('  function extractContactName','  function collectDetailCandidates')+block('  function sanitizeText','  function redactCustomerText'),ctx);
+test('contact name comes from its field even when mixed case or a single letter',()=>{for(const name of ['Doe, Jane','LI, A','Smith-Jones, Mary Ann'])assert.equal(ctx.extractContactName({querySelector:()=>({querySelector:()=>({textContent:name})})},''),name);});
+test('detached contact rows recognize mobile, cell and home label formats',()=>{for(const label of ['Mobile:','Mobile Phone:','Cell Number:','Cellular','Mobile'])assert.equal(ctx.extractLabeledPhone(label+' (314) 555-0100','Mobile'),'(314) 555-0100');assert.equal(ctx.extractLabeledPhone('Mobile: Home: (314) 555-0101','Mobile'),'');assert.equal(ctx.extractLabeledPhone('Mobile: Home: (314) 555-0101','Home'),'(314) 555-0101');});
+test('Home-only contact works and a bare telephone link remains importable',()=>{const row={textContent:'Home: (314) 555-0101'};const p={querySelectorAll:s=>s.startsWith('p.')?[row]:[]};assert.equal(ctx.collectPhoneEntries(p,'')[0].label,'Home');const anchor={textContent:'Call',getAttribute:key=>key==='href'?'tel:+13145550100':''};const links={querySelectorAll:s=>s.startsWith('p.')?[]:[anchor]};assert.equal(ctx.collectPhoneEntries(links,'')[0].label,'Home');});
+
+test('phone value is read from the label sibling even with an icon between text and digits',()=>{const field={textContent:'Mobile:',nextElementSibling:{textContent:'phone (314) 555-0100'}};const panel={querySelectorAll:s=>s==='span, label, dt'?[field]:[]};assert.equal(ctx.collectPhoneEntries(panel,'Mobile:phone (314) 555-0100')[0].number,'(314) 555-0100');});
