@@ -309,7 +309,7 @@ html[data-theme="dark"][data-lead-paper="beige"] .workspace .leadCard h2 { color
 [data-texting-mode] .workspace #pendingCallNotice,
 [data-texting-mode] .workspace #appointmentPicker,
 [data-texting-mode] .workspace .scriptOverlay,
-[data-texting-mode] .workspace .scriptOpener,
+[data-texting-mode] .workspace .scriptOpen,
 [data-texting-mode] .workspace .swipeHint { display: none !important; }
 .textingMode textarea { min-height: 180px; line-height: 1.55; }
 .textingMode .download { font-weight: 700; text-decoration: none; }
