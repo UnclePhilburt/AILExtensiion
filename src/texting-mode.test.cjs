@@ -91,8 +91,8 @@ test('natural message defaults normalize names and upgrade saved original templa
   for (const type of ['Child Safe Kit', 'ChildSafe', 'Will Kit', 'Response Card']) {
     const templates = c.textTemplates(type);
     assert.doesNotMatch(templates.A + templates.B, /STOP|opt out/i);
-    assert.match(templates.A, /Zoom meeting/);
-    assert.match(templates.B, /Zoom meeting/);
+    assert.match(templates.A, /Zoom/);
+    assert.match(templates.B, /Zoom/);
     if (/Child/.test(type)) assert.match(templates.A, /American Income Life with the Child Safe Program/);
   }
   const old = 'Hi {firstName}, this is {agentName} with {company}. I am reaching out about {topic}. Is there a good time for a brief conversation? Reply STOP to opt out.';
@@ -187,4 +187,17 @@ test('No reply does not offer the same number again when Home and Mobile match',
  await h.find('No reply').events.click();
  assert.equal(h.find('Open in Messages').hidden,true);
  assert.ok(h.find('No different Home number is available.'));
+});
+
+test('life insurance request comes before Zoom in both variants, while kit intros stay specific', () => {
+ const {context:c}=harness();
+ for(const type of ['Life Insurance Options','Response Card']) {
+  const drafts=c.textTemplates(type);
+  for(const variant of ['A','B']) {
+   assert.ok(drafts[variant].includes('request to talk with an agent about life insurance options'));
+   assert.ok(drafts[variant].indexOf('life insurance') < drafts[variant].indexOf('Zoom'));
+  }
+ }
+ assert.doesNotMatch(c.textTemplates('Child Safe Kit').A,/request to talk with an agent/);
+ assert.doesNotMatch(c.textTemplates('Will Kit').A,/request to talk with an agent/);
 });
