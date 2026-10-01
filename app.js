@@ -1,5 +1,5 @@
 import { buildLeadProfile } from './lead-profile.js';
-import { createTextingMode } from './texting-mode.js?v=11';
+import { createTextingMode } from './texting-mode.js?v=12';
 import { textTracking } from './text-tracking.js';
 import { installLeadSwipe } from './lead-swipe.js?v=5';
 import { createScriptOverlay } from './script-overlay.js?v=5';
@@ -97,6 +97,11 @@ const textingMode = typeof createTextingMode === 'function' ? createTextingMode(
   getAgent: () => loadPhoneSettings(localStorage).firstName,
   isEnabled: () => loadPhoneSettings(localStorage).textingMode,
   tracking: useCloud && typeof textTracking !== 'undefined' ? textTracking : null,
+  activateLead: async targetLeadId => {
+    const accepted = await sendComputerCommand('open-lead', { targetLeadId });
+    if (!accepted) throw new Error('Could not open the follow-up lead. Check your computer connection.');
+    for (const delay of [700,1800,4000]) setTimeout(() => void refreshLead(), delay);
+  },
   getMeetings: async () => {
     if (!useCloud) throw new Error('Cloud mode is required to check your meetings.');
     const from = new Date(); from.setHours(0,0,0,0);
