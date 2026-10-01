@@ -1,0 +1,7 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Text review · IMPACT Companion</title><script src="settings-boot.js"></script><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="text-review.css"></head>
+<body class="textReviewPage"><main class="reviewShell"><header><nav><a href="./">Home</a><a href="workspace.html">Texting workspace</a></nav><p class="eyebrow">YOUR TEXTS</p><h1>Text review</h1><p>Mark replies first. Then mark the remaining unreviewed texts as no reply.</p></header>
+<section class="reviewToolbar" aria-label="Review controls"><label>Find a text<input id="search" type="search" placeholder="Name, number, or message"></label><label>Show<select id="filter"><option value="all">All texts</option><option value="unreviewed">Unreviewed</option><option value="replied">Replied</option><option value="no-reply">No reply</option></select></label><button id="refresh" type="button">Refresh</button></section>
+<div class="reviewBulk"><p id="counts"></p><button id="bulk" type="button" disabled>Mark remaining no reply</button><small>Only unreviewed texts matching your search and filter. Saved replies and appointments stay unchanged.</small></div>
+<p id="status" role="status">Loading your texts…</p><div id="texts"></div><button id="more" type="button" hidden>Show more</button>
+</main><script type="module" src="text-review.js?v=1"></script></body></html>
