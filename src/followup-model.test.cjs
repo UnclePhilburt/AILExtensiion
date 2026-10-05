@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const context=vm.createContext({});
-for(const name of ['text-learning.js','texting-mode.js','followup-model.js'])vm.runInContext(fs.readFileSync('phone-web/public/'+name,'utf8').replace(/^import .*$/gm,'').replace(/^export /gm,''),context);
+for(const name of ['call-scripts.data.js','call-scripts.js','text-learning.js','texting-mode.js','followup-model.js'])vm.runInContext(fs.readFileSync('phone-web/public/'+name,'utf8').replace(/^import .*$/gm,'').replace(/^export \{.*$/gm,'').replace(/^export /gm,''),context);
 const lead={lead_id:'123',name:'DOE, JANE',request_type:'Child Safe',phones:[{label:'Mobile',number:'3145550100'},{label:'Home',number:'3145550101'}]};
 test('each texting day has independent experiments and four usable variants',()=>{
  const experiments=new Set();
@@ -55,7 +55,7 @@ test('benefits messages name the actual group without internal codes or generic 
 });
 
 test('Child Safe label variants and old insurance templates always produce kit texts',()=>{
- for(const type of ['Child Safe','Child Safety Kit','CHILD-SAFE KIT','Child–Safe','Child_Safe','CSK','Child Safe Referral']){
+ for(const type of ['Child Safe','Child Safety Kit','CHILD-SAFE KIT','Child–Safe','Child_Safe','CSK','Child Safe Referral','MediaPlex','Media Plex']){
   const templates=context.textTemplates(type,{A:context.textTemplates('Life Insurance').A,B:context.textTemplates('Life Insurance').B,topic:'life insurance information'});
   for(const variant of ['A','B','C','D']){
    assert.match(templates[variant],/Child Safe Program/);assert.doesNotMatch(templates[variant],/life insurance|cost-free benefits/i);

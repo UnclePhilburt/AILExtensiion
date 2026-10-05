@@ -13,6 +13,7 @@ function harness(options = {}) {
   let lead = { available: true, leadId: '123', leadName: 'SMITH, JANE', requestType: 'Response Card', phones: [{ label: 'Mobile', number: '3145550100' }] };
   const calls = [];
   const context = vm.createContext({ document: { createElement: make }, navigator: { userAgent: 'iPhone' }, crypto: require('node:crypto'), setTimeout: fn => fn() });
+  for(const file of ['call-scripts.data.js','call-scripts.js'])vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'../phone-web/public/'+file),'utf8').replace(/^import .*$/gm,'').replace(/^export \{.*$/gm,'').replace(/^export /gm,''),context);
   vm.runInContext(fs.readFileSync(require('node:path').join(__dirname, '../phone-web/public/text-learning.js'), 'utf8').replace(/^export /gm, ''), context); vm.runInContext(source, context);
   const root = make('section');
   const seed = { enabled: true, company: 'American Income Life', agent: 'Cody', templates: {}, records: [], pending: {} };
