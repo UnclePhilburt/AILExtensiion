@@ -33,7 +33,7 @@ async function textNoAnswer(){await operation('complete',{slot:$('#slot').value}
 async function launch(){await load();if(current.action.kind==='text'){
  const draft=current.action.draft;const offered=draft?.offeredSlots||[];
  if(!current.action.started_at&&offered.length&&offered.some(t=>!textMeetingSlots(meetings,Date.now(),draft.offerPolicy).includes(Date.parse(t)))){await operation('prepare',{...planDraft(owner,current.lead,current.action,agent,meetings,records),replace:true});$('#status').textContent='Available times changed. Review the updated message, then open it.';return;}
- await alignIMPACT();await operation('start');await impactResult('call');openMessage(smsLink(current.action.draft.number,current.action.draft.body,/iPhone|iPad|iPod/.test(navigator.userAgent)));$('#status').textContent='Tap Send in your messaging app, then return and tap No answer to save the text and move on.';
+ await operation('start');openMessage(smsLink(current.action.draft.number,current.action.draft.body,/iPhone|iPad|iPod/.test(navigator.userAgent)));$('#status').textContent='Tap Send in your messaging app, then return and tap No answer to save the text and update IMPACT.';
  }else{await alignIMPACT();await operation('start');await impactResult('call');const phones=current.lead.phones;const phone=phones.find(p=>p.label==='Mobile')||phones.find(p=>p.label==='Home');location.href='tel:'+phone.number.replace(/[^+0-9]/g,'');$('#status').textContent='After the call, record the result here. IMPACT call update queued.';}}
 function render(){
  $('#slot').disabled=busy;$('#next').disabled=busy||!enabled;$('#refresh').disabled=busy;const buttons=$('#actionButtons');buttons.replaceChildren();$('#message').hidden=true;
