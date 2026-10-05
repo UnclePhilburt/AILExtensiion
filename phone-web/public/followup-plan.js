@@ -17,39 +17,30 @@ async function run(fn){if(busy)return;busy=true;render();try{await fn();}catch(e
 async function all(table){const rows=[];for(let i=0;;i+=500){const {data,error}=await client.from(table).select('*').eq('user_id',owner).order(table==='followup_leads'?'lead_id':'id').range(i,i+499);if(error)throw error;rows.push(...data);if(data.length<500)return rows;}}
 async function load(){const {data,error}=await client.from('followup_settings').select('*').eq('user_id',owner).maybeSingle();if(error)throw Error('Run the follow-up database setup before using your plan.');if(!data?.enabled)await rpc('plan_enable',{p_enabled:true});enabled=true;$('#importNote').textContent=data?.import_note||'No inbox imported yet.';[leads,records,meetings]=await Promise.all([all('followup_leads'),all('text_messages'),all('scheduled_events')]);leads=leads.filter(lead=>!lead.archived_at);}
 async function operation(op,payload={}){if(!current)throw Error('Choose the next lead first.');try{current.action=await rpc('plan_action',{p_id:current.action.id,p_device:device,p_operation:op,p_payload:payload});}catch(e){if(/no longer assigned|plan is paused/i.test(e.message))current=null;throw e;}}
-async function prepareCurrent(state){
+async function prepareCurrent(){
  if(!current||current.action.kind!=='text')return;
- const live=state?visibleLead(state,$('#slot').value):null;
- const matching=String(live?.leadId||'')===String(current.lead.lead_id);
- const type=String((matching&&live.requestType)||current.lead.request_type||'').trim();
- if(!type)throw Error('This lead has no saved type. Open it in IMPACT and tap Refresh.');
- const changed=current.lead.request_type!==type;
- if(changed){
-  await rpc('plan_import',{p_leads:[{leadId:current.lead.lead_id,leadName:current.lead.name,requestType:type,phones:current.lead.phones}],p_note:$('#importNote').textContent});
-  current.lead.request_type=type;
- }
+ const type=String(current.lead.request_type||'').trim();
+ if(!type)throw Error('This lead has no saved type. Reimport its details before preparing a text.');
  const {lead,action}=current;
  const wrong=isChildSafeLead(type)&&/life insurance|cost-free benefits/i.test(action.draft?.body||'');
  const wrongBenefits=isBenefitsReplyLead(type)&&(/life insurance/i.test(action.draft?.body||'')||(benefitsGroupName(type)&&!String(action.draft?.body||'').includes('for members of '+benefitsGroupName(type))));
- if(!action.draft||(!action.started_at&&(changed||wrong||wrongBenefits))){
+ if(!action.draft||(!action.started_at&&(wrong||wrongBenefits))){
   if(!agent)throw Error('Add your name in account settings before preparing texts.');
   await operation('prepare',{...planDraft(owner,lead,action,agent,meetings,records),replace:true});
  }
  current.detailsReady=true;
 }
 async function refreshCurrent(){
- let timer,state,problem;
- try{state=await Promise.race([alignIMPACT(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('IMPACT did not respond in time.')),8000);})]);}
- catch(error){problem=error;}finally{clearTimeout(timer);}
- if(problem&&current?.action.kind!=='text')throw problem;
- try{await prepareCurrent(state);}finally{if(current)current.detailsReady=true;}
- $('#status').textContent=problem?'Text ready from saved lead details. IMPACT is not connected yet; tap Refresh to retry.':'This lead is open in IMPACT window '+$('#slot').value+'.';
+ const saved=leads.find(lead=>String(lead.lead_id)===String(current?.lead.lead_id));
+ if(saved)current.lead=saved;
+ await prepareCurrent();
+ $('#status').textContent='Ready. Using your saved lead details.';
 }
 async function next(){
  if(current?.action.status==='claimed'){if(current.action.kind==='text'&&current.action.started_at){showTextResult();return;}await operation(current.action.started_at?'defer':'skip');}
  current=null;await load();if(enabled)current=await rpc('plan_claim',{p_device:device});
  if(current){
-  current.detailsReady=false;render();$('#status').textContent='Opening this lead in IMPACT window '+$('#slot').value+'…';
+  render();$('#status').textContent='Preparing your next lead…';
   await refreshCurrent();
  }else $('#status').textContent='Nothing due right now. Later calls will appear during your working hours.';
 }
@@ -71,24 +62,23 @@ async function alignIMPACT(){
  return state;
 }
 async function impactResult(type){await alignIMPACT();await rpc('plan_impact',{p_id:current.action.id,p_slot:$('#slot').value,p_type:type});}
-async function textNoAnswer(){await operation('complete',{slot:$('#slot').value});await impactResult('call');await impactResult('no-answer');await next();}
+async function textNoAnswer(){await operation('complete',{slot:$('#slot').value});await next();}
 
 async function launch(){await load();if(current.action.kind==='text'){
- if(current.detailsReady===false)throw Error('Tap Refresh to check this lead’s type in IMPACT before texting.');
  const draft=current.action.draft;if(isChildSafeLead(current.lead.request_type)&&/life insurance|cost-free benefits/i.test(draft?.body||''))throw Error('This saved draft has the wrong wording for a Child Safe lead. If you have not sent it, choose I did not send it to prepare a corrected draft.');const offered=draft?.offeredSlots||[];
  if(!current.action.started_at&&offered.length&&offered.some(t=>!textMeetingSlots(meetings,Date.now(),draft.offerPolicy).includes(Date.parse(t)))){await operation('prepare',{...planDraft(owner,current.lead,current.action,agent,meetings,records),replace:true});$('#status').textContent='Available times changed. Review the updated message, then open it.';return;}
- await operation('start');openMessage(smsLink(current.action.draft.number,current.action.draft.body,/iPhone|iPad|iPod/.test(navigator.userAgent)),{direct:true});$('#status').textContent='Tap Send in your messaging app, then return and tap No answer to save the text and update IMPACT.';
- }else{await alignIMPACT();await operation('start');await impactResult('call');const phones=current.lead.phones;const phone=phones.find(p=>p.label==='Mobile')||phones.find(p=>p.label==='Home');location.href='tel:'+phone.number.replace(/[^+0-9]/g,'');$('#status').textContent='After the call, record the result here. IMPACT call update queued.';}}
+ await operation('start');openMessage(smsLink(current.action.draft.number,current.action.draft.body,/iPhone|iPad|iPod/.test(navigator.userAgent)),{direct:true});$('#status').textContent='Tap Send in your messaging app, then return and tap I sent it to save the text.';
+ }else{await operation('start');const phones=current.lead.phones;const phone=phones.find(p=>p.label==='Mobile')||phones.find(p=>p.label==='Home');location.href='tel:'+phone.number.replace(/[^+0-9]/g,'');$('#status').textContent='After the call, record the result here to save it in your plan.';}}
 function wrongChildSafeDraft(lead,action){return action.kind==='text'&&action.status!=='done'&&isChildSafeLead(lead.request_type)&&/life insurance|cost-free benefits/i.test(action.draft?.body||'');}
 function render(){
  $('#clearLeads').disabled=busy;$('#slot').disabled=busy;$('#next').disabled=busy||!enabled;$('#refresh').disabled=busy;const buttons=$('#actionButtons');buttons.replaceChildren();$('#message').hidden=true;
  if(current){const {lead,action}=current;const wrongDraft=wrongChildSafeDraft(lead,action);$('#leadName').textContent=pretty(lead.name);$('#step').textContent=action.kind==='text'?(stepNames[action.step]||action.step):'CALL · ATTEMPT '+action.attempt;$('#detail').textContent=lead.request_type+' · '+(action.draft?.number||(lead.phones.find(p=>p.label==='Mobile')||lead.phones[0])?.number||'');
- if(action.kind==='text'&&action.draft){$('#message').hidden=false;$('#message').textContent=current.detailsReady===false?'Checking the lead type in IMPACT before preparing your text…':wrongDraft?'This is a Child Safe Kit lead. An older insurance draft was saved before the correction. If you did not send it, use the button below to discard it. The plan will prepare a Child Safe message when this lead returns.':action.draft.body;}
- if(action.status==='done'&&action.kind==='text'){button(buttons,'No answer · next lead',async()=>{await impactResult('call');await impactResult('no-answer');await next();});}
- if(action.status==='done'){$('#detail').textContent+=' · Saved';button(buttons,'Update IMPACT',async()=>{await impactResult(action.result==='no-answer'?'no-answer':'call');$('#status').textContent='IMPACT update queued. This action is counted only once.';});}else if(action.status==='claimed'){
- const launchButton=button(buttons,action.kind==='text'?'Open text message':'Open phone dialer',launch);launchButton.className='primary';launchButton.disabled=busy||wrongDraft||(action.kind==='text'&&current.detailsReady===false)||(action.kind==='text'&&!action.draft);if(action.kind==='text'&&!action.draft){const settings=node('a','Add your name in Settings');settings.href='settings.html';buttons.append(settings);}
- if(action.kind==='text'&&action.draft){if(!wrongDraft&&current.detailsReady!==false)button(buttons,'Copy message',async()=>{await navigator.clipboard.writeText(action.draft.body);$('#status').textContent='Message copied. Open your texting app to send it.';});if(action.started_at)button(buttons,'No answer · text sent',textNoAnswer);}
- else if(action.started_at){button(buttons,'No answer',async()=>{await operation('complete',{result:'no-answer'});await load();try{await impactResult('no-answer');$('#status').textContent='Saved; IMPACT result queued. Next attempt waits at least two hours.';}catch(e){$('#status').textContent='Result saved in your plan. IMPACT was not updated: '+e.message;}});button(buttons,'We connected',async()=>{await operation('complete',{result:'connected'});current=null;await load();$('#status').textContent='Connected. Remaining outreach is paused.';});}
+ if(action.kind==='text'&&action.draft){$('#message').hidden=false;$('#message').textContent=wrongDraft?'This is a Child Safe Kit lead. An older insurance draft was saved before the correction. If you did not send it, use the button below to discard it. The plan will prepare a Child Safe message when this lead returns.':action.draft.body;}
+ if(action.status==='done'&&action.kind==='text'){button(buttons,'Next lead',next);}
+ if(action.status==='done'){$('#detail').textContent+=' · Saved';button(buttons,'Update IMPACT',async()=>{await impactResult('call');if(action.kind==='text'||action.result==='no-answer')await impactResult('no-answer');$('#status').textContent='IMPACT update queued. This action is counted only once.';});}else if(action.status==='claimed'){
+ const launchButton=button(buttons,action.kind==='text'?'Open text message':'Open phone dialer',launch);launchButton.className='primary';launchButton.disabled=busy||wrongDraft||(action.kind==='text'&&!action.draft);if(action.kind==='text'&&!action.draft){const settings=node('a','Add your name in Settings');settings.href='settings.html';buttons.append(settings);}
+ if(action.kind==='text'&&action.draft){if(!wrongDraft)button(buttons,'Copy message',async()=>{await navigator.clipboard.writeText(action.draft.body);$('#status').textContent='Message copied. Open your texting app to send it.';});if(action.started_at)button(buttons,'I sent it · next lead',textNoAnswer);}
+ else if(action.started_at){button(buttons,'No answer',async()=>{await operation('complete',{result:'no-answer'});await load();$('#status').textContent='Saved in your plan. Next attempt waits at least two hours.';});button(buttons,'We connected',async()=>{await operation('complete',{result:'connected'});current=null;await load();$('#status').textContent='Connected. Remaining outreach is paused.';});}
  if(action.started_at)button(buttons,action.kind==='text'?(wrongDraft?'I didn’t send it · discard old draft':'I did not send it'):'I did not place the call',async()=>{await operation('defer');current=null;await load();$('#status').textContent='Saved for later; no completed result recorded.';});outcomeButtons(buttons,lead);}
  }else{$('#step').textContent='TODAY’S QUEUE';$('#leadName').textContent='Find your next step';$('#detail').textContent=leads.filter(l=>l.status==='active').length+' active leads · '+leads.filter(l=>l.status==='appointment').length+' appointments';}
  const prompt=$('#checkin');prompt.replaceChildren();prompt.hidden=!checkin;if(checkin){prompt.append(node('h2','Quick reply check'),node('p','Did '+pretty(checkin.lead_name)+' reply to your text to '+checkin.phone+'?'));button(prompt,'Yes, they replied',()=>checkReply(true));button(prompt,'No reply',()=>checkReply(false));button(prompt,'Later',async()=>{checkin=null;});}
@@ -96,7 +86,7 @@ function render(){
  $('#leadCount').textContent=leads.length;const list=$('#leads');list.replaceChildren();const term=$('#search').value.toLowerCase();const filtered=leads.filter(l=>(l.name+' '+JSON.stringify(l.phones)).toLowerCase().includes(term));for(const lead of filtered.slice(0,100)){const card=node('article','');card.className='lead';card.append(node('h3',pretty(lead.name)),node('p',lead.request_type+' · '+lead.status));const controls=node('div','');controls.className='actions';if(lead.status==='active')outcomeButtons(controls,lead);else if(lead.status!=='complete')button(controls,'Resume follow-ups',()=>status(lead.lead_id,'active'));card.append(controls);list.append(card);}if(filtered.length>100)list.append(node('p','Showing 100 leads. Search to find another lead.'));
 }
 $('#clearLeads').onclick=()=>{if(busy||!window.confirm('Clear your follow-up lead list and queued steps? Appointments, sent texts, and replied/stopped protections will be kept.'))return;void run(async()=>{let count;try{count=await rpc('plan_clear',{});}catch(error){if(/setup/i.test(error.message))throw Error('Run the weekly reset SQL update from How your plan works once, then retry.');throw error;}current=null;checkin=null;await load();$('#status').textContent=count+' leads cleared. Import your current IMPACT inbox when ready.';});};
-$('#next').onclick=()=>void run(next);$('#refresh').onclick=()=>void run(async()=>{await load();if(current&&current.action.status==='claimed')await operation('renew');if(current){current.detailsReady=false;await refreshCurrent();}if(!current)$('#status').textContent='Updated.';});$('#search').oninput=render;$('#slot').onchange=()=>void run(async()=>{if(current){current.detailsReady=false;await refreshCurrent();}});
+$('#next').onclick=()=>void run(next);$('#refresh').onclick=()=>void run(async()=>{await load();if(current&&current.action.status==='claimed')await operation('renew');if(current){await refreshCurrent();}if(!current)$('#status').textContent='Updated.';});$('#search').oninput=render;$('#slot').onchange=()=>void run(async()=>{if(current){await refreshCurrent();}});
 $('#appointment').addEventListener('close',()=>{if($('#appointment').returnValue==='save')void run(()=>status(appointmentLead,'appointment',centralInput($('#appointmentTime').value)));});
 setInterval(()=>{if(!document.hidden&&current?.action.status==='claimed'&&!busy)void run(async()=>{try{await operation('renew');}catch(e){current=null;await load();throw e;}});},60000);
 const {data}=await client.auth.getSession();if(!data.session){location.replace('account.html?next=followup-plan.html');}else{owner=data.session.user.id;if(isMessageDebugAccount(data.session.user)){const debug=node('button','Texting debug');debug.type='button';debug.id='codyTextingDebug';debug.onclick=()=>{if(current?.action.kind==='text'&&current.action.draft){const draft=current.action.draft;try{openMessage(smsLink(draft.number,draft.body,/iPhone|iPad|iPod/.test(navigator.userAgent)));}catch(error){$('#status').textContent=error.message;}return;}const number=window.prompt('No texting lead is selected. Enter your own number for a test, or cancel and select Next lead first. Nothing sends automatically.');if(!number)return;try{openMessage(smsLink(number,'IMPACT texting test — no need to send this.',/iPhone|iPad|iPod/.test(navigator.userAgent)));}catch(error){$('#status').textContent=error.message;}};$('.toolsActions').append(debug);}agent=loadPhoneSettings(localStorage).firstName||data.session.user.user_metadata?.full_name||data.session.user.user_metadata?.name||'';agent=agent.split(' ')[0];await run(async()=>{await load();checkin=(await rpc('companion_text_checkin',{}))?.[0]||null;$('#status').textContent='Ready. Tap Next lead to begin.';});}
