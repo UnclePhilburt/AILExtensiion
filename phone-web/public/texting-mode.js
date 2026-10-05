@@ -47,7 +47,7 @@ export function textTemplates(type, saved, group = '') {
   }
   if(isBenefitsReplyLead(type)){result.topic=textTopic(type);for(const variant of ['A','B','C','D'])if(/life insurance/i.test(result[variant]))result[variant]=defaults[variant];}
   const groupName=benefitsGroupName(type,group);
-  if(isBenefitsReplyLead(type)&&groupName){for(const variant of ['A','B','C','D'])result[variant]=result[variant].replace(/cost-free benefits program(?! through )/g,'cost-free benefits program through '+groupName);}
+  if(isBenefitsReplyLead(type)&&groupName){for(const variant of ['A','B','C','D'])result[variant]=result[variant].replace('cost-free benefits program through '+groupName,'cost-free benefits program for members of '+groupName).replace(/cost-free benefits program(?! for members of )/g,'cost-free benefits program for members of '+groupName);}
   return result;
 }
 export function textHash(value) {

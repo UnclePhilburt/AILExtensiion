@@ -49,7 +49,7 @@ test('benefits messages name the actual group without internal codes or generic 
  for(const type of ['Group','Union','Response Card'])assert.equal(context.benefitsGroupName(type),'');
  for(const variant of ['A','B','C','D']){
   const draft=context.planDraft('user',{...lead,request_type:'IBT 610 (SGCOY) (AD&D)'},{step:'intro',draft:{variant}},'Cody',[],[],Date.parse('2026-10-04T23:00:00Z'));
-  assert.match(draft.body,/program through IBT 610/);assert.doesNotMatch(draft.body,/SGCOY|AD&D/);
-  assert.match(context.textTemplates('IBT 610 (SGCOY) (AD&D)')[variant],/program through IBT 610/);
+  assert.match(draft.body,/program for members of IBT 610/);assert.doesNotMatch(draft.body,/SGCOY|AD&D/);
+  assert.match(context.textTemplates('IBT 610 (SGCOY) (AD&D)')[variant],/program for members of IBT 610/);
  }
 });
