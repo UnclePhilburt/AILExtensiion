@@ -321,10 +321,12 @@ test('saved history stays separate from lead details and does not open over the 
  assert.notEqual(history.open,true,'active call history must not automatically expand');
  assert.equal(page.el('#callResults').hidden,false);
 });
-test('loading recent call history never advances the lead by itself',async()=>{
+test('recent calls skip on arrival but not on the initial page or repeated refresh',async()=>{
  const server=makeServer();freshState(server,null);
- await loadPage(server,{loadLeadMemory:async()=>({until:Date.parse('2026-09-24T22:00:00Z'),events:[]})});await settle();
+ const page=await loadPage(server,{loadLeadMemory:async()=>({until:Date.parse('2026-09-24T22:00:00Z'),events:[]})});await settle();
  assert.equal(server.sent.length,0);
+ freshState(server,page,leadB);await page.app.refreshCloud();await settle();assert.deepEqual(server.sent.map(c=>c.type),['next']);
+ await page.app.refreshCloud();await settle();assert.equal(server.sent.length,1);
 });
 test('a settled lead with no number skips once without recording a call',async()=>{
  const server=makeServer();freshState(server,null);const page=await loadPage(server);
