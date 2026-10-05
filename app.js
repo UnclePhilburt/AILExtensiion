@@ -1,3 +1,4 @@
+import {findUncalledLead} from './uncalled-lead.js?v=1';
 import {createCallPassProgress} from './call-pass-progress.js?v=5';
 import {loadLeadMemory} from './lead-call-memory.js?v=1';
 import {createWorkspacePlanSync} from './workspace-plan-sync.js?v=1';
@@ -572,7 +573,7 @@ function tapAccepted() {
 // Settings page: "Best next lead" (off by default) turns Next into Best next
 // and hides Previous (settings-boot.js sets html[data-best-next] for the layout).
 async function showNextLead() {
-  await sendNavigation(loadPhoneSettings(localStorage).bestNextLead ? "best-next" : "next");
+  if(useCloud)await openUncalledLead();else await sendNavigation(loadPhoneSettings(localStorage).bestNextLead ? "best-next" : "next");
 }
 
 async function showPreviousLead() {
@@ -717,14 +718,14 @@ function clearNavigationPending() {
   updateNavButtons();
 }
 
-async function sendNavigation(type) {
+async function sendNavigation(type,details={}) {
   if (!displayedLead?.available) { showFeedback("No lead is showing yet. Open IMPACT on your computer.", "error"); return; }
   if (navigationPending()) { showFeedback("Still waiting for IMPACT to move. One moment…"); return; }
   const pending = { until: Date.now() + 10000 };
   navPending = pending;
   navIntent = { type, at: Date.now() };
   updateNavButtons();
-  const sent = await sendComputerCommand(type);
+  const sent = await sendComputerCommand(type,details);
   if (sent) tapAccepted();
   if (navPending !== pending) return;
   if (!sent) {
@@ -777,7 +778,7 @@ async function sendComputerCommand(type, details = {}) {
         if (!(await refreshSessionNow())) throw new Error(SIGN_IN_MESSAGE);
         await withTimeout(cloudSend(state, command, id), 12000, NETWORK_MESSAGE);
       }
-      showFeedback(type === 'open-lead' ? 'Bringing that appointment up on your computer…' : type === 'call' ? 'Call sent to IMPACT.' : type === 'virtual-appointment' ? 'Opening Virtual Appointment in IMPACT…' : type === 'virtual-appointment-day' ? 'Selecting that day in IMPACT…' : type === 'virtual-appointment-slot' ? 'Setting that appointment in IMPACT…' : type === 'refused-appointment' ? 'Sending Refused Appointment to IMPACT…' : type === 'no-answer' ? 'Sending No Answer to IMPACT…' : type === 'previous' ? 'Moving IMPACT back on computer…' : type === 'next' ? 'Advancing IMPACT on computer…' : type === 'best-next' ? 'Finding your best next lead…' : 'Action sent to your computer…', "loading", 4000);
+      showFeedback(type === 'open-lead' ? 'Opening the selected lead on your computer…' : type === 'call' ? 'Call sent to IMPACT.' : type === 'virtual-appointment' ? 'Opening Virtual Appointment in IMPACT…' : type === 'virtual-appointment-day' ? 'Selecting that day in IMPACT…' : type === 'virtual-appointment-slot' ? 'Setting that appointment in IMPACT…' : type === 'refused-appointment' ? 'Sending Refused Appointment to IMPACT…' : type === 'no-answer' ? 'Sending No Answer to IMPACT…' : type === 'previous' ? 'Moving IMPACT back on computer…' : type === 'next' ? 'Advancing IMPACT on computer…' : type === 'best-next' ? 'Finding your best next lead…' : 'Action sent to your computer…', "loading", 4000);
       expectComputerResult(type);
       followLeadAfterResult(type);
       return true;
@@ -1264,7 +1265,7 @@ function renderSavedLeadEvents(lead,transition){
   if(currentUserId!==user||String(displayedLead?.leadId)!==String(lead.leadId))return;
   content.replaceChildren();
   if(!memory.until)recentLeadSkips.clear();
-  if(memory.until&&['next','arrive'].includes(transition)&&!loadPhoneSettings(localStorage).textingMode&&String(pendingCall?.leadId)!==String(lead.leadId)&&!hasScheduledAppointment(lead.callHistory)&&!navigationPending()&&!recentLeadSkips.has(key)&&recentLeadSkips.size<10){recentLeadSkips.add(key);showFeedback('Skipping a lead called within the last two hours.');void sendNavigation('next');}
+  if(memory.until&&['next','arrive'].includes(transition)&&!loadPhoneSettings(localStorage).textingMode&&String(pendingCall?.leadId)!==String(lead.leadId)&&!hasScheduledAppointment(lead.callHistory)&&!navigationPending()&&!recentLeadSkips.has(key)&&recentLeadSkips.size<10){recentLeadSkips.add(key);showFeedback('Finding an uncalled lead…');void openUncalledLead();}
   if(memory.until){if(String(pendingCall?.leadId)!==String(lead.leadId))section.open=true;const notice=document.createElement('p');notice.textContent='Recently called · available again '+new Date(memory.until).toLocaleTimeString('en-US',{timeZone:'America/Chicago',hour:'numeric',minute:'2-digit'})+' Central. Use Next lead.';content.append(notice);}
   if(!memory.events.length)content.textContent='No saved calls or texts for this lead yet.';
   for(const entry of memory.events.slice(0,30)){const line=document.createElement('p');line.textContent=[entry.label,new Date(entry.at).toLocaleString('en-US',{timeZone:'America/Chicago'}),entry.number,entry.result?.replaceAll('-',' ')].filter(Boolean).join(' · ');content.append(line);}
@@ -1274,11 +1275,28 @@ function renderSavedLeadEvents(lead,transition){
 const missingPhoneSkips = new Set();
 function scheduleMissingPhoneSkip(lead,transition){
  const settings=loadPhoneSettings(localStorage),key=getLeadKey(lead);
- if(settings.textingMode||lead.phones?.length){missingPhoneSkips.clear();return;}
- if(!['next','arrive'].includes(transition)||!lead.available||!lead.leadId||lead.appointmentOptions||hasScheduledAppointment(lead.callHistory)||pendingCall?.leadId===String(lead.leadId)||missingPhoneSkips.has(key)||missingPhoneSkips.size>=10)return;
+ if(settings.textingMode||lead.phones?.length)return;
+ if(!['next','arrive'].includes(transition)||!lead.available||!lead.leadId||lead.appointmentOptions||hasScheduledAppointment(lead.callHistory)||pendingCall?.leadId===String(lead.leadId)||missingPhoneSkips.has(key))return;
  missingPhoneSkips.add(key);
  setTimeout(()=>{
   if(document.hidden||getLeadKey(displayedLead)!==key||displayedLead?.phones?.length||navigationPending()||pendingCall?.leadId===String(lead.leadId))return;
-  showFeedback('Skipping a lead with no phone number.');void sendNavigation('next');
+  showFeedback('Skipping a lead with no phone number.');void openUncalledLead();
  },2000);
+}
+
+let choosingUncalledLead=false;
+async function openUncalledLead(){
+ if(!useCloud)return sendNavigation('next');
+ if(choosingUncalledLead||navigationPending()||!displayedLead?.available)return;
+ choosingUncalledLead=true;
+ const user=currentUserId,slot=thisPhoneSlot(),currentId=displayedLead.leadId;
+ try{
+  const otherLeadIds=Object.entries(currentCloudState?.slot_leads||{}).filter(([lane])=>lane!==slot).map(([,lead])=>lead?.leadId);
+  const missingLeadIds=[...missingPhoneSkips].map(key=>key.startsWith('lead:')?key.slice(5):'');
+  const result=await findUncalledLead(client,user,{currentLeadId:currentId,otherLeadIds,missingLeadIds});
+  if(user!==currentUserId||slot!==thisPhoneSlot()||currentId!==displayedLead?.leadId)return;
+  if(!result.leadId){showFeedback('No uncalled leads are available right now. Recent calls and the other phone’s lead are skipped.');return;}
+  await sendNavigation('open-lead',{targetLeadId:result.leadId});
+ }catch(error){showFeedback(error.message||'Could not check saved calls. Try Next again.','error');}
+ finally{choosingUncalledLead=false;}
 }
