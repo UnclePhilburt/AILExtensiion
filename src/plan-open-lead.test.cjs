@@ -16,4 +16,4 @@ test('debug uses the selected lead draft without asking for the agent number',()
  vm.runInContext(source.slice(start,end),ctx);debug.onclick();assert.deepEqual(calls,[['3145550123','Lead-specific draft'],'sms:3145550123']);
 });
 
-test('Next moves past an opened text without a popup or recording it as sent',async()=>{const {context,events}=setup();context.current={action:{status:'claimed',started_at:'now',kind:'text'},lead:{lead_id:'old'}};context.operation=async op=>events.push(op);await context.next();assert.equal(events[0],'defer');assert.equal(context.current.lead.lead_id,'123');assert.equal(events.includes('complete'),false);});
+test('Next asks whether an opened text was sent before advancing or saving',async()=>{const {context,events}=setup();context.current={action:{status:'claimed',started_at:'now',kind:'text'},lead:{lead_id:'old'}};let asked=false;context.showTextResult=()=>asked=true;await context.next();assert.equal(asked,true);assert.equal(context.current.lead.lead_id,'old');assert.deepEqual(events,[]);});
