@@ -2,7 +2,7 @@ const {test}=require('node:test');const assert=require('node:assert/strict');con
 const source=fs.readFileSync('phone-web/public/message-debug.js','utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
 function setup(email,verifiedEmail=email){
  let verificationCalls=0,created=0;const listeners={};
- const make=()=>({style:{},dataset:{},children:[],listeners:{},setAttribute(){},append(...items){this.children.push(...items)},addEventListener(k,v){this.listeners[k]=v},removeEventListener(){},remove(){this.removed=true}});
+ const make=()=>({style:{},dataset:{},children:[],listeners:{},setAttribute(){},append(...items){this.children.push(...items)},prepend(...items){this.children.unshift(...items)},addEventListener(k,v){this.listeners[k]=v},removeEventListener(){},remove(){this.removed=true}});
  const dialog=make();dialog.isConnected=true;
  const context=vm.createContext({client:{auth:{getSession:async()=>({data:{session:email?{user:{id:'owner',email}}:null}}),getUser:async()=>{verificationCalls++;return {data:{user:{id:'owner',email:verifiedEmail}}}},onAuthStateChange:fn=>{listeners.auth=fn;return {data:{subscription:{unsubscribe(){}}}}}}},document:{createElement:()=>{created++;return make()},addEventListener(){},removeEventListener(){}},window:{addEventListener(){},removeEventListener(){}},navigator:{userAgent:'Android'},Date,setTimeout,clearTimeout});
  vm.runInContext(source,context);return {context,dialog,listeners,counts:()=>({verificationCalls,created})};

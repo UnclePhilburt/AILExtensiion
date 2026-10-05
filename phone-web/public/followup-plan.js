@@ -1,9 +1,10 @@
-import {openMessage} from './open-message.js?v=3';
+import {isMessageDebugAccount} from './message-debug.js?v=2';
+import {openMessage} from './open-message.js?v=4';
 import {cloudState,cloudSend,cloudTouchPhone,visibleLead} from './cloud-sync.js';
 import {loadPhoneSettings} from './settings-store.js';
 import {client} from './auth-runtime.js';
 import {planDraft,stepNames,centralInput} from './followup-model.js';
-import {smsLink,textMeetingSlots} from './texting-mode.js?v=18';
+import {smsLink,textMeetingSlots} from './texting-mode.js?v=19';
 const $=s=>document.querySelector(s),node=(tag,text)=>Object.assign(document.createElement(tag),{textContent:text});
 $('#slot').value=loadPhoneSettings(localStorage).phoneSlot;
 const device=sessionStorage.getItem('plan.device')||crypto.randomUUID();sessionStorage.setItem('plan.device',device);
@@ -52,5 +53,5 @@ function render(){
 $('#next').onclick=()=>void run(next);$('#refresh').onclick=()=>void run(async()=>{await load();if(current&&current.action.status==='claimed')await operation('renew');if(current)await alignIMPACT();$('#status').textContent=current?'This lead is open in IMPACT window '+$('#slot').value+'.':'Updated.';});$('#search').oninput=render;$('#slot').onchange=()=>void run(async()=>{if(current){await alignIMPACT();$('#status').textContent='This lead is open in IMPACT window '+$('#slot').value+'.';}});
 $('#appointment').addEventListener('close',()=>{if($('#appointment').returnValue==='save')void run(()=>status(appointmentLead,'appointment',centralInput($('#appointmentTime').value)));});
 setInterval(()=>{if(!document.hidden&&current?.action.status==='claimed'&&!busy)void run(async()=>{try{await operation('renew');}catch(e){current=null;await load();throw e;}});},60000);
-const {data}=await client.auth.getSession();if(!data.session){location.replace('account.html?next=followup-plan.html');}else{owner=data.session.user.id;agent=loadPhoneSettings(localStorage).firstName||data.session.user.user_metadata?.full_name||data.session.user.user_metadata?.name||'';agent=agent.split(' ')[0];await run(async()=>{await load();checkin=(await rpc('companion_text_checkin',{}))?.[0]||null;$('#status').textContent='Ready. Tap Next lead to begin.';});}
+const {data}=await client.auth.getSession();if(!data.session){location.replace('account.html?next=followup-plan.html');}else{owner=data.session.user.id;if(isMessageDebugAccount(data.session.user)){const debug=node('button','Texting debug');debug.type='button';debug.id='codyTextingDebug';debug.onclick=()=>{const number=window.prompt('Enter your own phone number for this test. Nothing will be sent automatically.');if(!number)return;try{openMessage(smsLink(number,'IMPACT texting test — no need to send this.',/iPhone|iPad|iPod/.test(navigator.userAgent)));}catch(error){$('#status').textContent=error.message;}};$('.toolbar').prepend(debug);}agent=loadPhoneSettings(localStorage).firstName||data.session.user.user_metadata?.full_name||data.session.user.user_metadata?.name||'';agent=agent.split(' ')[0];await run(async()=>{await load();checkin=(await rpc('companion_text_checkin',{}))?.[0]||null;$('#status').textContent='Ready. Tap Next lead to begin.';});}
 client.auth.onAuthStateChange((_event,session)=>{if(owner&&session?.user?.id!==owner)location.reload();});
