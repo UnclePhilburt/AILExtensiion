@@ -99,8 +99,8 @@ export function textMeetingSlots(rows, now=Date.now(), policy='standard') {
  for(let day=policy==='standard'&&p.hour>=17?1:0;day<7;day++) {
   if(policy==='same-day'&&day>0)break;
   const date=new Date(base+day*86400000), dow=date.getUTCDay();if(dow===0)continue;
-  for(let hour=dow===6?9:14;hour<=(dow===6?13:20);hour++) {
-   const time=centralTimestamp(date.getUTCFullYear(),date.getUTCMonth()+1,date.getUTCDate(),hour);
+  for(let minute=dow===6?9*60:14*60;minute<=(dow===6?13*60:20*60+30);minute+=30) {
+   const time=centralTimestamp(date.getUTCFullYear(),date.getUTCMonth()+1,date.getUTCDate(),Math.floor(minute/60))+(minute%60)*60000;
    if(time<now+3600000)continue;
    if(rows.some(row=>{
     if(row.kind==='callback')return false;
@@ -113,12 +113,13 @@ export function textMeetingSlots(rows, now=Date.now(), policy='standard') {
  }
  return slots;
 }
-export function availableTextMeetings(rows,now=Date.now(),policy='standard') {
+export function availableTextMeetings(rows,now=Date.now(),policy='standard',random=Math.random) {
  const slots=textMeetingSlots(rows,now,policy);if(!slots.length)return [];
- const first=slots[0],p=centralParts(first);
+ const p=centralParts(slots[0]);
  const same=slots.filter(t=>{const q=centralParts(t);return q.year===p.year&&q.month===p.month&&q.day===p.day;});
- const later=same.filter(t=>t>first), preferred=later.find(t=>centralParts(t).hour===19);
- return later.length?[first,preferred||later[later.length-1]]:policy==='same-day'?[first]:slots.slice(0,2);
+ const pool=same.length>=2||policy==='same-day'?same:slots;
+ const picked=[];while(pool.length&&picked.length<2)picked.push(pool.splice(Math.floor(random()*pool.length),1)[0]);
+ return picked.sort((a,b)=>a-b);
 }
 export function meetingTimeLabel(time,now=Date.now()) {
  const p=centralParts(time),n=centralParts(now), diff=(Date.UTC(p.year,p.month-1,p.day)-Date.UTC(n.year,n.month-1,n.day))/86400000;

@@ -1,4 +1,4 @@
-import {textFirstName,textHash,textVariant,availableTextMeetings,meetingTimeLabel,centralParts,isBenefitsReplyLead,benefitsGroupName,isChildSafeLead} from './texting-mode.js?v=25';
+import {textFirstName,textHash,textVariant,availableTextMeetings,meetingTimeLabel,centralParts,isBenefitsReplyLead,benefitsGroupName,isChildSafeLead} from './texting-mode.js?v=26';
 import {chooseTextVariant} from './text-learning.js?v=2';
 export const stepNames={intro:'Introduction · Sunday / Monday catch-up',tuesday:'Tuesday follow-up',thursday:'Thursday follow-up',saturday:'Saturday final follow-up'};
 export function planDraft(user,lead,action,agent,meetings,records=[],now=Date.now()) {
