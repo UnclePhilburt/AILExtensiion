@@ -82,7 +82,6 @@ let navPending = null;
 let currentUserId = "";
 const callPass=createCallPassProgress(document.querySelector("#callPassProgress"),{client,getUser:()=>currentUserId});
 const leadMemoryCache=new Map();
-const recentLeadSkips=new Set();
 let callReservationPending=false;
 const workspacePlanSync=createWorkspacePlanSync({client,storage:localStorage,getUser:()=>currentUserId,notify:message=>showFeedback(message,"error")});
 setInterval(()=>{if(!document.hidden)void workspacePlanSync.flush();},15000);
@@ -982,6 +981,7 @@ function renderLead(lead, updatedAt, source, transition = "") {
   leadCard.append(phoneList);
   buildLeadProfile(leadCard, historyCard, lead, bioOpen);
   renderSavedLeadEvents(lead,transition);
+  scheduleMissingPhoneSkip(lead,transition);
   const resultMenu = document.createElement('details');
   resultMenu.className = 'profileResultMenu';
   resultMenu.open = resultsOpen;
@@ -1262,10 +1262,20 @@ function renderSavedLeadEvents(lead,transition){
  cached.promise.then(memory=>{
   if(currentUserId!==user||String(displayedLead?.leadId)!==String(lead.leadId))return;
   content.replaceChildren();
-  if(!memory.until)recentLeadSkips.clear();
-  if(memory.until&&['next','arrive'].includes(transition)&&String(pendingCall?.leadId)!==String(lead.leadId)&&!hasScheduledAppointment(lead.callHistory)&&!navigationPending()&&!recentLeadSkips.has(key)&&recentLeadSkips.size<10){recentLeadSkips.add(key);showFeedback('Skipping a lead called within the last two hours.');void sendNavigation('next');}
   if(memory.until){if(String(pendingCall?.leadId)!==String(lead.leadId))section.open=true;const notice=document.createElement('p');notice.textContent='Recently called · available again '+new Date(memory.until).toLocaleTimeString('en-US',{timeZone:'America/Chicago',hour:'numeric',minute:'2-digit'})+' Central. Use Next lead.';content.append(notice);}
   if(!memory.events.length)content.textContent='No saved calls or texts for this lead yet.';
   for(const entry of memory.events.slice(0,30)){const line=document.createElement('p');line.textContent=[entry.label,new Date(entry.at).toLocaleString('en-US',{timeZone:'America/Chicago'}),entry.number,entry.result?.replaceAll('-',' ')].filter(Boolean).join(' · ');content.append(line);}
  }).catch(()=>{content.textContent='Saved history is unavailable. Check your connection or run the call-memory SQL update.';leadMemoryCache.delete(key);});
+}
+
+const missingPhoneSkips = new Set();
+function scheduleMissingPhoneSkip(lead,transition){
+ const settings=loadPhoneSettings(localStorage),key=getLeadKey(lead);
+ if(settings.textingMode||lead.phones?.length){missingPhoneSkips.clear();return;}
+ if(!['next','arrive'].includes(transition)||!lead.available||!lead.leadId||lead.appointmentOptions||hasScheduledAppointment(lead.callHistory)||pendingCall?.leadId===String(lead.leadId)||missingPhoneSkips.has(key)||missingPhoneSkips.size>=10)return;
+ missingPhoneSkips.add(key);
+ setTimeout(()=>{
+  if(document.hidden||getLeadKey(displayedLead)!==key||displayedLead?.phones?.length||navigationPending()||pendingCall?.leadId===String(lead.leadId))return;
+  showFeedback('Skipping a lead with no phone number.');void sendNavigation('next');
+ },2000);
 }
