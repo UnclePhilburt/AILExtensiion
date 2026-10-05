@@ -1,3 +1,4 @@
+import {createCallPassProgress} from './call-pass-progress.js?v=1';
 import {loadLeadMemory} from './lead-call-memory.js?v=1';
 import {createWorkspacePlanSync} from './workspace-plan-sync.js?v=1';
 import { buildLeadProfile } from './lead-profile.js';
@@ -79,6 +80,7 @@ let navPending = null;
 // page reload (common when the phone switches to the dialer) keeps the
 // "How did it go?" controls for the lead that was called.
 let currentUserId = "";
+const callPass=createCallPassProgress(document.querySelector("#callPassProgress"),{client,getUser:()=>currentUserId});
 const leadMemoryCache=new Map();
 const recentLeadSkips=new Set();
 let callReservationPending=false;
@@ -171,6 +173,7 @@ client.auth.onAuthStateChange((_event, session) => {
   const userId = signedIn ? String(session.user?.id || "") : "";
   if (userId !== currentUserId) {
     currentUserId = userId;
+    void callPass.refresh();
     timingOutcomes = null;
     timingOutcomesFetchedAt = 0;
     pendingCall = userId ? readPendingCall(localStorage, userId, Date.now()) : null;
@@ -953,6 +956,7 @@ function renderLead(lead, updatedAt, source, transition = "") {
       try{const {data,error}=await withTimeout(client.rpc("plan_begin_workspace_call",{p_call:callId,p_lead:{leadId:lead.leadId,leadName:lead.leadName,phone:phone.number,slot}}),12000,NETWORK_MESSAGE);if(error)throw error;started=Date.parse(data);if(user!==currentUserId||String(displayedLead?.leadId)!==String(lead.leadId))throw Error("The account or lead changed. Call was not opened.");}
       catch(error){showFeedback(["PGRST202","42883"].includes(error.code)?"Run the call-memory SQL update before calling from this workspace.":error.message,"error");return;}finally{callReservationPending=false;}
       leadMemoryCache.clear();
+      void callPass.refresh();
       calledLeadKey = getLeadKey(lead);
       const healthCallId = callId;
       setPendingCall(createPendingCall({ leadKey: calledLeadKey, leadId: lead.leadId, leadName: lead.leadName, phoneLabel: phone.label, now: started, healthCallId }));

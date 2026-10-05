@@ -43,7 +43,7 @@ async function loadPage(server,globals={}){
   const document={hidden:false,querySelector:selector=>selector.startsWith('meta')?null:el(selector),createElement:make,
     addEventListener(name,fn){docEvents[name]=fn;}};
   const context=vm.createContext({
-    installLeadSwipe(){}, buildLeadProfile(){}, createScriptOverlay:()=>({open(){},hide(){},sync(){}}),
+    createCallPassProgress:()=>({refresh:async()=>{}}),installLeadSwipe(){}, buildLeadProfile(){}, createScriptOverlay:()=>({open(){},hide(){},sync(){}}),
     loadLeadMemory:async()=>({until:0,events:[]}),client:{rpc:async()=>({data:new Date(clock.now).toISOString(),error:null}),auth:{onAuthStateChange:fn=>{authChanged=fn;},
       getSession:async()=>{auth.getSessionCalls++;return {data:{session:auth.session},error:null};},
       refreshSession:async()=>{auth.refreshCalls++;return auth.refreshOk?{data:{session:auth.session},error:null}:{data:{session:null},error:new Error('refresh failed')};}}},

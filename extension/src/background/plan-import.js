@@ -11,6 +11,7 @@ export async function planImportMessage(message,sender) {
   checkCloud(error);
   return {ok:true,enabled:!error&&data?.enabled===true,userId:user};
  }
+ if(message.type==='impact/callingList'){const {error}=await client.rpc('workspace_pass_list',{p_leads:message.leadIds||[]});checkCloud(error);return {ok:true,userId:user};}
  for(const lead of message.leads||[]) {
   const events=scheduleFromHistory(lead.callHistory||[]);
   if(events.length){const {error}=await client.rpc('companion_save_schedule',{p_lead:leadSnapshot(lead),p_events:events,p_replace:true});if(error)throw new Error('Could not save this lead’s appointments: '+error.message);}

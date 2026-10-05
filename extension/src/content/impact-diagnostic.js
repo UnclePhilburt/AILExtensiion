@@ -702,6 +702,8 @@
         }
         if(all.size!==total)throw Error('Read '+all.size+' of '+total+' leads. Retry Load all pages.');
         await chrome.storage.local.set({[STORAGE_KEYS.inboxQueue]:{capturedAt:new Date().toISOString(),url:scrubCurrentUrl(),complete:true,leads:[...all.values()]}});
+        const shared=await chrome.runtime.sendMessage({type:'impact/callingList',leadIds:[...all.keys()]});
+        if(!shared?.ok)throw Error('Calling list saved on this computer. Run the shared-call-pass SQL update and click Load all pages again to connect the counter.');
         scanned=true;status.textContent='Calling list ready: '+all.size+' leads across '+pages+' pages. Next and Best Next use the whole list.';
         const first=document.querySelector('#LeadTable_first');if(first&&!first.classList.contains('disabled')&&!first.closest('.disabled'))await changePage(first);
       }catch(error){status.textContent=error.message;}finally{importing=false;button.disabled=false;scanButton.disabled=false;}
