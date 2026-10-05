@@ -89,6 +89,7 @@
   startPhoneCommandWatcher();
   chrome.runtime.sendMessage({ type: "impact/windowSlot" }, (response) => paintPhoneWindowBadge(response?.slot));
   window.setInterval(finishResultAdvance, 150);
+  window.setInterval(()=>{void confirmRegisteredPhoneCall().catch(()=>{});},2500);
   startQuietHoursDialogWatcher();
 
   // IMPACT shows this notice for Union / Association leads after 8 PM. It is
@@ -938,7 +939,7 @@
           "in-home": "Set In - Home Appointment", "call-back": "Set Call Back Appointment", "left-message": "Left Message", "dropby-appointment": "Bad Number/Set Dropby Appointment"
         };
         try {
-          if (command.type === "call-back") sessionStorage.setItem("impact.callbackAppointmentContext", JSON.stringify({ leadId: command.leadId, startedAt: Date.now() }));
+          if (command.type === "call-back") sessionStorage.setItem("impact.callbackAppointmentContext", JSON.stringify({ leadId: command.leadId, healthCallId:command.healthCallId, startedAt: Date.now() }));
           if (["in-home", "call-back", "left-message", "dropby-appointment"].includes(command.type)) openWhatHappened(labels[command.type]);
           else openDetailAction(labels[command.type]);
           if (command.type === "left-message") void rememberWindowLead(getCurrentLeadId(), true);
@@ -1330,7 +1331,7 @@
   async function recoverPhoneCall(command, pending=null) {
     const key='impact.callRecovery';
     const previous=JSON.parse(sessionStorage.getItem(key)||'null');
-    if(command.id && previous?.command?.id===command.id && previous.phase==='clicked')return;
+    if(previous?.phase==='clicked'&&((command.healthCallId&&previous.command?.healthCallId===command.healthCallId)||(command.id&&previous.command?.id===command.id))){await confirmRegisteredPhoneCall();return;}
     const at=Date.parse(command.requestedAt);
     if(!pending&&(!Number.isFinite(at)||Date.now()-at>15000||at>Date.now()+5000))throw new Error('Call request expired. Tap Call again on your phone.');
     if(!/^[0-9]{1,20}$/.test(String(command.leadId||'')))throw new Error('Call recovery needs a valid lead.');
@@ -1369,6 +1370,17 @@
     throw new Error('Automatic call recovery could not finish. '+lastError.message);
   }
 
+  let callConfirmationBusy=false;
+  async function confirmRegisteredPhoneCall(){
+    if(callConfirmationBusy||location.pathname!=='/Lead/WhatHappend')return;
+    const context=JSON.parse(sessionStorage.getItem('impact.phoneCallContext')||'null');
+    const recovery=JSON.parse(sessionStorage.getItem('impact.callRecovery')||'null');
+    if(!context?.healthCallId||recovery?.phase!=='clicked'||recovery.command?.healthCallId!==context.healthCallId||Date.now()-context.startedAt>43200000)return;
+    if(context.confirmedAt&&Date.now()-context.confirmedAt<5000)return;
+    callConfirmationBusy=true;
+    try{const result=await chrome.runtime.sendMessage({type:'impact/commandResult',message:'Call confirmed in IMPACT. [call:'+context.healthCallId+']'});if(result?.ok){context.confirmedAt=Date.now();sessionStorage.setItem('impact.phoneCallContext',JSON.stringify(context));}}
+    finally{callConfirmationBusy=false;}
+  }
   function clickLeadCallButton(command) {
     if (!command.leadId || command.leadId !== getCurrentLeadId()) throw new Error("Call skipped: the IMPACT lead changed.");
     if (!Number.isFinite(Date.parse(command.requestedAt)) || Date.now() - Date.parse(command.requestedAt) > 15000) throw new Error("Call skipped: request expired.");
@@ -1869,6 +1881,7 @@
     if (location.pathname !== "/Lead/InboxDetail" || !(await isOriginAllowed())) return null;
     const lead = collectLocalLeadPreview();
     if (!lead.available || !lead.leadId || !leadReadyForPhone(lead)) return null;
+    lead.callRetrySupported=true;
     await addQuietHoursContext(lead);
     if (nextLeadCache?.pageUrl === location.href && Date.now() < nextLeadCache.expiresAt) lead.nextLead = nextLeadCache.lead;
     lead.scriptDetails = collectScriptDetails(document.querySelector("#primaryPanel"), lead.requestType, lead.leadName);
@@ -1980,6 +1993,7 @@
   }
 
   async function publishCurrentLead(lead) {
+    lead.callRetrySupported=true;
       void rememberWindowLead(lead?.leadId, false);
       const fingerprint = JSON.stringify({
         url: location.href,
