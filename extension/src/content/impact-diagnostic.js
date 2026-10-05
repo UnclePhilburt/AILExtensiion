@@ -554,13 +554,13 @@
     return shown >= Math.min(100, total);
   }
 
-  function collectInboxLeadQueue() {
-    const fromGrid = collectGridInboxQueue();
+  function collectInboxLeadQueue(root = document) {
+    const fromGrid = root === document ? collectGridInboxQueue() : [];
     if (fromGrid.length) return fromGrid;
     const seen = new Set();
     const leads = [];
-    const links = document.querySelectorAll('#LeadTable a[href*="/Lead/InboxDetail?LeadId="]');
-    for (const element of (links.length ? links : document.querySelectorAll('a[href*="/Lead/InboxDetail?LeadId="]'))) {
+    const links = root.querySelectorAll('#LeadTable a[href*="/Lead/InboxDetail?LeadId="]');
+    for (const element of (links.length ? links : root.querySelectorAll('a[href*="/Lead/InboxDetail?LeadId="]'))) {
       const lead = leadFromInboxAnchor(element, leads.length);
       if (!lead || seen.has(lead.leadId)) continue;
       seen.add(lead.leadId);
@@ -1174,13 +1174,35 @@
     if (currentId === finishedLeadId) await clickLeadNavigationButton("down");
   }
 
-  async function openBestNextLead(command) {
+  async function refreshBestNextInbox(){
+    const response=await fetch('/Lead/Inbox',{credentials:'include',cache:'no-store',signal:AbortSignal.timeout(12000)});
+    if(!response.ok)throw Error('Could not refresh the Inbox list. Open your IMPACT Inbox and try again.');
+    const doc=new DOMParser().parseFromString(await response.text(),'text/html');
+    if(!doc.querySelector('#LeadTable'))throw Error('IMPACT did not return your Inbox. Refresh IMPACT and sign in, then try again.');
+    const leads=collectInboxLeadQueue(doc);
+    if(leads.length)await chrome.storage.local.set({[STORAGE_KEYS.inboxQueue]:{capturedAt:new Date().toISOString(),url:'/Lead/Inbox',leads}});
+    return leads;
+  }
 
-    const queue = await readInboxQueue();
+  function emptyBestNextMessage(queue,currentLeadId,blocked){
+    const others=queue.filter(lead=>String(lead.leadId)!==String(currentLeadId));
+    if(!queue.length)return 'No leads were found in the Inbox. Check your Inbox filters.';
+    if(!others.length)return 'The refreshed Inbox contains only this lead. Check your Inbox filters for more leads.';
+    const count=others.filter(lead=>blocked.includes(String(lead.leadId))).length;
+    return count+' other Inbox leads are assigned to or were recently worked by the other phone. Try again later or check your Inbox filters.';
+  }
+
+  async function openBestNextLead(command) {
+    let queue = await readInboxQueue();
     const currentLeadId = getCurrentLeadId();
-    const blocked = await otherPhoneBlocked();
-    const choice = bestNextPool(queue, currentLeadId, readBestNextSeen(), blocked);
-    if (!choice.pool.length) throw new Error(blocked.length ? "The other phone is on the only lead left in this pass." : "Open the IMPACT Inbox on your computer so the phone can see the list, then try again.");
+    let blocked = await otherPhoneBlocked();
+    let choice = bestNextPool(queue, currentLeadId, readBestNextSeen(), blocked);
+    if(!choice.pool.length){
+      await chrome.runtime.sendMessage({type:'impact/commandResult',message:'Refreshing the Inbox list for more leads…'});
+      queue=await refreshBestNextInbox();blocked=await otherPhoneBlocked();
+      choice=bestNextPool(queue,currentLeadId,readBestNextSeen(),blocked);
+    }
+    if(!choice.pool.length)throw Error(emptyBestNextMessage(queue,currentLeadId,blocked));
     const now = Date.now();
     const group = bestCallingGroup(choice.pool, now);
     const cache = readDetailCache();

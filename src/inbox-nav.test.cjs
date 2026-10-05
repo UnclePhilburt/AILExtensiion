@@ -144,3 +144,12 @@ test('the phone Best next setting decides where a call result moves, and Next wa
   assert.match(pageSize, /hdnPageSize/);
   assert.match(pageSize, /page\.len\(100\)/);
 });
+
+test('Best next refreshes an exhausted partial list and finds a lead beyond the other phone',async()=>{
+ let refreshed=0,selected=[];const ctx=vm.createContext({readInboxQueue:async()=>[lead('1'),lead('2')],getCurrentLeadId:()=> '2',otherPhoneBlocked:async()=>['1'],readBestNextSeen:()=>[],bestNextPool:context.bestNextPool,refreshBestNextInbox:async()=>{refreshed++;return queue;},chrome:{runtime:{sendMessage:async()=>{}}},bestCallingGroup:pool=>{selected=pool.map(l=>l.leadId);throw Error('ranking reached');}});
+ vm.runInContext(source.slice(source.indexOf('  async function openBestNextLead('),source.indexOf('  async function automaticallyOpenBestNextLead')),ctx);await assert.rejects(ctx.openBestNextLead({}),/ranking reached/);assert.equal(refreshed,1);assert.deepEqual(selected,['3']);
+});
+test('empty or one-lead inbox does not blame the other phone',()=>{
+ const ctx=vm.createContext({});vm.runInContext(source.slice(source.indexOf('  function emptyBestNextMessage'),source.indexOf('  async function openBestNextLead')),ctx);
+ assert.doesNotMatch(ctx.emptyBestNextMessage([],'2',['1']),/other phone/);assert.doesNotMatch(ctx.emptyBestNextMessage([lead('2')],'2',['1']),/other phone/);assert.match(ctx.emptyBestNextMessage(queue,'2',['1','3']),/recently worked/);
+});
