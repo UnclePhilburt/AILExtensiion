@@ -153,3 +153,6 @@ test('group placeholder: say the name and number, keep the codes for the tooltip
   assert.equal(fields.group, 'IBT 610');
   assert.equal(fields.groupRaw, 'IBT 610 (SGCOY) (AD&D)');
 });
+test('named associations fill the computer script group without a numeric local',()=>{
+ assert.equal(api.scriptFieldsFromLead({available:true,leadId:'123',leadName:'TEST, PERSON',requestType:'St Louis Bowling Association (SGCOY) (AD&D)'}).group,'St Louis Bowling Association');
+});

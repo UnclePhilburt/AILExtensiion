@@ -2096,6 +2096,18 @@
   // Where the group came from ("label:Group", "table:Group", "request type",
   // "pattern", ...) is kept for the impact.groupRead log only.
   function readGroup(panel, text, requestType, leadName) {
+    // IMPACT now uses vertical label/value rows, and associations need no local number.
+    for(const row of Array.from(panel?.querySelectorAll?.('tr')||[])){
+      const cells=Array.from(row.querySelectorAll(':scope > th, :scope > td'));
+      for(let i=0;i<cells.length-1;i++){
+        const label=sanitizeText(cells[i].innerText||cells[i].textContent||'').replace(/:$/,'');
+        if(SCRIPT_DETAIL_LABELS.group.some(name=>name.toLowerCase()===label.toLowerCase())){
+          const value=sanitizeText(cells[i+1].innerText||cells[i+1].textContent||'');
+          if(value)return {group:value.slice(0,120),source:'row:'+label};
+        }
+      }
+    }
+    if(/\b(?:association|assoc|union|lodge|chapter|council)\b/i.test(requestType||'')&&!/^(?:union|association|union member response card|union member request|association member request|union member)$/i.test(String(requestType||'').trim()))return {group:String(requestType).slice(0,120),source:'named request type'};
     for (const label of SCRIPT_DETAIL_LABELS.group) {
       const value = readLabelledValue(text, label);
       if (value) return { group: value, source: `label:${label}` };

@@ -24,3 +24,7 @@ test('will kit, globe lapse and an unknown lead pick the right script or none', 
   assert.equal(context.scriptForRequestType('Something else'), null);
   assert.equal(context.CALL_SCRIPTS.length, 13);
 });
+test('association names appear in the phone script without a local number',()=>{
+ assert.equal(context.fillScriptText('Your group is {group}',{requestType:'St Louis Bowling Association (SGCOY) (AD&D)'}),'Your group is St Louis Bowling Association');
+ assert.equal(context.fillScriptText('{group}',{group:'St Louis Bowling Association'}),'St Louis Bowling Association');
+});

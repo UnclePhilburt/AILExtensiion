@@ -167,7 +167,7 @@ export function scriptFieldsFromLead(lead, details = {}, user = null) {
     phone: clean(phone?.number),
     requestType: clean(lead.requestType),
     dob: formatDob(details.dob),
-    group: speakableGroup(details.group),
+    group: speakableGroup(details.group||lead.group||lead.groupName||(/\b(?:association|assoc|union|lodge|chapter|council)\b/i.test(lead.requestType||'')&&!/^(?:union|association|union member response card|union member request|association member request|union member)$/i.test(clean(lead.requestType))?lead.requestType:'')),
     // Full value for the tooltip on the filled-in group (browser-only).
     groupRaw: clean(details.group).slice(0, 120),
     beneficiary: displayPerson(details.beneficiary),

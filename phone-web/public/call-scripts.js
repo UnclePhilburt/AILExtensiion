@@ -44,7 +44,7 @@ export function fillScriptText(text, lead, agentName = '') {
     firstName: firstNameFrom(lead?.leadName) || '(Name)',
     address: String(lead?.address || '').trim() || '(Address)',
     agent: agent || '(You)',
-    group: '(Group)',
+    group: String(lead?.group||lead?.groupName||lead?.scriptDetails?.group||(/\b(?:association|assoc|union|local|lodge|chapter|council)\b/i.test(lead?.requestType||'')&&!/^(?:union|association|union member response card|union member request|association member request|union member)$/i.test(String(lead?.requestType||'').trim())?lead.requestType:'')).replace(/(?:\s*\([^()]*\))+\s*$/,'').trim()||'(Group)',
     beneficiary: '(Beneficiary)',
     spouse: '(Spouse)'
   };
