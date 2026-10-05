@@ -26,6 +26,10 @@ test('workspace calls link results once, delay the next attempt and stop refused
  assert.equal((await db.query("select count(*)::int as n from followup_actions where kind='call' and status='pending' and due_at<'2026-10-05T21:00:00Z'")).rows[0].n,0);
  await record('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','refused-appointment');
  assert.equal((await db.query('select status from followup_leads')).rows[0].status,'stopped');assert.equal((await db.query("select count(*)::int as n from followup_actions where status in ('pending','claimed')")).rows[0].n,0);
+
+ await db.exec('reset role');await db.exec(fs.readFileSync('supabase/migrations/030_workspace_call_guard.sql','utf8').replace(/now\(\)/g,'public.plan_test_now()'));await db.exec('set role authenticated');
+ await assert.rejects(db.query('select plan_begin_workspace_call($1,$2::jsonb)',['cccccccc-cccc-4ccc-8ccc-cccccccccccc',JSON.stringify(lead)]),/called recently/);
+ const fresh={...lead,leadId:'456'},freshId='dddddddd-dddd-4ddd-8ddd-dddddddddddd';await db.query('select plan_begin_workspace_call($1,$2::jsonb)',[freshId,JSON.stringify(fresh)]);await db.query('select plan_begin_workspace_call($1,$2::jsonb)',[freshId,JSON.stringify(fresh)]);assert.equal((await db.query("select count(*)::int as n from followup_workspace_calls where lead_id='456'")).rows[0].n,1);
  await db.query("select set_config('request.jwt.claim.sub',$1,false)",['22222222-2222-4222-8222-222222222222']);assert.equal((await db.query('select count(*)::int as n from followup_workspace_calls')).rows[0].n,0);
  }finally{await db.close();}
 });
@@ -38,4 +42,10 @@ test('workspace outbox keeps a result queued while its call start is uploading a
  const sync=ctx.createWorkspacePlanSync({client,storage,getUser:()=> 'user',notify:()=>{}}),call={healthCallId:'call',leadId:'123',leadName:'Test',startedAt:Date.now()};
  sync.record(call,{phone:'3145550100',slot:'2'});sync.record(call,{phone:'3145550100',slot:'2'},'no-answer');release();await new Promise(r=>setImmediate(r));
  assert.equal(JSON.parse([...data.values()][0])[0].p_result,'no-answer');fail=true;await sync.flush();assert.equal(JSON.parse([...data.values()][0]).length,1);fail=false;await sync.flush();assert.equal(JSON.parse([...data.values()][0]).length,0);
+});
+
+test('lead history merges calls and texts without duplicating linked follow-up calls',async()=>{
+ const ctx=vm.createContext({});vm.runInContext(fs.readFileSync('phone-web/public/lead-call-memory.js','utf8').replace(/^export /gm,''),ctx);
+ const at=new Date().toISOString();const rows={followup_workspace_calls:[{id:'w',action_id:'a',started_at:at,phone:'3145550100',result:'no-answer'}],followup_actions:[{id:'a',kind:'call',started_at:at},{id:'b',kind:'text',started_at:at}],text_messages:[{sent_at:at,phone:'3145550100',replied:true}]};
+ const client={from:table=>{const q={select:()=>q,eq:()=>q,order:()=>q,limit:async()=>({data:rows[table],error:null})};return q;}};const result=await ctx.loadLeadMemory(client,'user','123');assert.equal(result.events.length,2);assert.ok(result.until>Date.now());assert.equal(ctx.recentCallUntil([], [{kind:'text',started_at:at}]),0);
 });

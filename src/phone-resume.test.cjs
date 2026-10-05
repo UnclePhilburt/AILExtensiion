@@ -44,7 +44,7 @@ async function loadPage(server,globals={}){
     addEventListener(name,fn){docEvents[name]=fn;}};
   const context=vm.createContext({
     installLeadSwipe(){}, buildLeadProfile(){}, createScriptOverlay:()=>({open(){},hide(){},sync(){}}),
-    client:{rpc:async()=>({error:null}),auth:{onAuthStateChange:fn=>{authChanged=fn;},
+    loadLeadMemory:async()=>({until:0,events:[]}),client:{rpc:async()=>({data:new Date(clock.now).toISOString(),error:null}),auth:{onAuthStateChange:fn=>{authChanged=fn;},
       getSession:async()=>{auth.getSessionCalls++;return {data:{session:auth.session},error:null};},
       refreshSession:async()=>{auth.refreshCalls++;return auth.refreshOk?{data:{session:auth.session},error:null}:{data:{session:null},error:new Error('refresh failed')};}}},
     saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, encourageLead:()=>{}, encourageResult:()=>{}, cloudEnabled:async()=>true,

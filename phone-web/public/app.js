@@ -1,3 +1,4 @@
+import {loadLeadMemory} from './lead-call-memory.js?v=1';
 import {createWorkspacePlanSync} from './workspace-plan-sync.js?v=1';
 import { buildLeadProfile } from './lead-profile.js';
 import { createTextingMode } from './texting-mode.js?v=26';
@@ -78,6 +79,9 @@ let navPending = null;
 // page reload (common when the phone switches to the dialer) keeps the
 // "How did it go?" controls for the lead that was called.
 let currentUserId = "";
+const leadMemoryCache=new Map();
+const recentLeadSkips=new Set();
+let callReservationPending=false;
 const workspacePlanSync=createWorkspacePlanSync({client,storage:localStorage,getUser:()=>currentUserId,notify:message=>showFeedback(message,"error")});
 setInterval(()=>{if(!document.hidden)void workspacePlanSync.flush();},15000);
 addEventListener("online",()=>void workspacePlanSync.flush());
@@ -543,7 +547,7 @@ async function sendCallResult(type, details = {}) {
     healthCallId: call.healthCallId,
     advance: loadPhoneSettings(localStorage).bestNextLead ? "best" : "next"
   });
-  if (sent) { tapAccepted(); navIntent = null; if(isCallResultCommand(type))workspacePlanSync.record(call,{phone:displayedLead?.phones?.find(p=>p.label===call.phoneLabel)?.number||"",slot:thisPhoneSlot()},type); }
+  if (sent) { leadMemoryCache.clear(); tapAccepted(); navIntent = null; if(isCallResultCommand(type))workspacePlanSync.record(call,{phone:displayedLead?.phones?.find(p=>p.label===call.phoneLabel)?.number||"",slot:thisPhoneSlot()},type); }
   // A short, gentle message for No Answer / Refused / an appointment set (Settings can turn it off).
   if (sent) encourageResult(type);
   if (sent && isCallResultCommand(type) && pendingCall === call) setPendingCall(markPendingCallResult(call, Date.now()));
@@ -940,11 +944,20 @@ function renderLead(lead, updatedAt, source, transition = "") {
     number.textContent = phone.number;
     content.append(label, number);
     link.append(icon, content);
-    link.addEventListener("click", () => {
+    link.addEventListener("click", async (event) => {
+      event?.preventDefault();
+      if(callReservationPending)return;
+      const user=currentUserId,slot=thisPhoneSlot(),callId=crypto.randomUUID();
+      callReservationPending=true;
+      let started;
+      try{const {data,error}=await withTimeout(client.rpc("plan_begin_workspace_call",{p_call:callId,p_lead:{leadId:lead.leadId,leadName:lead.leadName,phone:phone.number,slot}}),12000,NETWORK_MESSAGE);if(error)throw error;started=Date.parse(data);if(user!==currentUserId||String(displayedLead?.leadId)!==String(lead.leadId))throw Error("The account or lead changed. Call was not opened.");}
+      catch(error){showFeedback(["PGRST202","42883"].includes(error.code)?"Run the call-memory SQL update before calling from this workspace.":error.message,"error");return;}finally{callReservationPending=false;}
+      leadMemoryCache.clear();
       calledLeadKey = getLeadKey(lead);
-      const healthCallId = crypto.randomUUID();
-      setPendingCall(createPendingCall({ leadKey: calledLeadKey, leadId: lead.leadId, leadName: lead.leadName, phoneLabel: phone.label, now: Date.now(), healthCallId }));
+      const healthCallId = callId;
+      setPendingCall(createPendingCall({ leadKey: calledLeadKey, leadId: lead.leadId, leadName: lead.leadName, phoneLabel: phone.label, now: started, healthCallId }));
       workspacePlanSync.record(pendingCall,{phone:phone.number,slot:thisPhoneSlot()});
+      location.href=phone.dialHref;
       renderPendingCallReminder(null);
       document.querySelector("#callHistory").open = false;
       const bio = leadCard.querySelector(".profileBio");
@@ -964,6 +977,7 @@ function renderLead(lead, updatedAt, source, transition = "") {
   }
   leadCard.append(phoneList);
   buildLeadProfile(leadCard, historyCard, lead, bioOpen);
+  renderSavedLeadEvents(lead,transition);
   const resultMenu = document.createElement('details');
   resultMenu.className = 'profileResultMenu';
   resultMenu.open = resultsOpen;
@@ -1232,4 +1246,22 @@ function appendDetailTo(parent, label, value) {
   row.className = "detail";
   row.textContent = `${label}: ${value}`;
   parent.append(row);
+}
+
+function renderSavedLeadEvents(lead,transition){
+ const user=currentUserId;if(!user||!lead.leadId)return;
+ const section=document.createElement('details');section.className='profileBio';
+ const title=document.createElement('summary');title.textContent='Saved calls & texts';section.append(title);
+ const content=document.createElement('div');content.textContent='Loading saved history…';section.append(content);leadCard.append(section);
+ const key=user+':'+lead.leadId;let cached=leadMemoryCache.get(key);
+ if(!cached||Date.now()-cached.at>15000){cached={at:Date.now(),promise:loadLeadMemory(client,user,lead.leadId)};leadMemoryCache.set(key,cached);}
+ cached.promise.then(memory=>{
+  if(currentUserId!==user||String(displayedLead?.leadId)!==String(lead.leadId))return;
+  content.replaceChildren();
+  if(!memory.until)recentLeadSkips.clear();
+  if(memory.until&&['next','arrive'].includes(transition)&&String(pendingCall?.leadId)!==String(lead.leadId)&&!hasScheduledAppointment(lead.callHistory)&&!navigationPending()&&!recentLeadSkips.has(key)&&recentLeadSkips.size<10){recentLeadSkips.add(key);showFeedback('Skipping a lead called within the last two hours.');void sendNavigation('next');}
+  if(memory.until){section.open=true;const notice=document.createElement('p');notice.textContent='Recently called · available again '+new Date(memory.until).toLocaleTimeString('en-US',{timeZone:'America/Chicago',hour:'numeric',minute:'2-digit'})+' Central. Use Next lead.';content.append(notice);}
+  if(!memory.events.length)content.textContent='No saved calls or texts for this lead yet.';
+  for(const entry of memory.events.slice(0,30)){const line=document.createElement('p');line.textContent=[entry.label,new Date(entry.at).toLocaleString('en-US',{timeZone:'America/Chicago'}),entry.number,entry.result?.replaceAll('-',' ')].filter(Boolean).join(' · ');content.append(line);}
+ }).catch(()=>{content.textContent='Saved history is unavailable. Check your connection or run the call-memory SQL update.';leadMemoryCache.delete(key);});
 }
