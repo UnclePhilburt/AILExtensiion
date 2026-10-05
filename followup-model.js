@@ -23,3 +23,10 @@ export function planDraft(user,lead,action,agent,meetings,records=[],now=Date.no
  return {variant,body:intro+context+endings[variant],number:(noReply&&home?home:mobile||home)?.number,experiment,timingCohort:cohort,offerPolicy:policy,offeredSlots:variant==='B'||offers.length!==2?[]:slots.map(t=>new Date(t).toISOString())};
 }
 export function centralInput(value){const [date,time]=value.split('T');if(!date||!time)throw Error('Choose a date and time.');const [y,m,d]=date.split('-').map(Number),[h,min]=time.split(':').map(Number);let n=Date.UTC(y,m-1,d,h,min);for(let i=0;i<3;i++){const p=centralParts(n);n+=Date.UTC(y,m-1,d,h)-Date.UTC(p.year,p.month-1,p.day,p.hour);}return new Date(n).toISOString();}
+
+export function dailyTextProgress(leads,records,now=Date.now()){
+ const day=time=>{const p=centralParts(time);return p.year+'-'+p.month+'-'+p.day;};
+ const today=day(now),sent=new Set(records.filter(r=>r.sent_at&&Number.isFinite(Date.parse(r.sent_at))&&day(Date.parse(r.sent_at))===today).map(r=>String(r.lead_id)));
+ const current=leads.filter(l=>!l.archived_at);
+ return {total:current.length,texted:current.filter(l=>sent.has(String(l.lead_id))).length,remaining:current.filter(l=>l.status==='active'&&!sent.has(String(l.lead_id))).length};
+}

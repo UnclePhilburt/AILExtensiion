@@ -3,7 +3,7 @@ import {openMessage} from './open-message.js?v=6';
 import {cloudState,cloudSend,cloudTouchPhone,visibleLead} from './cloud-sync.js';
 import {loadPhoneSettings} from './settings-store.js';
 import {client} from './auth-runtime.js';
-import {planDraft,stepNames,centralInput} from './followup-model.js?v=8';
+import {planDraft,stepNames,centralInput,dailyTextProgress} from './followup-model.js?v=9';
 import {smsLink,textMeetingSlots,isBenefitsReplyLead,benefitsGroupName,isChildSafeLead} from './texting-mode.js?v=26';
 const $=s=>document.querySelector(s),node=(tag,text)=>Object.assign(document.createElement(tag),{textContent:text});
 $('#slot').value=loadPhoneSettings(localStorage).phoneSlot;
@@ -71,6 +71,11 @@ async function launch(){await load();if(current.action.kind==='text'){
  }else{await operation('start');const phones=current.lead.phones;const phone=phones.find(p=>p.label==='Mobile')||phones.find(p=>p.label==='Home');location.href='tel:'+phone.number.replace(/[^+0-9]/g,'');$('#status').textContent='After the call, record the result here to save it in your plan.';}}
 function wrongChildSafeDraft(lead,action){return action.kind==='text'&&action.status!=='done'&&isChildSafeLead(lead.request_type)&&/life insurance|cost-free benefits/i.test(action.draft?.body||'');}
 function render(){
+ const progress=dailyTextProgress(leads,records);
+ $('#textProgressCount').textContent=progress.texted+' / '+progress.total;
+ $('#textProgressRemaining').textContent=progress.remaining+' active leads not texted today';
+ $('#textProgressBar').max=progress.total||1;$('#textProgressBar').value=progress.texted;
+
  $('#clearLeads').disabled=busy;$('#slot').disabled=busy;$('#next').disabled=busy||!enabled;$('#refresh').disabled=busy;const buttons=$('#actionButtons');buttons.replaceChildren();$('#message').hidden=true;
  if(current){const {lead,action}=current;const wrongDraft=wrongChildSafeDraft(lead,action);$('#leadName').textContent=pretty(lead.name);$('#step').textContent=action.kind==='text'?(stepNames[action.step]||action.step):'CALL · ATTEMPT '+action.attempt;$('#detail').textContent=lead.request_type+' · '+(action.draft?.number||(lead.phones.find(p=>p.label==='Mobile')||lead.phones[0])?.number||'');
  if(action.kind==='text'&&action.draft){$('#message').hidden=false;$('#message').textContent=wrongDraft?'This is a Child Safe Kit lead. An older insurance draft was saved before the correction. If you did not send it, use the button below to discard it. The plan will prepare a Child Safe message when this lead returns.':action.draft.body;}
