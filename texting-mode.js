@@ -14,9 +14,12 @@ export const DEFAULT_TEXTS = {
   A: 'Hi {firstName}, this is {agentName} with {company}. We got your request to talk with an agent about life insurance options. I have {meetingTimeA} or {meetingTimeB} open to go over them with you on Zoom. Which time works best for you?',
   B: 'Hey {firstName}, this is {agentName} with {company}. We got your request to talk with an agent about life insurance options. What time are you usually available to go over them with me on Zoom?'
 };
+export function isChildSafeLead(type) {
+ return /\bchild[\s_\u2010-\u2015-]*saf(?:e|ety)\b|\bcsk\b/i.test(String(type||''));
+}
 export function isBenefitsReplyLead(type) {
   const value=String(type||'');
-  if(/child[\s-]*safe|will\s*kit/i.test(value))return false;
+  if(isChildSafeLead(value)||/will\s*kit/i.test(value))return false;
   return /\b(?:union|unions|group|groups|association|assoc|response\s*cards?|reply\s*cards?|rc)\b/i.test(value)
     || /(?:^|[\s,;:|-])(?:[A-Z][A-Z&.'\/-]*[A-Z&.]|Local|Lodge|District|Council|Chapter)\s+#?\d{1,5}[A-Z]?\s*\((?=[^()]*[A-Za-z])[A-Za-z0-9&\/.' -]{1,20}\)/.test(value)
     || /\([A-Z]{2,}\d[A-Z0-9]*\)\s*\([A-Z&]{2,}\)/i.test(value);
@@ -33,7 +36,7 @@ export function benefitsGroupName(type, explicit = '') {
   return name.slice(0,120);
 }
 export function textTemplates(type, saved, group = '') {
-  const childSafe = /child[\s-]*safe/i.test(type);
+  const childSafe = isChildSafeLead(type);
   const defaults = childSafe ? {
     A: 'Hi {firstName}, this is {agentName} from American Income Life with the Child Safe Program. I have {meetingTimeA} or {meetingTimeB} open for a Zoom meeting to go over the Child Safe Kit with you. Which time works best for you?',
     B: 'Hey {firstName}, this is {agentName} from American Income Life with the Child Safe Program. What time are you usually available for a Zoom meeting to go over the Child Safe Kit?'
@@ -45,6 +48,7 @@ export function textTemplates(type, saved, group = '') {
     if (!saved?.[variant] || saved[variant] === LEGACY_TEXTS[variant] || saved[variant] === KIT_TEXTS[variant] || PREVIOUS_ZOOM_TEXTS.includes(saved[variant])) result[variant] = defaults[variant];
     result[variant] = result[variant].replace(/\s*Reply STOP to opt out\.?/gi, '').trim();
   }
+  if(childSafe){result.topic='the Child Safe Kit';for(const variant of ['A','B','C','D'])if(/life insurance|cost-free benefits/i.test(result[variant]))result[variant]=defaults[variant];}
   if(isBenefitsReplyLead(type)){result.topic=textTopic(type);for(const variant of ['A','B','C','D'])if(/life insurance/i.test(result[variant]))result[variant]=defaults[variant];}
   const groupName=benefitsGroupName(type,group);
   if(isBenefitsReplyLead(type)&&groupName){for(const variant of ['A','B','C','D'])result[variant]=result[variant].replace('cost-free benefits program through '+groupName,'cost-free benefits program for members of '+groupName).replace(/cost-free benefits program(?! for members of )/g,'cost-free benefits program for members of '+groupName);}
@@ -69,7 +73,7 @@ export function textFirstName(name) {
 export function textTopic(type) {
   if(isBenefitsReplyLead(type))return 'the cost-free benefits program';
   if (/will\s*kit/i.test(type)) return 'the will kit';
-  if (/child\s*safe/i.test(type)) return 'the child safety kit';
+  if (isChildSafeLead(type)) return 'the Child Safe Kit';
   return 'life insurance information';
 }
 export function withoutOrganization(value) {
@@ -248,6 +252,7 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
     if (followup && String(lead?.leadId) === String(followup.leadId)) openingFollowup = '';
 
     if (pending) {
+      if(isChildSafeLead(pending.requestType)&&/life insurance|cost-free benefits/i.test(pending.body)&&!state.records.some(r=>r.id===pending.id&&r.sentAt)){delete state.pending[slot];save(state);sync(true);return;}
       root.append(el('h3', displayName(pending.name), 'textingName'), el('p', pending.number, 'textingRecipient'));
       const sent = state.records.find(r => r.id === pending.id)?.sentAt;
       const actual = el('textarea'); actual.value = pending.body;

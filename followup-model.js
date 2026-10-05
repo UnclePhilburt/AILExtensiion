@@ -1,4 +1,4 @@
-import {textFirstName,textHash,textVariant,availableTextMeetings,meetingTimeLabel,centralParts,isBenefitsReplyLead,benefitsGroupName} from './texting-mode.js?v=23';
+import {textFirstName,textHash,textVariant,availableTextMeetings,meetingTimeLabel,centralParts,isBenefitsReplyLead,benefitsGroupName,isChildSafeLead} from './texting-mode.js?v=24';
 import {chooseTextVariant} from './text-learning.js?v=2';
 export const stepNames={intro:'Introduction · Sunday / Monday catch-up',tuesday:'Tuesday follow-up',thursday:'Thursday follow-up',saturday:'Saturday final follow-up'};
 export function planDraft(user,lead,action,agent,meetings,records=[],now=Date.now()) {
@@ -8,7 +8,7 @@ export function planDraft(user,lead,action,agent,meetings,records=[],now=Date.no
  const variant=action.draft?.variant||chooseTextVariant(records.filter(r=>r.timing_cohort===cohort),experiment,textVariant(user,lead.lead_id,experiment,['A','B','C','D']),Math.random,['A','B','C','D']);
  const policy=same&&['C','D'].includes(variant)?'same-day':'standard';
  const slots=availableTextMeetings(meetings,now,policy);
- const child=/child[\s-]*safe/i.test(lead.request_type),will=/will\s*kit/i.test(lead.request_type);
+ const child=isChildSafeLead(lead.request_type),will=/will\s*kit/i.test(lead.request_type);
  const company=child?'American Income Life with the Child Safe Program':'American Income Life';
  const benefits=isBenefitsReplyLead(lead.request_type);
  const group=benefits?benefitsGroupName(lead.request_type,lead.group_name||lead.group):'';
