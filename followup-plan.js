@@ -9,13 +9,14 @@ const $=s=>document.querySelector(s),node=(tag,text)=>Object.assign(document.cre
 $('#slot').value=loadPhoneSettings(localStorage).phoneSlot;
 const device=sessionStorage.getItem('plan.device')||crypto.randomUUID();sessionStorage.setItem('plan.device',device);
 let checkin=null;
+let workspaceCalls=[],workspaceHistoryReady=false;
 let owner='',agent='',enabled=false,current=null,leads=[],records=[],meetings=[],busy=false,appointmentLead='';
 const pretty=s=>String(s||'').split(',').reverse().join(' ').trim().split(/\s+/).map(w=>w===w.toUpperCase()?w[0]+w.slice(1).toLowerCase():w).join(' ');
 async function rpc(name,args){const {data,error}=await client.rpc(name,args);if(error)throw Error(['42P01','PGRST202','PGRST205'].includes(error.code)?'Database setup is needed. Open “How your plan works” for the setup file.':error.message);return data;}
 async function checkReply(value){const {error}=await client.from('text_messages').update({replied:value,reviewed_at:new Date().toISOString()}).eq('user_id',owner).eq('id',checkin.id);if(error)throw error;checkin=null;await load();$('#status').textContent='Reply status saved.';}
 async function run(fn){if(busy)return;busy=true;render();try{await fn();}catch(e){$('#status').textContent=e.message;}finally{busy=false;render();}}
 async function all(table){const rows=[];for(let i=0;;i+=500){const {data,error}=await client.from(table).select('*').eq('user_id',owner).order(table==='followup_leads'?'lead_id':'id').range(i,i+499);if(error)throw error;rows.push(...data);if(data.length<500)return rows;}}
-async function load(){const {data,error}=await client.from('followup_settings').select('*').eq('user_id',owner).maybeSingle();if(error)throw Error('Run the follow-up database setup before using your plan.');if(!data?.enabled)await rpc('plan_enable',{p_enabled:true});enabled=true;$('#importNote').textContent=data?.import_note||'No inbox imported yet.';[leads,records,meetings]=await Promise.all([all('followup_leads'),all('text_messages'),all('scheduled_events')]);leads=leads.filter(lead=>!lead.archived_at);}
+async function load(){const {data,error}=await client.from('followup_settings').select('*').eq('user_id',owner).maybeSingle();if(error)throw Error('Run the follow-up database setup before using your plan.');if(!data?.enabled)await rpc('plan_enable',{p_enabled:true});enabled=true;$('#importNote').textContent=data?.import_note||'No inbox imported yet.';[leads,records,meetings]=await Promise.all([all('followup_leads'),all('text_messages'),all('scheduled_events')]);leads=leads.filter(lead=>!lead.archived_at);try{workspaceCalls=await all('followup_workspace_calls');workspaceHistoryReady=true;}catch(error){if(!/followup_workspace_calls|schema cache/i.test(error.message))throw error;workspaceCalls=[];workspaceHistoryReady=false;}}
 async function operation(op,payload={}){if(!current)throw Error('Choose the next lead first.');try{current.action=await rpc('plan_action',{p_id:current.action.id,p_device:device,p_operation:op,p_payload:payload});}catch(e){if(/no longer assigned|plan is paused/i.test(e.message))current=null;throw e;}}
 async function prepareCurrent(){
  if(!current||current.action.kind!=='text')return;
@@ -71,6 +72,13 @@ async function launch(){await load();if(current.action.kind==='text'){
  }else{await operation('start');const phones=current.lead.phones;const phone=phones.find(p=>p.label==='Mobile')||phones.find(p=>p.label==='Home');location.href='tel:'+phone.number.replace(/[^+0-9]/g,'');$('#status').textContent='After the call, record the result here to save it in your plan.';}}
 function wrongChildSafeDraft(lead,action){return action.kind==='text'&&action.status!=='done'&&isChildSafeLead(lead.request_type)&&/life insurance|cost-free benefits/i.test(action.draft?.body||'');}
 function render(){
+ const history=$('#workspaceCallHistory');history.replaceChildren();
+ if(!workspaceHistoryReady){const setup=node('a','Connect workspace calls — run this SQL update once');setup.href='downloads/followup-workspace-calls.sql';history.append(setup);}else{
+ const recent=[...workspaceCalls].sort((a,b)=>Date.parse(b.started_at)-Date.parse(a.started_at));
+ for(const call of recent.slice(0,50)){const row=node('article','');row.className='lead';row.append(node('h3',pretty(call.lead_name)),node('p',[call.phone,new Date(call.started_at).toLocaleString('en-US',{timeZone:'America/Chicago'}),({'no-answer':'No answer','refused-appointment':'Refused appointment','virtual-appointment-slot':'Appointment booked'})[call.result]||'Call opened · awaiting result'].filter(Boolean).join(' · ')));history.append(row);}
+ if(!recent.length)history.append(node('p','Workspace calls will appear here. Times are Central.'));
+ }
+
  const progress=dailyTextProgress(leads,records);
  $('#textProgressCount').textContent=progress.texted+' / '+progress.total;
  $('#textProgressRemaining').textContent=progress.remaining+' active leads not texted today';

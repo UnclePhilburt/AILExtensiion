@@ -1,3 +1,4 @@
+import {createWorkspacePlanSync} from './workspace-plan-sync.js?v=1';
 import { buildLeadProfile } from './lead-profile.js';
 import { createTextingMode } from './texting-mode.js?v=26';
 import { textTracking } from './text-tracking.js?v=2';
@@ -77,6 +78,9 @@ let navPending = null;
 // page reload (common when the phone switches to the dialer) keeps the
 // "How did it go?" controls for the lead that was called.
 let currentUserId = "";
+const workspacePlanSync=createWorkspacePlanSync({client,storage:localStorage,getUser:()=>currentUserId,notify:message=>showFeedback(message,"error")});
+setInterval(()=>{if(!document.hidden)void workspacePlanSync.flush();},15000);
+addEventListener("online",()=>void workspacePlanSync.flush());
 let pendingCall = null;
 // Lead-change animation (presentation only, see lead-transition.js): the last
 // lead shown on the card and the Next/Previous tap that may explain a change.
@@ -539,7 +543,7 @@ async function sendCallResult(type, details = {}) {
     healthCallId: call.healthCallId,
     advance: loadPhoneSettings(localStorage).bestNextLead ? "best" : "next"
   });
-  if (sent) { tapAccepted(); navIntent = null; }
+  if (sent) { tapAccepted(); navIntent = null; if(isCallResultCommand(type))workspacePlanSync.record(call,{phone:displayedLead?.phones?.find(p=>p.label===call.phoneLabel)?.number||"",slot:thisPhoneSlot()},type); }
   // A short, gentle message for No Answer / Refused / an appointment set (Settings can turn it off).
   if (sent) encourageResult(type);
   if (sent && isCallResultCommand(type) && pendingCall === call) setPendingCall(markPendingCallResult(call, Date.now()));
@@ -940,6 +944,7 @@ function renderLead(lead, updatedAt, source, transition = "") {
       calledLeadKey = getLeadKey(lead);
       const healthCallId = crypto.randomUUID();
       setPendingCall(createPendingCall({ leadKey: calledLeadKey, leadId: lead.leadId, leadName: lead.leadName, phoneLabel: phone.label, now: Date.now(), healthCallId }));
+      workspacePlanSync.record(pendingCall,{phone:phone.number,slot:thisPhoneSlot()});
       renderPendingCallReminder(null);
       document.querySelector("#callHistory").open = false;
       const bio = leadCard.querySelector(".profileBio");
