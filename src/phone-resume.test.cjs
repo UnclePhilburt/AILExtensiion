@@ -44,7 +44,7 @@ async function loadPage(server,globals={}){
     addEventListener(name,fn){docEvents[name]=fn;}};
   const context=vm.createContext({
     installLeadSwipe(){}, buildLeadProfile(){}, createScriptOverlay:()=>({open(){},hide(){},sync(){}}),
-    client:{auth:{onAuthStateChange:fn=>{authChanged=fn;},
+    client:{rpc:async()=>({error:null}),auth:{onAuthStateChange:fn=>{authChanged=fn;},
       getSession:async()=>{auth.getSessionCalls++;return {data:{session:auth.session},error:null};},
       refreshSession:async()=>{auth.refreshCalls++;return auth.refreshOk?{data:{session:auth.session},error:null}:{data:{session:null},error:new Error('refresh failed')};}}},
     saveLeadSchedule:async()=>false, saveAppointmentChoice:async()=>false, encourageLead:()=>{}, encourageResult:()=>{}, cloudEnabled:async()=>true,
@@ -61,7 +61,7 @@ async function loadPage(server,globals={}){
     URLSearchParams, Date:FakeDate, JSON, crypto:require('node:crypto'), structuredClone,
     setInterval(){}, setTimeout:(fn,ms)=>{timers.push({fn,ms});return timers.length;}, clearTimeout(){}, console, ...globals
   });
-  vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context); vm.runInContext(leadHighlightsSource,context); vm.runInContext(leadRulesSource,context); vm.runInContext(settingsStoreSource,context); vm.runInContext(leadTransitionSource,context); vm.runInContext(leadSwipeSource,context);
+  vm.runInContext(read("workspace-plan-sync.js").replace(/^export /gm,""),context); vm.runInContext(pendingCallSource,context); vm.runInContext(phoneActionsSource,context); vm.runInContext(leadHighlightsSource,context); vm.runInContext(leadRulesSource,context); vm.runInContext(settingsStoreSource,context); vm.runInContext(leadTransitionSource,context); vm.runInContext(leadSwipeSource,context);
   const app=await vm.runInContext(`(async()=>{${appSource}\nreturn {refreshCloud};})()`,context);
   authChanged('SIGNED_IN',auth.session);
   await settle();
