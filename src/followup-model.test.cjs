@@ -66,3 +66,10 @@ test('Child Safe label variants and old insurance templates always produce kit t
   }
  }
 });
+
+test('daily progress counts unique current leads in Central time and excludes stopped leads from remaining',()=>{
+ const leads=[{lead_id:'1',status:'active'},{lead_id:'2',status:'active'},{lead_id:'3',status:'appointment'},{lead_id:'4',status:'active',archived_at:'yes'}];
+ const records=[{lead_id:'1',sent_at:'2026-10-06T04:59:00Z'},{lead_id:'1',sent_at:'2026-10-05T18:00:00Z'},{lead_id:'2',sent_at:'2026-10-05T04:59:00Z'},{lead_id:'4',sent_at:'2026-10-05T18:00:00Z'},{lead_id:'2',sent_at:null}];
+ assert.deepEqual(JSON.parse(JSON.stringify(context.dailyTextProgress(leads,records,Date.parse('2026-10-06T04:59:00Z')))),{total:3,texted:1,remaining:1});
+ assert.equal(context.dailyTextProgress(leads,records,Date.parse('2026-10-06T05:00:00Z')).texted,0);
+});
