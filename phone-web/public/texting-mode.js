@@ -14,12 +14,23 @@ export const DEFAULT_TEXTS = {
   A: 'Hi {firstName}, this is {agentName} with {company}. We got your request to talk with an agent about life insurance options. I have {meetingTimeA} or {meetingTimeB} open to go over them with you on Zoom. Which time works best for you?',
   B: 'Hey {firstName}, this is {agentName} with {company}. We got your request to talk with an agent about life insurance options. What time are you usually available to go over them with me on Zoom?'
 };
+export function isBenefitsReplyLead(type) {
+  const value=String(type||'');
+  if(/child[\s-]*safe|will\s*kit/i.test(value))return false;
+  return /\b(?:union|unions|group|groups|association|assoc|response\s*cards?|reply\s*cards?|rc)\b/i.test(value)
+    || /(?:^|[\s,;:|-])(?:[A-Z][A-Z&.'\/-]*[A-Z&.]|Local|Lodge|District|Council|Chapter)\s+#?\d{1,5}[A-Z]?\s*\((?=[^()]*[A-Za-z])[A-Za-z0-9&\/.' -]{1,20}\)/.test(value)
+    || /\([A-Z]{2,}\d[A-Z0-9]*\)\s*\([A-Z&]{2,}\)/i.test(value);
+}
+const BENEFITS_TEXTS = {
+ A: 'Hi {firstName}, this is {agentName} with {company}. We received the reply card you sent in for the cost-free benefits program. I have {meetingTimeA} or {meetingTimeB} open to go over it with you on Zoom. Which time works best for you?',
+ B: 'Hey {firstName}, this is {agentName} with {company}. We received the reply card you sent in for the cost-free benefits program. What time are you usually available to go over it with me on Zoom?'
+};
 export function textTemplates(type, saved) {
   const childSafe = /child[\s-]*safe/i.test(type);
   const defaults = childSafe ? {
     A: 'Hi {firstName}, this is {agentName} from American Income Life with the Child Safe Program. I have {meetingTimeA} or {meetingTimeB} open for a Zoom meeting to go over the Child Safe Kit with you. Which time works best for you?',
     B: 'Hey {firstName}, this is {agentName} from American Income Life with the Child Safe Program. What time are you usually available for a Zoom meeting to go over the Child Safe Kit?'
-  } : /will\s*kit/i.test(type) ? KIT_TEXTS : DEFAULT_TEXTS;
+  } : /will\s*kit/i.test(type) ? KIT_TEXTS : isBenefitsReplyLead(type) ? BENEFITS_TEXTS : DEFAULT_TEXTS;
   defaults.C = defaults.A;
   defaults.D = defaults.A.split('I have')[0] + 'Would {meetingTimeA} or {meetingTimeB} work for a Zoom meeting about {topic}? If neither works, what time is usually best for you?';
   const result = { ...defaults, topic: textTopic(type), ...saved };
@@ -27,6 +38,7 @@ export function textTemplates(type, saved) {
     if (!saved?.[variant] || saved[variant] === LEGACY_TEXTS[variant] || saved[variant] === KIT_TEXTS[variant] || PREVIOUS_ZOOM_TEXTS.includes(saved[variant])) result[variant] = defaults[variant];
     result[variant] = result[variant].replace(/\s*Reply STOP to opt out\.?/gi, '').trim();
   }
+  if(isBenefitsReplyLead(type)){result.topic=textTopic(type);for(const variant of ['A','B','C','D'])if(/life insurance/i.test(result[variant]))result[variant]=defaults[variant];}
   return result;
 }
 export function textHash(value) {
@@ -46,6 +58,7 @@ export function textFirstName(name) {
   return first.toLowerCase().replace(/(^|[-'’])\p{L}/gu, part => part.toUpperCase());
 }
 export function textTopic(type) {
+  if(isBenefitsReplyLead(type))return 'the cost-free benefits program';
   if (/will\s*kit/i.test(type)) return 'the will kit';
   if (/child\s*safe/i.test(type)) return 'the child safety kit';
   return 'life insurance information';

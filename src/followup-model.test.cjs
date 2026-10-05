@@ -32,3 +32,14 @@ test('reported no reply uses Home and Central appointment input respects dayligh
  assert.equal(context.centralInput('2026-10-05T14:30'),'2026-10-05T19:30:00.000Z');
  assert.equal(context.centralInput('2026-12-05T10:30'),'2026-12-05T16:30:00.000Z');
 });
+
+test('group, union and coded reply-card leads get benefits wording across all days and variants',()=>{
+ for(const type of ['Group','Union','Response Card','Association','IBT 610 (SGCOY) (AD&D)','GREATER ST LOUIS BOWLING ASSOC (SG123) (ADD)']){
+  const templates=context.textTemplates(type,{A:'We got your request about life insurance. Zoom?',topic:'life insurance information'});
+  for(const variant of ['A','B','C','D']){assert.match(templates[variant],/reply card/);assert.match(templates[variant],/cost-free benefits program/);assert.doesNotMatch(templates[variant],/life insurance/i);}
+  for(const step of ['intro','tuesday','thursday','saturday'])for(const variant of ['A','B','C','D']){
+   const draft=context.planDraft('user',{...lead,request_type:type},{step,draft:{variant}},'Cody',[],[],Date.parse('2026-10-04T23:00:00Z'));
+   assert.match(draft.body,/reply card/);assert.match(draft.body,/cost-free benefits program/);assert.match(draft.body,/Zoom/);assert.doesNotMatch(draft.body,/life insurance/i);assert.match(draft.experiment,/^plan-benefits-v2:/);
+  }
+ }
+});

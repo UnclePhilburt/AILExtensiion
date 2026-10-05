@@ -191,7 +191,7 @@ test('No reply does not offer the same number again when Home and Mobile match',
 
 test('life insurance request comes before Zoom in both variants, while kit intros stay specific', () => {
  const {context:c}=harness();
- for(const type of ['Life Insurance Options','Response Card']) {
+ for(const type of ['Life Insurance Options','Final Expense']) {
   const drafts=c.textTemplates(type);
   for(const variant of ['A','B']) {
    assert.ok(drafts[variant].includes('request to talk with an agent about life insurance options'));
