@@ -43,7 +43,7 @@ async function loadPage(server,globals={}){
   const document={hidden:false,querySelector:selector=>selector.startsWith('meta')?null:el(selector),createElement:make,
     addEventListener(name,fn){docEvents[name]=fn;}};
   const context=vm.createContext({
-    createCallPassProgress:()=>({refresh:async()=>{}}),installLeadSwipe(){}, buildLeadProfile(){}, createScriptOverlay:()=>({open(){},hide(){},sync(){}}),
+    findUncalledLead:async()=>({leadId:leadB.leadId}),createCallPassProgress:()=>({refresh:async()=>{}}),installLeadSwipe(){}, buildLeadProfile(){}, createScriptOverlay:()=>({open(){},hide(){},sync(){}}),
     loadLeadMemory:async()=>({until:0,events:[]}),client:{rpc:async()=>({data:new Date(clock.now).toISOString(),error:null}),auth:{onAuthStateChange:fn=>{authChanged=fn;},
       getSession:async()=>{auth.getSessionCalls++;return {data:{session:auth.session},error:null};},
       refreshSession:async()=>{auth.refreshCalls++;return auth.refreshOk?{data:{session:auth.session},error:null}:{data:{session:null},error:new Error('refresh failed')};}}},
@@ -325,13 +325,13 @@ test('recent calls skip on arrival but not on the initial page or repeated refre
  const server=makeServer();freshState(server,null);
  const page=await loadPage(server,{loadLeadMemory:async()=>({until:Date.parse('2026-09-24T22:00:00Z'),events:[]})});await settle();
  assert.equal(server.sent.length,0);
- freshState(server,page,leadB);await page.app.refreshCloud();await settle();assert.deepEqual(server.sent.map(c=>c.type),['next']);
+ freshState(server,page,leadB);await page.app.refreshCloud();await settle();assert.deepEqual(server.sent.map(c=>c.type),['open-lead']);
  await page.app.refreshCloud();await settle();assert.equal(server.sent.length,1);
 });
 test('a settled lead with no number skips once without recording a call',async()=>{
  const server=makeServer();freshState(server,null);const page=await loadPage(server);
  freshState(server,page,{...leadB,phones:[]});await page.app.refreshCloud();
- await page.runTimers(2000);assert.deepEqual(server.sent.map(c=>c.type),['next']);
+ await page.runTimers(2000);assert.deepEqual(server.sent.map(c=>c.type),['open-lead']);
  freshState(server,page,{...leadB,phones:[]});await page.app.refreshCloud();await page.runTimers(2000);
  assert.equal(server.sent.length,1);
 });
