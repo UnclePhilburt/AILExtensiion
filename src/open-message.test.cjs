@@ -34,3 +34,5 @@ test('copy fallback preserves the exact prepared message',async()=>{
  const {context,elements}=setup(false);let copied='';context.navigator.clipboard={writeText:async text=>{copied=text}};
  context.openMessage('sms:3145550100?body=Hello%20Jane');await elements.find(e=>e.textContent==='Copy message').events.click();assert.equal(copied,'Hello Jane');
 });
+
+test('regular launch goes straight to Messages without a dialog or debug panel',()=>{const {context,elements}=setup(false);context.navigator.userAgent='Android';context.openMessage('sms:3145550100?body=Hello',{direct:true});assert.equal(context.window.location.href,'sms:3145550100?body=Hello');assert.equal(elements.filter(e=>e.tag==='dialog').length,0);});

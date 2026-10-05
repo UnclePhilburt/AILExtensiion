@@ -1,7 +1,7 @@
 import {attachMessageDebug} from './message-debug.js?v=2';
 // Keep a real link available when asynchronous preparation outlasts the
 // browser's user activation. Opening a composer never confirms a sent text.
-export function openMessage(href) {
+export function openMessage(href, {direct = false} = {}) {
   const match = /^sms:(\+?\d{10,15})(?:[?&]body=(.*))?$/i.exec(href);
   if (!match) throw new Error('A text message needs a valid phone link.');
   const number = match[1], body = decodeURIComponent(match[2] || '');
@@ -11,6 +11,7 @@ export function openMessage(href) {
   const launchHref = android
     ? `intent:${number}#Intent;scheme=smsto;action=android.intent.action.SENDTO;S.sms_body=${encodeURIComponent(body)};end`
     : href;
+  if (direct) { window.location.href = href; return; }
   const previous = document.querySelector('#messageLauncher');
   if (previous) { previous.close(); previous.remove(); }
   const dialog = document.createElement('dialog');
