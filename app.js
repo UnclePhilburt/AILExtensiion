@@ -1,3 +1,4 @@
+import {createCallRegistrationRetry} from './call-registration-retry.js?v=1';
 import {findUncalledLead} from './uncalled-lead.js?v=1';
 import {createCallPassProgress} from './call-pass-progress.js?v=5';
 import {loadLeadMemory} from './lead-call-memory.js?v=1';
@@ -89,6 +90,9 @@ const workspacePlanSync=createWorkspacePlanSync({client,storage:localStorage,get
 setInterval(()=>{if(!document.hidden)void workspacePlanSync.flush();},15000);
 addEventListener("online",()=>void workspacePlanSync.flush());
 let pendingCall = null;
+const callRegistrationRetry=createCallRegistrationRetry({getCall:()=>pendingCall,getUser:()=>currentUserId,getSlot:thisPhoneSlot,getLead:()=>displayedLead,isHidden:()=>document.hidden,save:setPendingCall,send:sendComputerCommand});
+setInterval(()=>{void callRegistrationRetry.tick().catch(()=>{});},5000);
+addEventListener('focus',()=>{void callRegistrationRetry.tick().catch(()=>{});});
 // Lead-change animation (presentation only, see lead-transition.js): the last
 // lead shown on the card and the Next/Previous tap that may explain a change.
 let lastShownLeadKey = "";
@@ -425,6 +429,8 @@ function applyCloudState(state, startedAt) {
 }
 
 function receiveComputerResult(message) {
+  callRegistrationRetry.confirm(message);
+  message=String(message||'').replace(/\s*\[call:[0-9a-f-]+\]/ig,'');
   awaitingResultSince = 0;
   showFeedback(message, /skipped|not |no longer|unavailable|could not|couldn't|expired|failed|needs|disabled|open |check /i.test(message) ? "error" : "info");
   clearNavigationPending();
@@ -772,7 +778,7 @@ async function sendComputerCommand(type, details = {}) {
       // The same id on a retry lets the server ignore a duplicate.
       const id = crypto.randomUUID();
       try {
-        await withTimeout(cloudSend(state, command, id), 12000, NETWORK_MESSAGE);
+        await withTimeout(details.registrationRetry?(async()=>{const {error}=await client.rpc('companion_retry_call',{p_id:id,p_device:state.device_id,p_command:command});if(error)throw error;})():cloudSend(state, command, id),12000,NETWORK_MESSAGE);
       } catch (error) {
         if (!isAuthFailure(error.message)) throw error;
         if (!(await refreshSessionNow())) throw new Error(SIGN_IN_MESSAGE);
@@ -824,7 +830,7 @@ async function sendComputerCommand(type, details = {}) {
     followLeadAfterResult(type);
     return true;
   } catch (error) {
-    showFeedback(friendlySendError(error.message, type), "error");
+    showFeedback(details.registrationRetry&&['PGRST202','42883'].includes(error.code)?'Run the automatic-call-retry SQL update once to enable retries.':details.registrationRetry?'Call registration will retry automatically when the computer reconnects.':friendlySendError(error.message,type),'error');
     return false;
   }
 }
@@ -960,7 +966,7 @@ function renderLead(lead, updatedAt, source, transition = "") {
       void callPass.refresh();
       calledLeadKey = getLeadKey(lead);
       const healthCallId = callId;
-      setPendingCall(createPendingCall({ leadKey: calledLeadKey, leadId: lead.leadId, leadName: lead.leadName, phoneLabel: phone.label, now: started, healthCallId }));
+      setPendingCall({...createPendingCall({ leadKey: calledLeadKey, leadId: lead.leadId, leadName: lead.leadName, phoneLabel: phone.label, now: started, healthCallId }),phoneNumber:phone.number,slot,retryRegistration:Boolean(lead.callRetrySupported),registrationAttemptAt:Date.now(),retryAttempts:0});
       workspacePlanSync.record(pendingCall,{phone:phone.number,slot:thisPhoneSlot()});
       location.href=phone.dialHref;
       renderPendingCallReminder(null);
