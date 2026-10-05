@@ -355,3 +355,8 @@ test('a due callback stays visible instead of being skipped for its schedule',as
  const server=makeServer();freshState(server,null,{...leadA,callHistory:['Schedule Call Back appointment on Sep 24 2026 - 02:30 PM by Me']});
  const page=await loadPage(server);await page.runTimers(2000);assert.equal(server.sent.length,0);
 });
+test('Dont show again sends No Answer for the call and disables the finished-call button',async()=>{
+ const {server,page}=await calledPage();await page.el('#dontShowAgain').listeners.click();await settle();
+ assert.deepEqual(server.sent.map(c=>c.type),['call','no-answer']);assert.equal(server.sent[1].leadId,leadA.leadId);
+ assert.equal(page.el('#dontShowAgain').disabled,true);assert.match(page.feedback(),/excluded from calls and texts/);
+});

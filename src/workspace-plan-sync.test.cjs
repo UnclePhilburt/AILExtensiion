@@ -36,6 +36,13 @@ test('workspace calls link results once, delay the next attempt and stop refused
  const progress=async(reset=null)=>(await db.query('select workspace_pass_progress($1) as p',[reset])).rows[0].p;
  let shared=await progress();assert.equal(shared.total,3);assert.equal(shared.called,2);assert.equal(shared.remaining,1);
  await db.query("select set_config('plan.test_time',$1,false)",['2026-10-05T19:01:00Z']);shared=await progress(1);assert.equal(shared.pass,2);assert.equal(shared.called,0);assert.equal((await progress(1)).pass,2,'a duplicate reset from the other phone must not reset twice');assert.equal((await db.query('select count(*)::int as n from followup_workspace_calls')).rows[0].n,3,'reset preserves all calls');
+ await db.exec('reset role');await db.exec(fs.readFileSync('supabase/migrations/033_excluded_leads.sql','utf8').replace(/now\(\)/g,'public.plan_test_now()'));await db.exec('set role authenticated');
+ await db.query('select workspace_exclude_lead($1)',['456']);await db.query('select workspace_exclude_lead($1)',['456']);
+ await db.query('select plan_import($1::jsonb)',[JSON.stringify([fresh])]);
+ assert.equal((await db.query("select status from followup_leads where lead_id='456'")).rows[0].status,'stopped');
+ assert.equal((await db.query("select count(*)::int n from followup_actions where lead_id='456' and status in ('pending','claimed')")).rows[0].n,0);
+ await db.query("select plan_set_status('456','active',null)");assert.equal((await db.query("select status from followup_leads where lead_id='456'")).rows[0].status,'stopped','resume cannot undo persistent exclusion');
+ assert.equal((await progress()).total,2,'excluded lead is removed from the pass total');
  await db.query("select set_config('request.jwt.claim.sub',$1,false)",['22222222-2222-4222-8222-222222222222']);assert.equal((await db.query('select count(*)::int as n from followup_workspace_calls')).rows[0].n,0);
  }finally{await db.close();}
 });

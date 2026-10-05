@@ -1,7 +1,7 @@
 import {createCallRegistrationRetry} from './call-registration-retry.js?v=1';
-import {findUncalledLead} from './uncalled-lead.js?v=2';
+import {findUncalledLead} from './uncalled-lead.js?v=3';
 import {createCallPassProgress} from './call-pass-progress.js?v=5';
-import {loadLeadMemory} from './lead-call-memory.js?v=1';
+import {loadLeadMemory} from './lead-call-memory.js?v=2';
 import {createWorkspacePlanSync} from './workspace-plan-sync.js?v=1';
 import { buildLeadProfile } from './lead-profile.js';
 import { createTextingMode } from './texting-mode.js?v=26';
@@ -28,6 +28,7 @@ const bridgeTokenInput = document.querySelector("#bridgeToken");
 const saveBridgeButton = document.querySelector("#saveBridge");
 const previousLeadButton = document.querySelector("#previousLead");
 const nextLeadButton = document.querySelector("#nextLead");
+const dontShowAgainButton=document.querySelector("#dontShowAgain");
 const noAnswerButton = document.querySelector("#noAnswer");
 const detailActions = [
   ["#presDone", "pres-done", true],
@@ -90,6 +91,7 @@ const workspacePlanSync=createWorkspacePlanSync({client,storage:localStorage,get
 setInterval(()=>{if(!document.hidden)void workspacePlanSync.flush();},15000);
 addEventListener("online",()=>void workspacePlanSync.flush());
 let pendingCall = null;
+let excludingLead=false;
 const callRegistrationRetry=createCallRegistrationRetry({getCall:()=>pendingCall,getUser:()=>currentUserId,getSlot:thisPhoneSlot,getLead:()=>displayedLead,isHidden:()=>document.hidden,save:setPendingCall,send:sendComputerCommand});
 setInterval(()=>{void callRegistrationRetry.tick().catch(()=>{});},5000);
 addEventListener('focus',()=>{void callRegistrationRetry.tick().catch(()=>{});});
@@ -166,6 +168,19 @@ installLeadSwipe(leadCard, {
     if (direction === 'refused' && !globalThis.confirm('Record Refused Appointment for ' + (displayedLead?.leadName || 'this lead') + '?')) return;
     return sendCallResult(direction === 'next' ? 'no-answer' : direction === 'refused' ? 'refused-appointment' : 'virtual-appointment');
   }
+});
+dontShowAgainButton?.addEventListener('click',async()=>{
+ const call=pendingCall,user=currentUserId;
+ if(excludingLead||!call?.leadId||call.leadKey!==getLeadKey(displayedLead)||call.resultSentAt)return;
+ excludingLead=true;
+ dontShowAgainButton.disabled=true;
+ try{
+  const {error}=await client.rpc('workspace_exclude_lead',{p_lead:call.leadId});if(error)throw error;
+  if(user!==currentUserId||pendingCall?.healthCallId!==call.healthCallId||displayedLead?.leadId!==call.leadId)return;
+  const sent=await sendCallResult('no-answer');
+  showFeedback(sent?'No answer sent. This lead is excluded from calls and texts.':'Lead excluded from calls and texts. No Answer still needs to be submitted in IMPACT.',sent?'info':'error');
+ }catch(error){showFeedback(['PGRST202','42883'].includes(error.code)?'Run the Don’t show again SQL update once to enable this button.':error.message,'error');}
+ finally{excludingLead=false;updateNavButtons();}
 });
 noAnswerButton.addEventListener("click", () => sendCallResult("no-answer"));
 for (const action of detailActions) action.button?.addEventListener("click", () => sendCallResult(action.type));
@@ -1056,6 +1071,7 @@ function updateNavButtons() {
   const ready = callStarted && Boolean(displayedLead?.leadId);
   noAnswerButton.hidden = scheduled;
   noAnswerButton.disabled = !ready || scheduled;
+  if(dontShowAgainButton){dontShowAgainButton.disabled=excludingLead||!ready||Boolean(pendingCall?.resultSentAt)||navigationPending();}
   virtualAppointmentButton.hidden = scheduled;
   virtualAppointmentButton.disabled = !ready || scheduled || Boolean(displayedLead?.appointmentOptions);
   refusedAppointmentButton.hidden = false;
@@ -1255,7 +1271,7 @@ function renderSavedLeadEvents(lead,transition){
   if(currentUserId!==user||String(displayedLead?.leadId)!==String(lead.leadId))return;
   content.replaceChildren();
   if(!memory.until)recentLeadSkips.clear();
-  if(memory.until&&['next','arrive'].includes(transition)&&!loadPhoneSettings(localStorage).textingMode&&String(pendingCall?.leadId)!==String(lead.leadId)&&!hasScheduledAppointment(lead.callHistory)&&!navigationPending()&&!recentLeadSkips.has(key)&&recentLeadSkips.size<10){recentLeadSkips.add(key);showFeedback('Finding an uncalled lead…');void openUncalledLead();}
+  if((memory.until||memory.excluded)&&(memory.excluded||['next','arrive'].includes(transition))&&!loadPhoneSettings(localStorage).textingMode&&String(pendingCall?.leadId)!==String(lead.leadId)&&!hasScheduledAppointment(lead.callHistory)&&!navigationPending()&&!recentLeadSkips.has(key)&&recentLeadSkips.size<10){recentLeadSkips.add(key);showFeedback('Finding an uncalled lead…');void openUncalledLead();}
   if(memory.until){if(String(pendingCall?.leadId)!==String(lead.leadId))section.open=true;const notice=document.createElement('p');notice.className='savedHistoryNotice';notice.textContent='Call again after '+new Date(memory.until).toLocaleTimeString('en-US',{timeZone:'America/Chicago',hour:'numeric',minute:'2-digit'})+' CT.';content.append(notice);}
   if(!memory.events.length)content.textContent='No saved calls or texts for this lead yet.';
   title.textContent='Calls & texts'+(memory.events.length?' · '+memory.events.length:'');

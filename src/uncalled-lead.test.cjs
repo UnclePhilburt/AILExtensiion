@@ -20,3 +20,8 @@ test('future callbacks stay out of selection until their scheduled instant',asyn
  assert.equal((await context.findUncalledLead(c,'owner',{currentLeadId:'1',now})).leadId,'3');
  assert.equal((await context.findUncalledLead(c,'owner',{currentLeadId:'1',now:Date.parse(at)})).leadId,'2');
 });
+
+test('Dont show again excludes a lead even in a later pass',async()=>{
+ const c=client({followup_workspace_calls:[],followup_actions:[],workspace_excluded_leads:[{lead_id:'2'}]},{started_at:start,lead_ids:['1','2','3']});
+ assert.equal((await context.findUncalledLead(c,'owner',{currentLeadId:'1',now})).leadId,'3');
+});
