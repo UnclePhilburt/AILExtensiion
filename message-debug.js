@@ -6,7 +6,9 @@ export async function attachMessageDebug(dialog, {href, number, body, launchHref
   const {data} = await client.auth.getSession();
   if (!isMessageDebugAccount(data?.session?.user)) return;
   const verified = await client.auth.getUser();
-  if (verified.error || !isMessageDebugAccount(verified.data?.user) || !dialog.isConnected) return;
+  if (!dialog.isConnected) return;
+  if (verified.error) throw new Error('Could not verify the debug account.');
+  if (!isMessageDebugAccount(verified.data?.user)) return;
   const owner = verified.data.user.id;
   const panel = document.createElement('section');
   panel.style.cssText = 'margin-top:20px;padding-top:16px;border-top:1px solid #ccd7cb';
@@ -50,7 +52,7 @@ export async function attachMessageDebug(dialog, {href, number, body, launchHref
   }
   const copy=document.createElement('button');copy.type='button';copy.textContent='Copy debug report';
   copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(output.value);copy.textContent='Copied';}catch{output.focus();output.select();copy.textContent='Hold selected report to copy';}});
-  panel.append(output,copy);dialog.append(panel);record('debug ready');
+  panel.append(output,copy);dialog.prepend(panel);record('debug ready');
   let subscription;
   const cleanup=()=>{clearTimeout(timer);dialog.removeEventListener('click',click);document.removeEventListener('visibilitychange',visibility);window.removeEventListener('blur',blur);window.removeEventListener('focus',focus);subscription?.unsubscribe();panel.remove();};
   subscription=client.auth.onAuthStateChange((_event,session)=>{if(session?.user?.id!==owner)cleanup();}).data.subscription;

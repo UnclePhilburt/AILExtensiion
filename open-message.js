@@ -1,4 +1,4 @@
-import {attachMessageDebug} from './message-debug.js';
+import {attachMessageDebug} from './message-debug.js?v=2';
 // Keep a real link available when asynchronous preparation outlasts the
 // browser's user activation. Opening a composer never confirms a sent text.
 export function openMessage(href) {
@@ -47,7 +47,7 @@ export function openMessage(href) {
   close.addEventListener('click', () => dialog.close());
   dialog.addEventListener('close', () => dialog.remove());
   dialog.append(heading, hint, link, alternatives, close); document.body.append(dialog); dialog.showModal();
-  void attachMessageDebug(dialog, {href,number,body,launchHref,expires}).catch(() => {});
+  void attachMessageDebug(dialog, {href,number,body,launchHref,expires}).catch(() => { const note=document.createElement('p');note.textContent='Texting diagnostics could not load. Refresh this page and check your account sign-in.';dialog.append(note); });
   // A fresh tap on the link remains available even if this attempt is blocked.
   if (!android && navigator.userActivation?.isActive) window.location.href = href;
 }
