@@ -12,6 +12,6 @@ test('an offline computer preserves the selected lead and does not report a succ
 
 test('debug uses the selected lead draft without asking for the agent number',()=>{
  const calls=[];const debug={};const ctx=vm.createContext({debug,current:{action:{kind:'text',draft:{number:'3145550123',body:'Lead-specific draft'}}},navigator:{userAgent:'Android'},smsLink:(number,body)=>{calls.push([number,body]);return 'sms:3145550123';},openMessage:href=>calls.push(href),window:{prompt:()=>{throw Error('Must not ask for own number')}},$:()=>({})});
- const start=source.indexOf('debug.onclick=');const end=source.indexOf(";$('.toolbar').prepend(debug)",start);
+ const start=source.indexOf('debug.onclick=');const end=source.indexOf(";$('.toolsActions').append(debug)",start);
  vm.runInContext(source.slice(start,end),ctx);debug.onclick();assert.deepEqual(calls,[['3145550123','Lead-specific draft'],'sms:3145550123']);
 });
