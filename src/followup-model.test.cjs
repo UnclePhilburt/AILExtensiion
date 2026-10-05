@@ -53,3 +53,16 @@ test('benefits messages name the actual group without internal codes or generic 
   assert.match(context.textTemplates('IBT 610 (SGCOY) (AD&D)')[variant],/program for members of IBT 610/);
  }
 });
+
+test('Child Safe label variants and old insurance templates always produce kit texts',()=>{
+ for(const type of ['Child Safe','Child Safety Kit','CHILD-SAFE KIT','Child–Safe','Child_Safe','CSK','Child Safe Referral']){
+  const templates=context.textTemplates(type,{A:context.textTemplates('Life Insurance').A,B:context.textTemplates('Life Insurance').B,topic:'life insurance information'});
+  for(const variant of ['A','B','C','D']){
+   assert.match(templates[variant],/Child Safe Program/);assert.doesNotMatch(templates[variant],/life insurance|cost-free benefits/i);
+   for(const step of ['intro','tuesday','thursday','saturday']){
+    const draft=context.planDraft('user',{...lead,request_type:type},{step,draft:{variant}},'Cody',[],[],Date.parse('2026-10-05T15:00:00Z'));
+    assert.match(draft.body,/Child Safe Program/);assert.match(draft.body,/Child Safe Kit/);assert.doesNotMatch(draft.body,/life insurance|cost-free benefits/i);
+   }
+  }
+ }
+});
