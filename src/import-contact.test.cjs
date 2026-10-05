@@ -8,3 +8,13 @@ test('detached contact rows recognize mobile, cell and home label formats',()=>{
 test('Home-only contact works and a bare telephone link remains importable',()=>{const row={textContent:'Home: (314) 555-0101'};const p={querySelectorAll:s=>s.startsWith('p.')?[row]:[]};assert.equal(ctx.collectPhoneEntries(p,'')[0].label,'Home');const anchor={textContent:'Call',getAttribute:key=>key==='href'?'tel:+13145550100':''};const links={querySelectorAll:s=>s.startsWith('p.')?[]:[anchor]};assert.equal(ctx.collectPhoneEntries(links,'')[0].label,'Home');});
 
 test('phone value is read from the label sibling even with an icon between text and digits',()=>{const field={textContent:'Mobile:',nextElementSibling:{textContent:'phone (314) 555-0100'}};const panel={querySelectorAll:s=>s==='span, label, dt'?[field]:[]};assert.equal(ctx.collectPhoneEntries(panel,'Mobile:phone (314) 555-0100')[0].number,'(314) 555-0100');});
+
+vm.runInContext(block('  function collectRequestType','  function collectCallHistory'),ctx);
+function typePanel(rows){return {querySelector:()=>null,querySelectorAll:selector=>selector==='tr'?rows.map(([label,type])=>({querySelectorAll:()=>[{textContent:label},{textContent:type}]})):[]};}
+test('detached imports read the Group row regardless of its position',()=>{
+ for(const file of ['htmls/Detail.html','htmls/DetailNoNumber.html']){
+  const html=fs.readFileSync(file,'utf8');const rows=[...html.matchAll(/<tr[^>]*>\s*<th[^>]*>([^<]+)<\/th>\s*<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m=>[m[1].trim(),m[2].replace(/<[^>]*>/g,'').trim()]);
+  const group=rows.find(([label])=>label==='Group');assert.ok(group);assert.match(ctx.collectRequestType(typePanel(rows)),/^Child Safe Kit (Offer|Online Inquiry)$/);assert.equal(ctx.collectRequestType(typePanel(rows.slice().reverse())),group[1]);
+ }
+});
+test('Group is the program, while generic Type Vendor is not used as the program',()=>{assert.equal(ctx.collectRequestType(typePanel([['Type','Vendor'],['Group','Child Safe Kit Offer']])),'Child Safe Kit Offer');assert.equal(ctx.collectRequestType(typePanel([['Type','Vendor']])),'');assert.equal(ctx.collectRequestType(typePanel([['Request Type','Will Kit']])),'Will Kit');});

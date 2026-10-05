@@ -291,7 +291,7 @@
       available: true,
       leadName: extractContactName(panel, text),
       leadId: root === document ? getCurrentLeadId() : "",
-      requestType: collectRequestType(panel),
+      requestType: collectRequestType(panel) || collectRequestType(root),
       callHistory: collectCallHistory(panel),
       comments: collectLeadComments(panel),
       language: extractSimpleLabel(text, "Language"),
@@ -307,10 +307,9 @@
     // pages put it in one fixed table position, but other lead types move the
     // same labelled row into a different table or section.
     const value = (element) => sanitizeText(element?.innerText || element?.textContent || "");
-    const original = panel.querySelector("#myTabContentJust div:nth-of-type(4) > table.table-bordered > tbody > tr:nth-of-type(2) > td");
-    if (value(original)) return value(original);
 
-    const isTypeLabel = (text) => /^(?:request|lead)\s*type\s*:?(?:\s*\/\s*(?:request|lead)\s*type)?$/i.test(sanitizeText(text));
+
+    const isTypeLabel = (text) => /^(?:group|(?:request|lead)\s*type)(?:\s*\/\s*(?:request|lead)\s*type)?\s*:?$/i.test(sanitizeText(text));
     for (const row of Array.from(panel.querySelectorAll("tr"))) {
       const cells = Array.from(row.querySelectorAll(":scope > th, :scope > td"));
       for (let index = 0; index < cells.length - 1; index += 1) {
@@ -331,7 +330,7 @@
     }
 
     // Final fallback for a plain-text card such as "Lead Type: Referral".
-    const match = value(panel).match(/(?:^|\n)\s*(?:request|lead)\s*type\s*:\s*([^\n]+)/i);
+    const match = value(panel).match(/(?:^|\n)\s*(?:group|(?:request|lead)\s*type)\s*:\s*([^\n]+)/i);
     return sanitizeText(match?.[1] || "");
   }
 
@@ -708,8 +707,8 @@
             const doc=new DOMParser().parseFromString(await response.text(),'text/html');
             const lead=collectLocalLeadPreview(doc,'follow-up-import');lead.leadId=item.leadId;
             if(!lead.available)throw new Error('IMPACT did not return the contact panel for lead '+item.leadId+'. Your session may have expired. Refresh IMPACT, sign in if needed, then retry.');
-            if(!lead.leadName||!lead.phones?.length){
-              skipped.push({id:item.leadId,reason:!lead.leadName?'name not recognized':'phone field not recognized'});read++;
+            if(!lead.leadName||!lead.phones?.length||!lead.requestType){
+              skipped.push({id:item.leadId,reason:!lead.leadName?'name not recognized':!lead.phones?.length?'phone field not recognized':'lead type not recognized'});read++;
               status.textContent='Continuing import · lead '+item.leadId+': '+skipped[skipped.length-1].reason;
               continue;
             }
