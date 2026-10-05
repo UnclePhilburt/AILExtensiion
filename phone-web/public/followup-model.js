@@ -1,6 +1,6 @@
 import {textFirstName,textHash,textVariant,availableTextMeetings,meetingTimeLabel,centralParts,isBenefitsReplyLead} from './texting-mode.js?v=21';
 import {chooseTextVariant} from './text-learning.js?v=2';
-export const stepNames={intro:'Sunday introduction',tuesday:'Tuesday follow-up',thursday:'Thursday follow-up',saturday:'Saturday final follow-up'};
+export const stepNames={intro:'Introduction · Sunday / Monday catch-up',tuesday:'Tuesday follow-up',thursday:'Thursday follow-up',saturday:'Saturday final follow-up'};
 export function planDraft(user,lead,action,agent,meetings,records=[],now=Date.now()) {
  const same=centralParts(now).hour>=17&&availableTextMeetings(meetings,now,'same-day').length===2;
  const cohort=same?'after5-same-day-eligible':'standard';

@@ -3,7 +3,7 @@ import {openMessage} from './open-message.js?v=6';
 import {cloudState,cloudSend,cloudTouchPhone,visibleLead} from './cloud-sync.js';
 import {loadPhoneSettings} from './settings-store.js';
 import {client} from './auth-runtime.js';
-import {planDraft,stepNames,centralInput} from './followup-model.js?v=2';
+import {planDraft,stepNames,centralInput} from './followup-model.js?v=3';
 import {smsLink,textMeetingSlots,isBenefitsReplyLead} from './texting-mode.js?v=21';
 const $=s=>document.querySelector(s),node=(tag,text)=>Object.assign(document.createElement(tag),{textContent:text});
 $('#slot').value=loadPhoneSettings(localStorage).phoneSlot;
