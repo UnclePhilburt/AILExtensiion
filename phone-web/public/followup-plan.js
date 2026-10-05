@@ -19,10 +19,10 @@ async function load(){const {data,error}=await client.from('followup_settings').
 async function operation(op,payload={}){if(!current)throw Error('Choose the next lead first.');try{current.action=await rpc('plan_action',{p_id:current.action.id,p_device:device,p_operation:op,p_payload:payload});}catch(e){if(/no longer assigned|plan is paused/i.test(e.message))current=null;throw e;}}
 async function prepareCurrent(state){
  if(!current||current.action.kind!=='text')return;
- const live=visibleLead(state,$('#slot').value);
- if(String(live?.leadId||'')!==String(current.lead.lead_id))throw Error('Waiting for this lead’s details from IMPACT. Tap Refresh to retry.');
- const type=String(live.requestType||'').trim();
- if(!type)throw Error('IMPACT has not supplied this lead’s type yet. Tap Refresh to retry.');
+ const live=state?visibleLead(state,$('#slot').value):null;
+ const matching=String(live?.leadId||'')===String(current.lead.lead_id);
+ const type=String((matching&&live.requestType)||current.lead.request_type||'').trim();
+ if(!type)throw Error('This lead has no saved type. Open it in IMPACT and tap Refresh.');
  const changed=current.lead.request_type!==type;
  if(changed){
   await rpc('plan_import',{p_leads:[{leadId:current.lead.lead_id,leadName:current.lead.name,requestType:type,phones:current.lead.phones}],p_note:$('#importNote').textContent});
@@ -37,13 +37,20 @@ async function prepareCurrent(state){
  }
  current.detailsReady=true;
 }
+async function refreshCurrent(){
+ let timer,state,problem;
+ try{state=await Promise.race([alignIMPACT(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('IMPACT did not respond in time.')),8000);})]);}
+ catch(error){problem=error;}finally{clearTimeout(timer);}
+ if(problem&&current?.action.kind!=='text')throw problem;
+ try{await prepareCurrent(state);}finally{if(current)current.detailsReady=true;}
+ $('#status').textContent=problem?'Text ready from saved lead details. IMPACT is not connected yet; tap Refresh to retry.':'This lead is open in IMPACT window '+$('#slot').value+'.';
+}
 async function next(){
  if(current?.action.status==='claimed'){if(current.action.kind==='text'&&current.action.started_at){showTextResult();return;}await operation(current.action.started_at?'defer':'skip');}
  current=null;await load();if(enabled)current=await rpc('plan_claim',{p_device:device});
  if(current){
   current.detailsReady=false;render();$('#status').textContent='Opening this lead in IMPACT window '+$('#slot').value+'…';
-  const state=await alignIMPACT();await prepareCurrent(state);
-  $('#status').textContent='This lead is open in IMPACT window '+$('#slot').value+'.';
+  await refreshCurrent();
  }else $('#status').textContent='Nothing due right now. Later calls will appear during your working hours.';
 }
 function showTextResult(){
@@ -58,9 +65,9 @@ function button(parent,label,fn){const b=node('button',label);b.disabled=busy;b.
 async function status(id,value,time=null){await rpc('plan_set_status',{p_lead:id,p_status:value,p_appointment:time});if(current?.lead.lead_id===id)current=null;await load();$('#status').textContent=value==='active'?'Lead resumed. Only remaining steps will run.':'Saved. Remaining calls and texts are stopped.';}
 function outcomeButtons(parent,lead){if(parent.id==='actionButtons'){const more=node('details','');more.className='outcomes';more.append(node('summary','Reply, appointment or stop follow-ups'));const controls=node('div','');controls.className='actions';more.append(controls);parent.append(more);parent=controls;}button(parent,'They replied',()=>status(lead.lead_id,'replied'));button(parent,'Appointment scheduled',async()=>{appointmentLead=lead.lead_id;$('#appointmentTime').value='';$('#appointment').showModal();});button(parent,'Stop follow-ups',()=>status(lead.lead_id,'stopped'));}
 async function alignIMPACT(){
- const slot=$('#slot').value;await cloudTouchPhone(slot);let state=await cloudState(),lead=visibleLead(state,slot);
+ const target=String(current.lead.lead_id),slot=$('#slot').value;await cloudTouchPhone(slot);let state=await cloudState(),lead=visibleLead(state,slot);
  if(!lead?.leadId)throw Error('Open a lead in IMPACT window '+slot+' to connect this phone, then try again.');
- if(String(lead.leadId)!==current.lead.lead_id){await cloudSend(state,{type:'open-lead',slot,leadId:lead.leadId,targetLeadId:current.lead.lead_id});for(let i=0;i<20;i++){await new Promise(r=>setTimeout(r,500));state=await cloudState();lead=visibleLead(state,slot);if(String(lead?.leadId)===current.lead.lead_id)return state;}throw Error('Waiting for the matching IMPACT lead. Try again after it opens.');}
+ if(String(lead.leadId)!==target){await cloudSend(state,{type:'open-lead',slot,leadId:lead.leadId,targetLeadId:target});for(let i=0;i<20;i++){await new Promise(r=>setTimeout(r,500));state=await cloudState();lead=visibleLead(state,slot);if(String(lead?.leadId)===target)return state;}throw Error('Waiting for the matching IMPACT lead. Try again after it opens.');}
  return state;
 }
 async function impactResult(type){await alignIMPACT();await rpc('plan_impact',{p_id:current.action.id,p_slot:$('#slot').value,p_type:type});}
@@ -89,7 +96,7 @@ function render(){
  $('#leadCount').textContent=leads.length;const list=$('#leads');list.replaceChildren();const term=$('#search').value.toLowerCase();const filtered=leads.filter(l=>(l.name+' '+JSON.stringify(l.phones)).toLowerCase().includes(term));for(const lead of filtered.slice(0,100)){const card=node('article','');card.className='lead';card.append(node('h3',pretty(lead.name)),node('p',lead.request_type+' · '+lead.status));const controls=node('div','');controls.className='actions';if(lead.status==='active')outcomeButtons(controls,lead);else if(lead.status!=='complete')button(controls,'Resume follow-ups',()=>status(lead.lead_id,'active'));card.append(controls);list.append(card);}if(filtered.length>100)list.append(node('p','Showing 100 leads. Search to find another lead.'));
 }
 $('#clearLeads').onclick=()=>{if(busy||!window.confirm('Clear your follow-up lead list and queued steps? Appointments, sent texts, and replied/stopped protections will be kept.'))return;void run(async()=>{let count;try{count=await rpc('plan_clear',{});}catch(error){if(/setup/i.test(error.message))throw Error('Run the weekly reset SQL update from How your plan works once, then retry.');throw error;}current=null;checkin=null;await load();$('#status').textContent=count+' leads cleared. Import your current IMPACT inbox when ready.';});};
-$('#next').onclick=()=>void run(next);$('#refresh').onclick=()=>void run(async()=>{await load();if(current&&current.action.status==='claimed')await operation('renew');if(current){current.detailsReady=false;const state=await alignIMPACT();await prepareCurrent(state);}$('#status').textContent=current?'This lead is open in IMPACT window '+$('#slot').value+'.':'Updated.';});$('#search').oninput=render;$('#slot').onchange=()=>void run(async()=>{if(current){current.detailsReady=false;const state=await alignIMPACT();await prepareCurrent(state);$('#status').textContent='This lead is open in IMPACT window '+$('#slot').value+'.';}});
+$('#next').onclick=()=>void run(next);$('#refresh').onclick=()=>void run(async()=>{await load();if(current&&current.action.status==='claimed')await operation('renew');if(current){current.detailsReady=false;await refreshCurrent();}if(!current)$('#status').textContent='Updated.';});$('#search').oninput=render;$('#slot').onchange=()=>void run(async()=>{if(current){current.detailsReady=false;await refreshCurrent();}});
 $('#appointment').addEventListener('close',()=>{if($('#appointment').returnValue==='save')void run(()=>status(appointmentLead,'appointment',centralInput($('#appointmentTime').value)));});
 setInterval(()=>{if(!document.hidden&&current?.action.status==='claimed'&&!busy)void run(async()=>{try{await operation('renew');}catch(e){current=null;await load();throw e;}});},60000);
 const {data}=await client.auth.getSession();if(!data.session){location.replace('account.html?next=followup-plan.html');}else{owner=data.session.user.id;if(isMessageDebugAccount(data.session.user)){const debug=node('button','Texting debug');debug.type='button';debug.id='codyTextingDebug';debug.onclick=()=>{if(current?.action.kind==='text'&&current.action.draft){const draft=current.action.draft;try{openMessage(smsLink(draft.number,draft.body,/iPhone|iPad|iPod/.test(navigator.userAgent)));}catch(error){$('#status').textContent=error.message;}return;}const number=window.prompt('No texting lead is selected. Enter your own number for a test, or cancel and select Next lead first. Nothing sends automatically.');if(!number)return;try{openMessage(smsLink(number,'IMPACT texting test — no need to send this.',/iPhone|iPad|iPod/.test(navigator.userAgent)));}catch(error){$('#status').textContent=error.message;}};$('.toolsActions').append(debug);}agent=loadPhoneSettings(localStorage).firstName||data.session.user.user_metadata?.full_name||data.session.user.user_metadata?.name||'';agent=agent.split(' ')[0];await run(async()=>{await load();checkin=(await rpc('companion_text_checkin',{}))?.[0]||null;$('#status').textContent='Ready. Tap Next lead to begin.';});}

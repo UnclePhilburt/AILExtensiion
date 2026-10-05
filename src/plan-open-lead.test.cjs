@@ -6,7 +6,7 @@ test('regular text launch opens the lead draft even when IMPACT is unavailable',
 test('failed plan start still prevents opening an unassigned text',async()=>{
  let opened=false;const ctx=vm.createContext({isChildSafeLead:()=>false,current:{lead:{request_type:'Child Safe'},action:{kind:'text',draft:{offeredSlots:[]}}},load:async()=>{},operation:async()=>{throw Error('Action no longer assigned')},openMessage:()=>opened=true});vm.runInContext(source.slice(source.indexOf('async function launch()'),source.indexOf('function render()')),ctx);await assert.rejects(ctx.launch(),/no longer assigned/);assert.equal(opened,false);
 });
-function setup(fail=false){const events=[];const status={textContent:''};const context=vm.createContext({prepareCurrent:async()=>{},current:null,enabled:true,device:'phone',owner:'user',agent:'Cody',meetings:[],records:[],load:async()=>events.push('load'),rpc:async(name)=>{events.push(name);return {lead:{lead_id:'123'},action:{kind:'call',status:'claimed'}}},render:()=>events.push('render'),alignIMPACT:async()=>{events.push('open');if(fail)throw Error('Computer offline')},$:s=>s==='#slot'?{value:'2'}:status});vm.runInContext(source.slice(source.indexOf('async function next()'),source.indexOf('function button(')),context);return {context,events,status};}
+function setup(fail=false){const events=[];const status={textContent:''};const context=vm.createContext({refreshCurrent:async()=>{events.push("open");if(fail)throw Error("Computer offline");status.textContent="This lead is open in IMPACT window 2.";},prepareCurrent:async()=>{},current:null,enabled:true,device:'phone',owner:'user',agent:'Cody',meetings:[],records:[],load:async()=>events.push('load'),rpc:async(name)=>{events.push(name);return {lead:{lead_id:'123'},action:{kind:'call',status:'claimed'}}},render:()=>events.push('render'),alignIMPACT:async()=>{events.push('open');if(fail)throw Error('Computer offline')},$:s=>s==='#slot'?{value:'2'}:status});vm.runInContext(source.slice(source.indexOf('async function next()'),source.indexOf('function button(')),context);return {context,events,status};}
 test('selecting the next plan lead opens it on the computer before any call or text action',async()=>{const {context,events,status}=setup();await context.next();assert.deepEqual(events,['load','plan_claim','render','open']);assert.match(status.textContent,/open in IMPACT window 2/);});
 test('an offline computer preserves the selected lead and does not report a successful open',async()=>{const {context,status}=setup(true);await assert.rejects(context.next(),/offline/);assert.equal(context.current.lead.lead_id,'123');assert.doesNotMatch(status.textContent,/is open/);});
 
@@ -30,9 +30,16 @@ test('matching IMPACT type repairs a wrongly imported type before saving a Child
  const {ctx,events}=prepareSetup({leadId:'123',requestType:'Child Safe Kit Offer'});await ctx.prepareCurrent({});
  assert.equal(events[0][0],'plan_import');assert.equal(events[0][1].p_leads[0].requestType,'Child Safe Kit Offer');assert.equal(events[1][0],'prepare');assert.match(events[1][1].body,/Child Safe Program/);assert.doesNotMatch(events[1][1].body,/life insurance/i);assert.equal(ctx.current.detailsReady,true);
 });
-test('wrong phone lane and missing live type cannot change or prepare the lead',async()=>{
- for(const live of [{leadId:'999',requestType:'Child Safe Kit Offer'},{leadId:'123',requestType:''}]){const {ctx,events}=prepareSetup(live);await assert.rejects(ctx.prepareCurrent({}),/IMPACT/);assert.deepEqual(events,[]);assert.equal(ctx.current.detailsReady,false);}
+test('wrong phone lane and missing live type use the saved type without overwriting it',async()=>{
+ for(const live of [{leadId:'999',requestType:'Child Safe Kit Offer'},{leadId:'123',requestType:''}]){const {ctx,events}=prepareSetup(live);ctx.current.lead.request_type='Child Safe Kit Offer';await ctx.prepareCurrent({});assert.equal(events[0][0],'prepare');assert.match(ctx.current.action.draft.body,/Child Safe Program/);assert.equal(ctx.current.detailsReady,true);}
 });
 test('an already opened draft is preserved for the send confirmation instead of silently rewritten',async()=>{
  const {ctx,events}=prepareSetup({leadId:'123',requestType:'Child Safe Kit Offer'},true);await ctx.prepareCurrent({});assert.equal(events.length,1);assert.equal(ctx.current.action.draft.body,'Your life insurance options');assert.equal(ctx.current.lead.request_type,'Child Safe Kit Offer');
+});
+
+test('offline IMPACT still prepares a saved Child Safe text and clears the waiting state',async()=>{
+ const {ctx}=prepareSetup(null);ctx.current.lead.request_type='Child Safe Kit Offer';Object.assign(ctx,{setTimeout,clearTimeout,alignIMPACT:async()=>{throw Error('Offline');}});await ctx.refreshCurrent();assert.equal(ctx.current.detailsReady,true);assert.match(ctx.current.action.draft.body,/Child Safe Program/);
+});
+test('a nonresponsive IMPACT check times out and releases the text workflow',async()=>{
+ const {ctx}=prepareSetup(null);ctx.current.lead.request_type='Child Safe Kit Online Inquiry';Object.assign(ctx,{setTimeout:fn=>setTimeout(fn,1),clearTimeout,alignIMPACT:()=>new Promise(()=>{})});await ctx.refreshCurrent();assert.equal(ctx.current.detailsReady,true);assert.match(ctx.current.action.draft.body,/Child Safe Program/);
 });
