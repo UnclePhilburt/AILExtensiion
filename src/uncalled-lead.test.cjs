@@ -1,5 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const context=vm.createContext({Date,Set,Promise});vm.runInContext(fs.readFileSync('phone-web/public/uncalled-lead.js','utf8').replace(/^export /gm,''),context);
+const context=vm.createContext({Date,Set,Promise,Intl});vm.runInContext(fs.readFileSync('phone-web/public/uncalled-lead.js','utf8').replace(/^export /gm,''),context);
 function client(rows,pass){return {from(table){const q={select:()=>q,eq:(key,user)=>{if(key==='user_id')assert.equal(user,'owner');return q;},gt:()=>q,or:()=>q,order:()=>q,maybeSingle:async()=>({data:pass}),range:async(a,b)=>({data:(rows[table]||[]).slice(a,b+1)})};return q;}};}
 const now=Date.parse('2026-10-05T22:00:00Z'),start='2026-10-05T14:00:00Z';
 test('direct selection excludes calls from both phones throughout the pass and wraps to uncalled leads',async()=>{
@@ -24,4 +24,11 @@ test('future callbacks stay out of selection until their scheduled instant',asyn
 test('Dont show again excludes a lead even in a later pass',async()=>{
  const c=client({followup_workspace_calls:[],followup_actions:[],workspace_excluded_leads:[{lead_id:'2'}]},{started_at:start,lead_ids:['1','2','3']});
  assert.equal((await context.findUncalledLead(c,'owner',{currentLeadId:'1',now})).leadId,'3');
+});
+
+test('appointments later today and earlier today stay out of the calling list',async()=>{
+ for(const starts_at of ['2026-10-05T23:00:00Z','2026-10-05T18:00:00Z']){
+  const c=client({followup_workspace_calls:[],followup_actions:[],scheduled_events:[{kind:'virtual-appointment',impact_lead_id:'2',starts_at}]},{started_at:start,lead_ids:['1','2','3']});
+  assert.equal((await context.findUncalledLead(c,'owner',{currentLeadId:'1',now})).leadId,'3');
+ }
 });

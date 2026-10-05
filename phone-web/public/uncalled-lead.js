@@ -17,7 +17,7 @@ export async function findUncalledLead(client,user,{currentLeadId,otherLeadIds=[
  async function upcomingCallbacks(){
   const rows=[];
   for(let offset=0;;offset+=500){
-   const {data,error}=await client.from('scheduled_events').select('id,impact_lead_id,kind,starts_at').eq('user_id',user).eq('kind','callback').gt('starts_at',new Date(now).toISOString()).order('id').range(offset,offset+499);
+   const {data,error}=await client.from('scheduled_events').select('id,impact_lead_id,kind,starts_at').eq('user_id',user).gt('starts_at',new Date(now-86400000).toISOString()).order('id').range(offset,offset+499);
    if(error)throw error;rows.push(...data);if(data.length<500)return rows;
   }
  }
@@ -26,7 +26,8 @@ export async function findUncalledLead(client,user,{currentLeadId,otherLeadIds=[
  for(const c of [...workspace,...actions.filter(a=>a.kind==='call')]){
   if(c.started_at&&(Date.parse(c.started_at)>=Date.parse(pass.started_at)||Math.max(Date.parse(c.started_at)||0,Date.parse(c.completed_at)||0)>=recent))blocked.add(String(c.lead_id));
  }
- for(const event of callbacks)if(event.kind==='callback'&&Date.parse(event.starts_at)>now&&event.impact_lead_id)blocked.add(String(event.impact_lead_id));
+ const centralDay=at=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(at));
+ for(const event of callbacks){const scheduled=event.kind==='callback'?Date.parse(event.starts_at)>now:['appointment','virtual-appointment'].includes(event.kind)&&centralDay(event.starts_at)>=centralDay(now);if(scheduled&&event.impact_lead_id)blocked.add(String(event.impact_lead_id));}
  for(const lead of excluded)blocked.add(String(lead.lead_id));
  const ids=pass.lead_ids.map(String),position=ids.indexOf(String(currentLeadId));
  const ordered=position<0?ids:[...ids.slice(position+1),...ids.slice(0,position)];

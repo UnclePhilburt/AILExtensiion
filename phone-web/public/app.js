@@ -1,5 +1,5 @@
 import {createCallRegistrationRetry} from './call-registration-retry.js?v=1';
-import {findUncalledLead} from './uncalled-lead.js?v=3';
+import {findUncalledLead} from './uncalled-lead.js?v=4';
 import {createCallPassProgress} from './call-pass-progress.js?v=5';
 import {loadLeadMemory} from './lead-call-memory.js?v=2';
 import {createWorkspacePlanSync} from './workspace-plan-sync.js?v=1';
@@ -1332,23 +1332,28 @@ async function openUncalledLead(){
 }
 
 const futureCallbackHolds=new Map(),callbackSkipQueued=new Set();
-function futureCallbackTime(lead){
- const entry=splitHistory(lead?.callHistory).map(line=>parseHistoryEntry(line)).find(e=>e.kind==='callback'&&e.scheduled);
+function scheduledCallingHold(lead){
+ const entries=splitHistory(lead?.callHistory).map(line=>parseHistoryEntry(line));
+ const appointment=entries.find(e=>e.kind==='appointment'&&e.scheduled);
+ const appointmentAt=appointment?.dates?.[0]?.at;
+ const day=at=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(at));
+ if(appointmentAt&&day(appointmentAt)>=day(Date.now()))return appointmentAt+86400000;
+ const entry=entries.find(e=>e.kind==='callback'&&e.scheduled);
  const at=entry?.dates?.[0]?.at;return at>Date.now()?at:0;
 }
 function scheduleFutureCallbackSkip(lead,transition){
- const at=futureCallbackTime(lead),id=String(lead.leadId||'');
+ const at=scheduledCallingHold(lead),id=String(lead.leadId||'');
  if(!at){futureCallbackHolds.delete(id);return;}
  futureCallbackHolds.set(id,at);
  if(!useCloud||transition==='previous'||loadPhoneSettings(localStorage).textingMode||String(pendingCall?.leadId)===id||callbackSkipQueued.has(id))return;
  callbackSkipQueued.add(id);
  const user=currentUserId,slot=thisPhoneSlot(),deadline=Date.now()+15000;
  const skip=async()=>{
-  if(user!==currentUserId||slot!==thisPhoneSlot()||document.hidden||String(displayedLead?.leadId)!==id||!futureCallbackTime(displayedLead)||String(pendingCall?.leadId)===id){callbackSkipQueued.delete(id);return;}
+  if(user!==currentUserId||slot!==thisPhoneSlot()||document.hidden||String(displayedLead?.leadId)!==id||!scheduledCallingHold(displayedLead)||String(pendingCall?.leadId)===id){callbackSkipQueued.delete(id);return;}
   if(navigationPending()||choosingUncalledLead){if(Date.now()<deadline){setTimeout(()=>{void skip();},500);return;}callbackSkipQueued.delete(id);return;}
   await saveLeadSchedule(lead);
   if(user!==currentUserId||slot!==thisPhoneSlot()||String(displayedLead?.leadId)!==id)return;
-  showFeedback('Skipping until the scheduled callback time.');await openUncalledLead();
+  showFeedback('Skipping a scheduled appointment or future callback.');await openUncalledLead();
  };
  setTimeout(()=>{void skip();},2000);
 }

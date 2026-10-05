@@ -360,3 +360,7 @@ test('Dont show again sends No Answer for the call and disables the finished-cal
  assert.deepEqual(server.sent.map(c=>c.type),['call','no-answer']);assert.equal(server.sent[1].leadId,leadA.leadId);
  assert.equal(page.el('#dontShowAgain').disabled,true);assert.match(page.feedback(),/excluded from calls and texts/);
 });
+test('a scheduled appointment opened by IMPACT is skipped without a call',async()=>{
+ const server=makeServer();freshState(server,null,{...leadA,callHistory:['Schedule Virtual Appointment on Sep 25 2026 - 02:30 PM by Me']});
+ const page=await loadPage(server);await page.runTimers(2000);assert.deepEqual(server.sent.map(c=>c.type),['open-lead']);
+});
