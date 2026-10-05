@@ -1,4 +1,4 @@
-import {createCallPassProgress} from './call-pass-progress.js?v=3';
+import {createCallPassProgress} from './call-pass-progress.js?v=4';
 import {loadLeadMemory} from './lead-call-memory.js?v=1';
 import {createWorkspacePlanSync} from './workspace-plan-sync.js?v=1';
 import { buildLeadProfile } from './lead-profile.js';

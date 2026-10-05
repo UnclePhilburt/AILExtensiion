@@ -6,3 +6,9 @@ test('saved daily calls include legacy history, paginate and deduplicate both ph
  const client={from:t=>{const q={select:()=>q,eq:(k,v)=>{assert.equal(v,'owner');return q;},gte:()=>q,order:()=>q,range:async(a,b)=>({data:rows[t].slice(a,b+1)})};return q;}};
  assert.equal(await ctx.savedCallsToday(client,'owner',new Date('2026-10-05T21:00:00Z')),502);
 });
+test('completed passes restart automatically once across both phones, while empty and incomplete lists stay put',async()=>{
+ const ctx=vm.createContext({});vm.runInContext(fs.readFileSync('phone-web/public/call-pass-progress.js','utf8').replace(/^export /gm,''),ctx);
+ let pass=1,resets=0;const client={rpc:async(name,args)=>{if(args.p_restart===pass){pass++;resets++;}return {data:{pass,total:3,called:pass===1?3:0}};}};
+ const results=await Promise.all([ctx.currentCallPass(client),ctx.currentCallPass(client)]);assert.equal(resets,1);assert.ok(results.every(r=>r.data.pass===2));
+ for(const data of [{pass:1,total:0,called:0},{pass:1,total:3,called:2},{needs_list:true,total:0,called:0}]){let calls=0;await ctx.currentCallPass({rpc:async()=>{calls++;return {data};}});assert.equal(calls,1);}
+});
