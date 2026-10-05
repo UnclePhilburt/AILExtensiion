@@ -1254,7 +1254,7 @@ function appendDetailTo(parent, label, value) {
 
 function renderSavedLeadEvents(lead,transition){
  const user=currentUserId;if(!user||!lead.leadId)return;
- const section=document.createElement('details');section.className='profileBio';
+ const section=document.createElement('details');section.className='savedLeadHistory';section.open=false;
  const title=document.createElement('summary');title.textContent='Saved calls & texts';section.append(title);
  const content=document.createElement('div');content.textContent='Loading saved history…';section.append(content);leadCard.append(section);
  const key=user+':'+lead.leadId;let cached=leadMemoryCache.get(key);
@@ -1264,7 +1264,7 @@ function renderSavedLeadEvents(lead,transition){
   content.replaceChildren();
   if(!memory.until)recentLeadSkips.clear();
   if(memory.until&&['next','arrive'].includes(transition)&&String(pendingCall?.leadId)!==String(lead.leadId)&&!hasScheduledAppointment(lead.callHistory)&&!navigationPending()&&!recentLeadSkips.has(key)&&recentLeadSkips.size<10){recentLeadSkips.add(key);showFeedback('Skipping a lead called within the last two hours.');void sendNavigation('next');}
-  if(memory.until){section.open=true;const notice=document.createElement('p');notice.textContent='Recently called · available again '+new Date(memory.until).toLocaleTimeString('en-US',{timeZone:'America/Chicago',hour:'numeric',minute:'2-digit'})+' Central. Use Next lead.';content.append(notice);}
+  if(memory.until){if(String(pendingCall?.leadId)!==String(lead.leadId))section.open=true;const notice=document.createElement('p');notice.textContent='Recently called · available again '+new Date(memory.until).toLocaleTimeString('en-US',{timeZone:'America/Chicago',hour:'numeric',minute:'2-digit'})+' Central. Use Next lead.';content.append(notice);}
   if(!memory.events.length)content.textContent='No saved calls or texts for this lead yet.';
   for(const entry of memory.events.slice(0,30)){const line=document.createElement('p');line.textContent=[entry.label,new Date(entry.at).toLocaleString('en-US',{timeZone:'America/Chicago'}),entry.number,entry.result?.replaceAll('-',' ')].filter(Boolean).join(' · ');content.append(line);}
  }).catch(()=>{content.textContent='Saved history is unavailable. Check your connection or run the call-memory SQL update.';leadMemoryCache.delete(key);});

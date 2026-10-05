@@ -64,3 +64,7 @@ html body .workspace .navControls button:disabled { background:var(--journal-sof
 @media (max-width:340px) { html body .workspace .navControls { gap:8px; } html body .workspace .navControls button { padding:10px 12px; font-size:14px; gap:7px; } }
 @media (max-width:360px) { .profileHero { padding:22px 18px 18px; } html body .workspace .profileHero h2 { font-size:26px; } }
 @media (prefers-reduced-motion:reduce) { html body .workspace .leadCard.profileCard { transition:none; } }
+
+.savedLeadHistory { border-top:1px solid var(--journal-line); margin-top:12px; padding:12px 20px; font-size:13px; }
+.savedLeadHistory > summary { cursor:pointer; color:var(--journal-ink); font-weight:500; }
+.savedLeadHistory p { overflow-wrap:anywhere; }

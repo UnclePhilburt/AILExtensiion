@@ -312,3 +312,12 @@ test('quiet-hours auto-skip sends Next once for an active Response Card lead', a
   await page.app.refreshCloud(); await settle(); await page.runTimers(0);
   assert.deepEqual(server.sent.map(c=>c.type),['next'],'does not repeat Next while IMPACT is still on the same lead');
 });
+
+test('saved history stays separate from lead details and does not open over the active call',async()=>{
+ const {server,page}=await calledPage({loadLeadMemory:async()=>({until:Date.parse('2026-09-24T22:00:00Z'),events:[]})});
+ page.clock.now+=5000;freshState(server,page);await page.app.refreshCloud();await settle();
+ const history=page.el('#leadCard').children.filter(c=>c.className==='savedLeadHistory').at(-1);
+ assert.ok(history,'saved call history has its own class instead of profileBio');
+ assert.notEqual(history.open,true,'active call history must not automatically expand');
+ assert.equal(page.el('#callResults').hidden,false);
+});
