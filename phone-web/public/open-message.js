@@ -18,6 +18,7 @@ export function openMessage(href) {
   dialog.setAttribute('aria-label', 'Open your text message');
   Object.assign(dialog.style, { padding:'24px', border:'1px solid #ccd7cb', borderRadius:'20px', maxWidth:'360px', width:'calc(100% - 32px)', color:'#173e32', background:'#fff', font:'16px/1.5 system-ui' });
   const heading = document.createElement('h2'); heading.textContent = 'Your text is ready';
+  const recipient = document.createElement('p'); recipient.textContent = 'To: ' + number;
   const hint = document.createElement('p'); hint.textContent = 'If your texting app did not open, tap below. Send the message there, then return to confirm it.';
   const link = document.createElement('a'); link.href = launchHref; link.textContent = 'Open Messages';
   Object.assign(link.style, {display:'block', padding:'12px 18px', borderRadius:'12px', background:'#173e32', color:'white', textAlign:'center', textDecoration:'none'});
@@ -46,7 +47,7 @@ export function openMessage(href) {
   Object.assign(close.style, {marginTop:'16px', padding:'10px', font:'inherit'});
   close.addEventListener('click', () => dialog.close());
   dialog.addEventListener('close', () => dialog.remove());
-  dialog.append(heading, hint, link, alternatives, close); document.body.append(dialog); dialog.showModal();
+  dialog.append(heading, recipient, hint, link, alternatives, close); document.body.append(dialog); dialog.showModal();
   void attachMessageDebug(dialog, {href,number,body,launchHref,expires}).catch(() => { const note=document.createElement('p');note.textContent='Texting diagnostics could not load. Refresh this page and check your account sign-in.';dialog.append(note); });
   // A fresh tap on the link remains available even if this attempt is blocked.
   if (!android && navigator.userActivation?.isActive) window.location.href = href;
