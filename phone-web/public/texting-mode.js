@@ -25,7 +25,14 @@ const BENEFITS_TEXTS = {
  A: 'Hi {firstName}, this is {agentName} with {company}. We received the reply card you sent in for the cost-free benefits program. I have {meetingTimeA} or {meetingTimeB} open to go over it with you on Zoom. Which time works best for you?',
  B: 'Hey {firstName}, this is {agentName} with {company}. We received the reply card you sent in for the cost-free benefits program. What time are you usually available to go over it with me on Zoom?'
 };
-export function textTemplates(type, saved) {
+export function benefitsGroupName(type, explicit = '') {
+  const raw=String(explicit||type||'').replace(/\s+/g,' ').trim();
+  if(!explicit&&!isBenefitsReplyLead(raw))return '';
+  const name=raw.replace(/(?:\s*\([^()]*\))+\s*$/,'').replace(/^(?:request type|group name|union name|association name)\s*:\s*/i,'').replace(/^(?:response|reply)\s*cards?\s*[-:–]\s*/i,'').trim();
+  if(!name||/^(?:groups?|unions?|associations?|assoc|response\s*cards?|reply\s*cards?|rc|unknown|n\/a)$/i.test(name))return '';
+  return name.slice(0,120);
+}
+export function textTemplates(type, saved, group = '') {
   const childSafe = /child[\s-]*safe/i.test(type);
   const defaults = childSafe ? {
     A: 'Hi {firstName}, this is {agentName} from American Income Life with the Child Safe Program. I have {meetingTimeA} or {meetingTimeB} open for a Zoom meeting to go over the Child Safe Kit with you. Which time works best for you?',
@@ -39,6 +46,8 @@ export function textTemplates(type, saved) {
     result[variant] = result[variant].replace(/\s*Reply STOP to opt out\.?/gi, '').trim();
   }
   if(isBenefitsReplyLead(type)){result.topic=textTopic(type);for(const variant of ['A','B','C','D'])if(/life insurance/i.test(result[variant]))result[variant]=defaults[variant];}
+  const groupName=benefitsGroupName(type,group);
+  if(isBenefitsReplyLead(type)&&groupName){for(const variant of ['A','B','C','D'])result[variant]=result[variant].replace(/cost-free benefits program(?! through )/g,'cost-free benefits program through '+groupName);}
   return result;
 }
 export function textHash(value) {
@@ -207,7 +216,7 @@ export function createTextingMode(root, { storage, getUser, getSlot, getLead, ge
       checkinPanel = panel;
     }
     const type = lead?.requestType || 'General';
-    const templates = textTemplates(type, state.templates[type]);
+    const templates = textTemplates(type, state.templates[type], lead?.group || lead?.groupName);
     const experiment = textHash(JSON.stringify(['central-schedule-v1',type, templates, state.company]));
     const settings = el('details'); settings.append(el('summary', `Edit messages · ${type}`));
     const fields = {};

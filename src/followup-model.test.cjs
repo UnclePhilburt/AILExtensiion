@@ -43,3 +43,13 @@ test('group, union and coded reply-card leads get benefits wording across all da
   }
  }
 });
+
+test('benefits messages name the actual group without internal codes or generic labels',()=>{
+ assert.equal(context.benefitsGroupName('IBT 610 (SGCOY) (AD&D)'),'IBT 610');
+ for(const type of ['Group','Union','Response Card'])assert.equal(context.benefitsGroupName(type),'');
+ for(const variant of ['A','B','C','D']){
+  const draft=context.planDraft('user',{...lead,request_type:'IBT 610 (SGCOY) (AD&D)'},{step:'intro',draft:{variant}},'Cody',[],[],Date.parse('2026-10-04T23:00:00Z'));
+  assert.match(draft.body,/program through IBT 610/);assert.doesNotMatch(draft.body,/SGCOY|AD&D/);
+  assert.match(context.textTemplates('IBT 610 (SGCOY) (AD&D)')[variant],/program through IBT 610/);
+ }
+});
