@@ -73,7 +73,7 @@ void allowScriptLeadInContentScripts();
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (['impact/planStatus','impact/planImport'].includes(message?.type)) {
-    planImportMessage(message,sender).then(sendResponse).catch(error=>sendResponse({ok:false,error:error.message}));return true;
+    planImportMessage(message,sender).then(sendResponse).catch(error=>sendResponse({ok:false,error:error?.message||'Import failed while contacting your saved plan. Check your internet connection and Companion sign-in, then retry.'}));return true;
   }
   if (message?.type === 'impact/authStatus') {
     accessToken().then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));

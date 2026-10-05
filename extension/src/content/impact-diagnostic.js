@@ -630,6 +630,27 @@
     });
   }
 
+  async function requestPlanMessage(message) {
+    // Only the idempotent inbox importer uses this retry, never call/text commands.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let result;
+      try {
+        result = await chrome.runtime.sendMessage(message);
+      } catch (error) {
+        if (/context invalidated/i.test(error?.message || '')) {
+          throw new Error('Companion was updated. Refresh this IMPACT inbox, then click Import inbox again.');
+        }
+        if (!/receiving end|connection|message port|channel closed/i.test(error?.message || '')) throw error;
+      }
+      if (result?.ok === true) return result;
+      if (result?.ok === false) {
+        throw new Error(result.error || 'Companion could not finish the import. Open the extension, check that you are signed in, then retry.');
+      }
+      if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    throw new Error('Companion did not respond. Reload IMPACT Companion on chrome://extensions, then refresh this IMPACT inbox and retry. If both the Store and downloaded versions are enabled, keep only the version you use enabled.');
+  }
+
   function installPlanImport() {
     if (!/^\/Lead\/Inbox\/?$/.test(location.pathname)) return;
     let importing=false, owner='', autoStarted=false;
@@ -650,7 +671,7 @@
       const observer=new MutationObserver(()=>{if(mountImportPanel())observer.disconnect();});
       observer.observe(document.body,{childList:true,subtree:true});
     }
-    const request=message=>chrome.runtime.sendMessage(message).then(result=>{if(!result?.ok)throw new Error(result?.error||'Could not reach Companion.');return result;});
+    const request=requestPlanMessage;
     const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
     const pageKey=()=>Array.from(document.querySelectorAll('#LeadTable a[href*="/Lead/InboxDetail?LeadId="]')).map(a=>a.getAttribute('href')).join('|');
     async function changePage(control) {
