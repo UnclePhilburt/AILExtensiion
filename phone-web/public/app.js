@@ -11,7 +11,7 @@ import { createScriptOverlay } from './script-overlay.js?v=5';
 import { client, accessToken } from './auth-runtime.js';
 import { cloudEnabled, cloudState, cloudTouchPhone, cloudSend, watchCloud, visibleLead, slotView, isOnline } from './cloud-sync.js';
 import { NETWORK_MESSAGE, SIGN_IN_MESSAGE, RESULT_COMMANDS, checkBeforeSend, isStateFresh, isAuthFailure, isNetworkFailure, friendlySendError, withTimeout } from './phone-actions.js';
-import { buildHeadsUp, splitHistory, parseHistoryEntry, localTimeNote, hasScheduledAppointment, latestActivity } from './lead-highlights.js?v=3';
+import { buildHeadsUp, splitHistory, parseHistoryEntry, localTimeNote, hasScheduledAppointment } from './lead-highlights.js?v=3';
 import { doNotKnockWarning, requestTypeLabel } from './lead-rules.js';
 import { loadPhoneSettings } from './settings-store.js';
 import { saveLeadSchedule, saveAppointmentChoice } from './calendar-sync.js';
@@ -922,7 +922,6 @@ function renderLead(lead, updatedAt, source, transition = "") {
   const name = document.createElement("h2");
   name.textContent = lead.leadName || "Current lead";
   leadCard.append(name);
-  renderLatestActivity(lead);
   renderHeadsUp(lead);
   renderTimingInsight(lead);
 
@@ -1008,28 +1007,12 @@ function safely(fn) {
   try { return fn(); } catch (_error) { return null; }
 }
 
-function renderLatestActivity(lead) {
-  let activity = null;
-  try { activity = latestActivity(lead.callHistory, Date.now()); } catch (_error) { activity = null; }
-  if (!activity) return;
-  const section = document.createElement('section');
-  section.className = `latestActivity ${activity.tone}`;
-  section.setAttribute('aria-label', 'Most recent lead activity');
-  const label = document.createElement('span');
-  label.textContent = 'LAST ACTION';
-  const action = document.createElement('strong');
-  action.textContent = activity.action;
-  const when = document.createElement('span');
-  when.textContent = `${activity.when} · ${activity.relative}`;
-  section.append(label, action, when);
-  leadCard.append(section);
-}
-
 // Things to know before dialing (upcoming appointment, callback, bad number,
 // earlier tries), read from the lead's IMPACT Status history.
 function renderHeadsUp(lead) {
   let chips = [];
   try { chips = buildHeadsUp(lead.callHistory, Date.now()); } catch (_error) { chips = []; }
+  chips=chips.filter(chip=>chip.label!=='Previous tries');
   if (!chips.length) return;
   const section = document.createElement("section");
   section.className = "headsUp";
