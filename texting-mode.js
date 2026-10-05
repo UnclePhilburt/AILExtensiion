@@ -1,3 +1,4 @@
+import {scriptForRequestType} from './call-scripts.js';
 import {openMessage as launchMessage} from './open-message.js?v=5';
 import { chooseTextVariant, textingTimeHint } from './text-learning.js?v=2';
 // Drafts survive locally; confirmed sends and reported outcomes sync to Supabase.
@@ -15,6 +16,8 @@ export const DEFAULT_TEXTS = {
   B: 'Hey {firstName}, this is {agentName} with {company}. We got your request to talk with an agent about life insurance options. What time are you usually available to go over them with me on Zoom?'
 };
 export function isChildSafeLead(type) {
+ const script=scriptForRequestType(type);
+ if(script)return ['MPCHILDSAFE','CHILDSAFE','REFERRAL'].includes(script.id);
  return /\bchild[\s_\u2010-\u2015-]*saf(?:e|ety)\b|\bcsk\b/i.test(String(type||''));
 }
 export function isBenefitsReplyLead(type) {
