@@ -1,3 +1,4 @@
+import {openMessage as launchMessage} from './open-message.js';
 import { chooseTextVariant, textingTimeHint } from './text-learning.js?v=2';
 // Drafts survive locally; confirmed sends and reported outcomes sync to Supabase.
 const LEGACY_TEXTS = {
@@ -107,7 +108,7 @@ export function textStats(records, experiment) {
   });
 }
 
-export function createTextingMode(root, { storage, getUser, getSlot, getLead, getAgent, registerCall, isEnabled = () => true, tracking = null, getMeetings = null, activateLead = null, openMessage = href => { window.location.href = href; } }) {
+export function createTextingMode(root, { storage, getUser, getSlot, getLead, getAgent, registerCall, isEnabled = () => true, tracking = null, getMeetings = null, activateLead = null, openMessage = launchMessage }) {
   if (!root) return { sync() {} };
   let rendered = '', busy = false, openingFollowup = '', fourVariants = false, calendarRows = null, calendarAt = 0;
   const numberKey = number => String(number || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
