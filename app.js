@@ -1,5 +1,5 @@
 import {createCallRegistrationRetry} from './call-registration-retry.js?v=1';
-import {findUncalledLead} from './uncalled-lead.js?v=1';
+import {findUncalledLead} from './uncalled-lead.js?v=2';
 import {createCallPassProgress} from './call-pass-progress.js?v=5';
 import {loadLeadMemory} from './lead-call-memory.js?v=1';
 import {createWorkspacePlanSync} from './workspace-plan-sync.js?v=1';
@@ -11,7 +11,7 @@ import { createScriptOverlay } from './script-overlay.js?v=5';
 import { client, accessToken } from './auth-runtime.js';
 import { cloudEnabled, cloudState, cloudTouchPhone, cloudSend, watchCloud, visibleLead, slotView, isOnline } from './cloud-sync.js';
 import { NETWORK_MESSAGE, SIGN_IN_MESSAGE, RESULT_COMMANDS, checkBeforeSend, isStateFresh, isAuthFailure, isNetworkFailure, friendlySendError, withTimeout } from './phone-actions.js';
-import { buildHeadsUp, splitHistory, localTimeNote, hasScheduledAppointment, latestActivity } from './lead-highlights.js?v=3';
+import { buildHeadsUp, splitHistory, parseHistoryEntry, localTimeNote, hasScheduledAppointment, latestActivity } from './lead-highlights.js?v=3';
 import { doNotKnockWarning, requestTypeLabel } from './lead-rules.js';
 import { loadPhoneSettings } from './settings-store.js';
 import { saveLeadSchedule, saveAppointmentChoice } from './calendar-sync.js';
@@ -990,6 +990,7 @@ function renderLead(lead, updatedAt, source, transition = "") {
   buildLeadProfile(leadCard, historyCard, lead, bioOpen);
   renderSavedLeadEvents(lead,transition);
   scheduleMissingPhoneSkip(lead,transition);
+  scheduleFutureCallbackSkip(lead,transition);
   const resultMenu = document.createElement('details');
   resultMenu.className = 'profileResultMenu';
   resultMenu.open = resultsOpen;
@@ -1322,11 +1323,33 @@ async function openUncalledLead(){
  const user=currentUserId,slot=thisPhoneSlot(),currentId=displayedLead.leadId;
  try{
   const otherLeadIds=Object.entries(currentCloudState?.slot_leads||{}).filter(([lane])=>lane!==slot).map(([,lead])=>lead?.leadId);
-  const missingLeadIds=[...missingPhoneSkips].map(key=>key.startsWith('lead:')?key.slice(5):'');
+  const missingLeadIds=[...missingPhoneSkips].map(key=>key.startsWith('lead:')?key.slice(5):'').concat([...futureCallbackHolds].filter(([,at])=>at>Date.now()).map(([id])=>id));
   const result=await findUncalledLead(client,user,{currentLeadId:currentId,otherLeadIds,missingLeadIds});
   if(user!==currentUserId||slot!==thisPhoneSlot()||currentId!==displayedLead?.leadId)return;
   if(!result.leadId){showFeedback('No uncalled leads are available right now. Recent calls and the other phone’s lead are skipped.');return;}
   await sendNavigation('open-lead',{targetLeadId:result.leadId});
  }catch(error){showFeedback(error.message||'Could not check saved calls. Try Next again.','error');}
  finally{choosingUncalledLead=false;}
+}
+
+const futureCallbackHolds=new Map(),callbackSkipQueued=new Set();
+function futureCallbackTime(lead){
+ const entry=splitHistory(lead?.callHistory).map(line=>parseHistoryEntry(line)).find(e=>e.kind==='callback'&&e.scheduled);
+ const at=entry?.dates?.[0]?.at;return at>Date.now()?at:0;
+}
+function scheduleFutureCallbackSkip(lead,transition){
+ const at=futureCallbackTime(lead),id=String(lead.leadId||'');
+ if(!at){futureCallbackHolds.delete(id);return;}
+ futureCallbackHolds.set(id,at);
+ if(!useCloud||transition==='previous'||loadPhoneSettings(localStorage).textingMode||String(pendingCall?.leadId)===id||callbackSkipQueued.has(id))return;
+ callbackSkipQueued.add(id);
+ const user=currentUserId,slot=thisPhoneSlot(),deadline=Date.now()+15000;
+ const skip=async()=>{
+  if(user!==currentUserId||slot!==thisPhoneSlot()||document.hidden||String(displayedLead?.leadId)!==id||!futureCallbackTime(displayedLead)||String(pendingCall?.leadId)===id){callbackSkipQueued.delete(id);return;}
+  if(navigationPending()||choosingUncalledLead){if(Date.now()<deadline){setTimeout(()=>{void skip();},500);return;}callbackSkipQueued.delete(id);return;}
+  await saveLeadSchedule(lead);
+  if(user!==currentUserId||slot!==thisPhoneSlot()||String(displayedLead?.leadId)!==id)return;
+  showFeedback('Skipping until the scheduled callback time.');await openUncalledLead();
+ };
+ setTimeout(()=>{void skip();},2000);
 }
