@@ -1,4 +1,4 @@
-import {textFirstName,textHash,textVariant,availableTextMeetings,meetingTimeLabel,centralParts,isBenefitsReplyLead,benefitsGroupName} from './texting-mode.js?v=22';
+import {textFirstName,textHash,textVariant,availableTextMeetings,meetingTimeLabel,centralParts,isBenefitsReplyLead,benefitsGroupName} from './texting-mode.js?v=23';
 import {chooseTextVariant} from './text-learning.js?v=2';
 export const stepNames={intro:'Introduction · Sunday / Monday catch-up',tuesday:'Tuesday follow-up',thursday:'Thursday follow-up',saturday:'Saturday final follow-up'};
 export function planDraft(user,lead,action,agent,meetings,records=[],now=Date.now()) {
@@ -12,7 +12,7 @@ export function planDraft(user,lead,action,agent,meetings,records=[],now=Date.no
  const company=child?'American Income Life with the Child Safe Program':'American Income Life';
  const benefits=isBenefitsReplyLead(lead.request_type);
  const group=benefits?benefitsGroupName(lead.request_type,lead.group_name||lead.group):'';
- const program='the cost-free benefits program'+(group?' through '+group:'');
+ const program='the cost-free benefits program'+(group?' for members of '+group:'');
  const topic=child?'the Child Safe Kit':will?'the will kit':benefits?program+' you sent a reply card for':'your life insurance options';
  const intro='Hi '+textFirstName(lead.name)+', this is '+agent+(child?' from ':' with ')+company+'. ';
  const context={intro:benefits?'We received the reply card you sent in for '+program+'. ':child||will?'I’m reaching out about '+topic+'. ':'We got your request to talk with an agent about life insurance. ',tuesday:'Just following up about '+topic+'. ',thursday:'Wanted to check back about '+topic+'. ',saturday:'One last follow-up this week about '+topic+'. '}[action.step];
