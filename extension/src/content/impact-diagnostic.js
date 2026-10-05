@@ -478,6 +478,9 @@
 
     const queue = collectInboxLeadQueue();
     if (queue.length) {
+      const prior=(await chrome.storage.local.get(STORAGE_KEYS.inboxQueue))[STORAGE_KEYS.inboxQueue];
+      const total=Number((document.querySelector('#LeadTable_info')?.textContent||'').replace(/,/g,'').match(/of\s+(\d+)/i)?.[1]);
+      if(prior?.leads?.length===total&&prior?.complete&&Date.now()-Date.parse(prior.capturedAt)<4*60*60*1000&&queue.every(lead=>prior.leads.some(old=>old.leadId===lead.leadId))){return {count:prior.leads.length,complete:true};}
       await chrome.storage.local.set({
         [STORAGE_KEYS.inboxQueue]: {
           capturedAt: new Date().toISOString(),
@@ -551,7 +554,7 @@
     const shown = Number(match[2]) - Number(match[1]) + 1;
     const total = Number(match[3]);
     if (!total) return false;
-    return shown >= Math.min(100, total);
+    return shown >= Math.min(100, total - Number(match[1]) + 1);
   }
 
   function collectInboxLeadQueue(root = document) {
@@ -652,11 +655,11 @@
 
   function installPlanImport() {
     if (!/^\/Lead\/Inbox\/?$/.test(location.pathname)) return;
-    let importing=false, owner='', autoStarted=false;
+    let importing=false, owner='', autoStarted=false,scanned=false;
     const panel=document.createElement('section'); panel.id='impactPlanImport';
     panel.style.cssText='position:relative;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:16px;margin:10px 0;background:#eef5ed;border:1px solid #a5bfa8;border-radius:8px;color:#163c30;font:14px system-ui';
     const button=document.createElement('button');button.type='button';button.textContent='Import inbox';
-    const status=document.createElement('span');status.style.cssText='flex:1;min-width:160px;overflow-wrap:anywhere';panel.append(button,status);
+    const status=document.createElement('span');status.style.cssText='flex:1;min-width:160px;overflow-wrap:anywhere';const scanButton=document.createElement('button');scanButton.type='button';scanButton.textContent='Load all pages for calling';panel.append(button,scanButton,status);
     button.style.cssText='background:#173e32;color:white;border:0;border-radius:8px;padding:12px 20px;font:bold 15px system-ui;cursor:pointer';
     // Keep the bar in the inbox content, below IMPACT's fixed navigation.
     // The table may arrive after this content script runs.
@@ -678,6 +681,33 @@
       for(let i=0;i<80;i++){await pause(150);if(pageKey()&&pageKey()!==before)return;}
       throw new Error('The inbox page did not finish loading. Import again to resume safely.');
     }
+    async function scanAllPages(){
+      if(importing)return;importing=true;button.disabled=true;scanButton.disabled=true;
+      try{
+        for(let i=0;i<40&&!inboxListReady();i++)await pause(250);
+        if(!inboxListReady())throw Error('Wait for your Inbox to load, then click Load all pages for calling.');
+        const info=()=>{const m=(document.querySelector('#LeadTable_info')?.textContent||'').replace(/,/g,'').match(/Showing\s+(\d+)\s+to\s+(\d+)\s+of\s+(\d+)/i);return m?{start:+m[1],total:+m[3]}:null;};
+        let range=info();
+        for(let i=0;range&&range.start>1&&i<100;i++){const prev=document.querySelector('#LeadTable_previous');if(!prev)throw Error('Could not find the previous Inbox page.');await changePage(prev);range=info();}
+        if(!range||range.start!==1)throw Error('Could not verify the first Inbox page.');
+        const total=range.total,all=new Map();let pages=0;
+        while(true){
+          if(++pages>100)throw Error('Too many Inbox pages. Narrow the filter and retry.');
+          const before=all.size;for(const lead of collectInboxLeadQueue())if(!all.has(lead.leadId))all.set(lead.leadId,{...lead,order:all.size});
+          status.textContent='Loading calling list: '+all.size+' / '+total+' leads · page '+pages;
+          const next=document.querySelector('#LeadTable_next');
+          if(!next||next.classList.contains('disabled')||next.closest('.disabled')||next.getAttribute('aria-disabled')==='true')break;
+          if(all.size===before)throw Error('Inbox repeated a page. Retry Load all pages.');
+          await changePage(next);
+        }
+        if(all.size!==total)throw Error('Read '+all.size+' of '+total+' leads. Retry Load all pages.');
+        await chrome.storage.local.set({[STORAGE_KEYS.inboxQueue]:{capturedAt:new Date().toISOString(),url:scrubCurrentUrl(),complete:true,leads:[...all.values()]}});
+        scanned=true;status.textContent='Calling list ready: '+all.size+' leads across '+pages+' pages. Next and Best Next use the whole list.';
+        const first=document.querySelector('#LeadTable_first');if(first&&!first.classList.contains('disabled')&&!first.closest('.disabled'))await changePage(first);
+      }catch(error){status.textContent=error.message;}finally{importing=false;button.disabled=false;scanButton.disabled=false;}
+    }
+    scanButton.addEventListener('click',()=>void scanAllPages());
+    setTimeout(()=>{if(!scanned&&!importing)void scanAllPages();},2500);
     async function run() {
       if(importing)return;importing=true;button.disabled=true;let added=0,read=0;const skipped=[];
       try {
@@ -1107,7 +1137,7 @@
   }
 
   function writeBestNextSeen(ids) {
-    const unique = [...new Set((ids || []).map((id) => String(id)).filter(Boolean))].slice(-200);
+    const unique = [...new Set((ids || []).map((id) => String(id)).filter(Boolean))].slice(-10000);
     sessionStorage.setItem(BEST_NEXT_SEEN_KEY, JSON.stringify(unique));
   }
 
@@ -1180,6 +1210,8 @@
     const doc=new DOMParser().parseFromString(await response.text(),'text/html');
     if(!doc.querySelector('#LeadTable'))throw Error('IMPACT did not return your Inbox. Refresh IMPACT and sign in, then try again.');
     const leads=collectInboxLeadQueue(doc);
+    const saved=(await chrome.storage.local.get(STORAGE_KEYS.inboxQueue))[STORAGE_KEYS.inboxQueue];
+    if(saved?.complete&&Date.now()-Date.parse(saved.capturedAt)<4*60*60*1000&&saved.leads.length>leads.length)return saved.leads;
     if(leads.length)await chrome.storage.local.set({[STORAGE_KEYS.inboxQueue]:{capturedAt:new Date().toISOString(),url:'/Lead/Inbox',leads}});
     return leads;
   }
