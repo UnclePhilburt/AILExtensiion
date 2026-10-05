@@ -335,3 +335,14 @@ test('a settled lead with no number skips once without recording a call',async()
  freshState(server,page,{...leadB,phones:[]});await page.app.refreshCloud();await page.runTimers(2000);
  assert.equal(server.sent.length,1);
 });
+test('a numberless lead skips when the page first opens, including empty phone entries',async()=>{
+ for(const phones of [[],[{label:'Home',number:'',dialHref:'tel:'}]]){
+  const server=makeServer();freshState(server,null,{...leadA,phones});const page=await loadPage(server);
+  await page.runTimers(2000);assert.deepEqual(server.sent.map(c=>c.type),['open-lead']);
+ }
+});
+test('a number arriving during the settling pause prevents a missing-number skip',async()=>{
+ const server=makeServer();freshState(server,null,{...leadA,phones:[]});const page=await loadPage(server);
+ freshState(server,page,leadA);await page.app.refreshCloud();await page.runTimers(2000);
+ assert.equal(server.sent.length,0);
+});

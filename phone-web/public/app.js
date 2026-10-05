@@ -1272,16 +1272,24 @@ function renderSavedLeadEvents(lead,transition){
  }).catch(()=>{content.textContent='Saved history is unavailable. Check your connection or run the call-memory SQL update.';leadMemoryCache.delete(key);});
 }
 
-const missingPhoneSkips = new Set();
+const missingPhoneSkips = new Set(),queuedMissingPhoneSkips=new Set();
+function hasCallablePhone(lead){return (lead?.phones||[]).some(phone=>String(phone.number||'').replace(/\D/g,'').length>=7);}
 function scheduleMissingPhoneSkip(lead,transition){
  const settings=loadPhoneSettings(localStorage),key=getLeadKey(lead);
- if(settings.textingMode||lead.phones?.length)return;
- if(!['next','arrive'].includes(transition)||!lead.available||!lead.leadId||lead.appointmentOptions||hasScheduledAppointment(lead.callHistory)||pendingCall?.leadId===String(lead.leadId)||missingPhoneSkips.has(key))return;
- missingPhoneSkips.add(key);
- setTimeout(()=>{
-  if(document.hidden||getLeadKey(displayedLead)!==key||displayedLead?.phones?.length||navigationPending()||pendingCall?.leadId===String(lead.leadId))return;
+ if(settings.textingMode||hasCallablePhone(lead)||transition==='previous')return;
+ if(!lead.available||!lead.leadId||lead.appointmentOptions||hasScheduledAppointment(lead.callHistory)||pendingCall?.leadId===String(lead.leadId)||missingPhoneSkips.has(key)||queuedMissingPhoneSkips.has(key))return;
+ queuedMissingPhoneSkips.add(key);
+ const user=currentUserId,slot=thisPhoneSlot(),deadline=Date.now()+15000;
+ const skip=()=>{
+  if(user!==currentUserId||slot!==thisPhoneSlot()||document.hidden||getLeadKey(displayedLead)!==key||hasCallablePhone(displayedLead)||loadPhoneSettings(localStorage).textingMode||pendingCall?.leadId===String(lead.leadId)){queuedMissingPhoneSkips.delete(key);return;}
+  if(navigationPending()||choosingUncalledLead){
+   if(Date.now()<deadline){setTimeout(skip,500);return;}
+   queuedMissingPhoneSkips.delete(key);return;
+  }
+  queuedMissingPhoneSkips.delete(key);missingPhoneSkips.add(key);
   showFeedback('Skipping a lead with no phone number.');void openUncalledLead();
- },2000);
+ };
+ setTimeout(skip,2000);
 }
 
 let choosingUncalledLead=false;
