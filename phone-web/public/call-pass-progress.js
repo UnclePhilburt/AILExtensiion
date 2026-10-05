@@ -19,17 +19,18 @@ export async function savedCallsToday(client,user,now=new Date()){
 export function createCallPassProgress(root,{client,getUser}){
  if(!root)return {refresh:async()=>{}};
  const label=document.createElement('strong'),detail=document.createElement('p'),bar=document.createElement('progress'),restart=document.createElement('button');
- label.textContent='Calling pass';bar.max=1;bar.value=0;bar.style.width='100%';bar.setAttribute('aria-label','Leads called this pass');restart.textContent='New pass';restart.type='button';restart.hidden=true;
+ label.textContent='Calling pass';bar.max=1;bar.value=0;bar.setAttribute('aria-label','Leads called this pass');restart.textContent='New pass';restart.type='button';restart.hidden=true;
  const daily=document.createElement('strong');daily.textContent='Loading saved calls…';
- root.append(daily,label,bar,detail,restart);let pass=null,busy=false;
- async function refreshDaily(user){try{const count=await savedCallsToday(client,user);if(getUser()===user)daily.textContent=count+' calls today · Both phones';}catch{if(getUser()===user)daily.textContent='Saved calls unavailable — retrying';}} 
+ root.classList.add('callPass');daily.className='callPassDaily';label.className='callPassLabel';detail.className='callPassDetail';restart.className='callPassReset';restart.setAttribute('aria-label','Start a new calling pass for both phones');root.title='Call totals and pass progress are shared by both phones';
+ root.append(daily,restart,label,detail,bar);let pass=null,busy=false;
+ async function refreshDaily(user){try{const count=await savedCallsToday(client,user);if(getUser()===user)daily.textContent=count+' calls today';}catch{if(getUser()===user)daily.textContent='Saved calls unavailable — retrying';}} 
  async function refresh(reset=null){
   const user=getUser();if(busy||!user)return;busy=true;restart.disabled=true;
   const dailyRefresh=refreshDaily(user);
   try{const {data,error}=await client.rpc('workspace_pass_progress',{p_restart:reset});if(getUser()!==user)return;if(error)throw error;
-   pass=data.pass;restart.hidden=Boolean(data.needs_list);bar.max=data.total||1;bar.value=data.called||0;
-   label.textContent=data.needs_list?'Calling list not connected':'Pass '+data.pass+' · '+data.called+' / '+data.total+' leads called';
-   detail.textContent=data.needs_list?'Open your IMPACT inbox and let Load all pages for calling finish.':data.remaining+' remaining · Both phones combined';
+   pass=data.pass;restart.hidden=Boolean(data.needs_list);bar.hidden=Boolean(data.needs_list);bar.max=data.total||1;bar.value=data.called||0;
+   label.textContent=data.needs_list?'Calling list not connected':'Pass '+data.pass+' · '+data.called+' / '+data.total+' leads';
+   detail.textContent=data.needs_list?'Open your IMPACT inbox and let Load all pages for calling finish.':data.remaining+' left';
   }catch(error){if(getUser()!==user)return;label.textContent='Calling pass';detail.replaceChildren();const a=document.createElement('a');a.href='downloads/shared-call-pass.sql';a.textContent=['PGRST202','42883'].includes(error.code)?'Run the shared-pass SQL update once':'Counter unavailable — refresh after reconnecting';detail.append(a);}
   finally{await dailyRefresh;busy=false;restart.disabled=false;}
  }
