@@ -1,3 +1,4 @@
+import {attachMessageDebug} from './message-debug.js';
 // Keep a real link available when asynchronous preparation outlasts the
 // browser's user activation. Opening a composer never confirms a sent text.
 export function openMessage(href) {
@@ -10,7 +11,8 @@ export function openMessage(href) {
   const launchHref = android
     ? `intent:${number}#Intent;scheme=smsto;action=android.intent.action.SENDTO;S.sms_body=${encodeURIComponent(body)};end`
     : href;
-  document.querySelector('#messageLauncher')?.remove();
+  const previous = document.querySelector('#messageLauncher');
+  if (previous) { previous.close(); previous.remove(); }
   const dialog = document.createElement('dialog');
   dialog.id = 'messageLauncher';
   dialog.setAttribute('aria-label', 'Open your text message');
@@ -45,6 +47,7 @@ export function openMessage(href) {
   close.addEventListener('click', () => dialog.close());
   dialog.addEventListener('close', () => dialog.remove());
   dialog.append(heading, hint, link, alternatives, close); document.body.append(dialog); dialog.showModal();
+  void attachMessageDebug(dialog, {href,number,body,launchHref,expires}).catch(() => {});
   // A fresh tap on the link remains available even if this attempt is blocked.
   if (!android && navigator.userActivation?.isActive) window.location.href = href;
 }

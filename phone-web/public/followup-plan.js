@@ -1,9 +1,9 @@
-import {openMessage} from './open-message.js?v=2';
+import {openMessage} from './open-message.js?v=3';
 import {cloudState,cloudSend,cloudTouchPhone,visibleLead} from './cloud-sync.js';
 import {loadPhoneSettings} from './settings-store.js';
 import {client} from './auth-runtime.js';
 import {planDraft,stepNames,centralInput} from './followup-model.js';
-import {smsLink,textMeetingSlots} from './texting-mode.js?v=17';
+import {smsLink,textMeetingSlots} from './texting-mode.js?v=18';
 const $=s=>document.querySelector(s),node=(tag,text)=>Object.assign(document.createElement(tag),{textContent:text});
 $('#slot').value=loadPhoneSettings(localStorage).phoneSlot;
 const device=sessionStorage.getItem('plan.device')||crypto.randomUUID();sessionStorage.setItem('plan.device',device);
