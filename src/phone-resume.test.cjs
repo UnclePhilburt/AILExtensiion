@@ -346,3 +346,12 @@ test('a number arriving during the settling pause prevents a missing-number skip
  freshState(server,page,leadA);await page.app.refreshCloud();await page.runTimers(2000);
  assert.equal(server.sent.length,0);
 });
+test('a future callback opened by IMPACT is redirected to an uncalled lead',async()=>{
+ const server=makeServer();freshState(server,null,{...leadA,callHistory:['Schedule Call Back appointment on Sep 25 2026 - 02:30 PM by Me']});
+ const page=await loadPage(server);await page.runTimers(2000);
+ assert.deepEqual(server.sent.map(c=>c.type),['open-lead']);assert.equal(server.sent[0].targetLeadId,leadB.leadId);
+});
+test('a due callback stays visible instead of being skipped for its schedule',async()=>{
+ const server=makeServer();freshState(server,null,{...leadA,callHistory:['Schedule Call Back appointment on Sep 24 2026 - 02:30 PM by Me']});
+ const page=await loadPage(server);await page.runTimers(2000);assert.equal(server.sent.length,0);
+});
