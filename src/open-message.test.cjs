@@ -18,6 +18,19 @@ test('active gesture attempts opening immediately and leaves a fallback link',()
  const {context,elements}=setup(true);context.openMessage('sms:3145550100&body=Hello');assert.equal(context.window.location.href,'sms:3145550100&body=Hello');assert.ok(elements.find(e=>e.tag==='a'));
 });
 test('old links require refreshing the prepared draft and close returns to the lead',()=>{
- const {context,elements,advance}=setup(false);context.openMessage('sms:3145550100');advance();let prevented=false;elements.find(e=>e.tag==='a').events.click({preventDefault(){prevented=true}});assert.equal(prevented,true);elements.find(e=>e.tag==='button').events.click();assert.equal(elements.find(e=>e.tag==='dialog').removed,true);
+ const {context,elements,advance}=setup(false);context.openMessage('sms:3145550100');advance();let prevented=false;elements.find(e=>e.tag==='a').events.click({preventDefault(){prevented=true}});assert.equal(prevented,true);elements.find(e=>e.textContent==='Back to lead').events.click();assert.equal(elements.find(e=>e.tag==='dialog').removed,true);
 });
 test('non-text URLs cannot be launched',()=>{const {context}=setup(true);assert.throws(()=>context.openMessage('https://example.com'),/phone link/);});
+
+test('Android uses a direct SENDTO intent with encoded body and a number-only fallback',()=>{
+ const {context,elements}=setup(true);context.navigator.userAgent='Mozilla/5.0 Android';
+ const body='Hi Jane; #Intent & Zoom?';context.openMessage('sms:+13145550100?body='+encodeURIComponent(body));
+ const links=elements.filter(e=>e.tag==='a');
+ assert.equal(links[0].href,'intent:+13145550100#Intent;scheme=smsto;action=android.intent.action.SENDTO;S.sms_body='+encodeURIComponent(body)+';end');
+ assert.equal(links[1].href,'sms:+13145550100');assert.equal(context.window.location.href,'');
+ assert.equal(elements.find(e=>e.tag==='textarea').value,body);
+});
+test('copy fallback preserves the exact prepared message',async()=>{
+ const {context,elements}=setup(false);let copied='';context.navigator.clipboard={writeText:async text=>{copied=text}};
+ context.openMessage('sms:3145550100?body=Hello%20Jane');await elements.find(e=>e.textContent==='Copy message').events.click();assert.equal(copied,'Hello Jane');
+});

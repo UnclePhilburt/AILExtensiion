@@ -1,4 +1,4 @@
-import {openMessage as launchMessage} from './open-message.js';
+import {openMessage as launchMessage} from './open-message.js?v=2';
 import { chooseTextVariant, textingTimeHint } from './text-learning.js?v=2';
 // Drafts survive locally; confirmed sends and reported outcomes sync to Supabase.
 const LEGACY_TEXTS = {
