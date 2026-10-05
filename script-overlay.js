@@ -1,4 +1,4 @@
-import { CALL_SCRIPTS, fillScriptText, scriptForRequestType } from './call-scripts.js';
+import { CALL_SCRIPTS, fillScriptText, scriptForRequestType } from './call-scripts.js?v=2';
 import { loadPhoneSettings } from './settings-store.js';
 
 function paragraph(text) {
