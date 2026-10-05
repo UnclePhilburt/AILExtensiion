@@ -33,5 +33,10 @@ test('Monday fallback moves missed intros to morning and keeps normal calling ho
  await time('2026-10-05T19:00:00Z');await db.exec(`select plan_prepare_monday('${user}')`);assert.equal((await db.query("select monday_fallback from followup_leads where lead_id='456'")).rows[0].monday_fallback,false);
  await time('2026-11-02T16:00:00Z');assert.equal((await db.query("select plan_hours_open('text','intro',true) as yes")).rows[0].yes,true);
  await time('2026-11-02T19:00:00Z');assert.equal((await db.query("select plan_hours_open('text','intro',true) as yes")).rows[0].yes,false);
+
+ await db.exec(fs.readFileSync('supabase/migrations/028_monday_text_window.sql','utf8').replace(/now\(\)/g,'public.plan_test_now()'));
+ for(const [hour,expected] of [[9,false],[10,true],[13,true],[14,true],[20,true],[21,false]]){await time(new Date(Date.parse('2026-10-05T05:00:00Z')+hour*3600000).toISOString());assert.equal((await db.query("select plan_hours_open('text','intro',true) as yes")).rows[0].yes,expected);}
+ await time('2026-10-05T18:00:00Z');assert.equal((await db.query("select plan_hours_open('call','day-1',true) as yes")).rows[0].yes,false);
+ await time('2026-10-05T19:00:00Z');assert.equal((await db.query("select plan_hours_open('call','day-1',true) as yes")).rows[0].yes,true);
  }finally{await db.close();}
 });
