@@ -1258,7 +1258,7 @@ function renderSavedLeadEvents(lead,transition){
  const user=currentUserId;if(!user||!lead.leadId)return;
  const section=document.createElement('details');section.className='savedLeadHistory';section.open=false;
  const title=document.createElement('summary');title.textContent='Saved calls & texts';section.append(title);
- const content=document.createElement('div');content.textContent='Loading saved history…';section.append(content);leadCard.append(section);
+ const content=document.createElement('div');content.className='savedHistoryBody';content.textContent='Loading history…';section.append(content);leadCard.append(section);
  const key=user+':'+lead.leadId;let cached=leadMemoryCache.get(key);
  if(!cached||Date.now()-cached.at>15000){cached={at:Date.now(),promise:loadLeadMemory(client,user,lead.leadId)};leadMemoryCache.set(key,cached);}
  cached.promise.then(memory=>{
@@ -1266,9 +1266,25 @@ function renderSavedLeadEvents(lead,transition){
   content.replaceChildren();
   if(!memory.until)recentLeadSkips.clear();
   if(memory.until&&['next','arrive'].includes(transition)&&!loadPhoneSettings(localStorage).textingMode&&String(pendingCall?.leadId)!==String(lead.leadId)&&!hasScheduledAppointment(lead.callHistory)&&!navigationPending()&&!recentLeadSkips.has(key)&&recentLeadSkips.size<10){recentLeadSkips.add(key);showFeedback('Finding an uncalled lead…');void openUncalledLead();}
-  if(memory.until){if(String(pendingCall?.leadId)!==String(lead.leadId))section.open=true;const notice=document.createElement('p');notice.textContent='Recently called · available again '+new Date(memory.until).toLocaleTimeString('en-US',{timeZone:'America/Chicago',hour:'numeric',minute:'2-digit'})+' Central. Use Next lead.';content.append(notice);}
+  if(memory.until){if(String(pendingCall?.leadId)!==String(lead.leadId))section.open=true;const notice=document.createElement('p');notice.className='savedHistoryNotice';notice.textContent='Call again after '+new Date(memory.until).toLocaleTimeString('en-US',{timeZone:'America/Chicago',hour:'numeric',minute:'2-digit'})+' CT.';content.append(notice);}
   if(!memory.events.length)content.textContent='No saved calls or texts for this lead yet.';
-  for(const entry of memory.events.slice(0,30)){const line=document.createElement('p');line.textContent=[entry.label,new Date(entry.at).toLocaleString('en-US',{timeZone:'America/Chicago'}),entry.number,entry.result?.replaceAll('-',' ')].filter(Boolean).join(' · ');content.append(line);}
+  title.textContent='Calls & texts'+(memory.events.length?' · '+memory.events.length:'');
+  const rows=memory.events.slice(0,30),list=document.createElement('ol');list.className='savedHistoryList';
+  const row=entry=>{
+   const item=document.createElement('li'),heading=document.createElement('div'),kind=document.createElement('strong'),when=document.createElement('time'),meta=document.createElement('div');
+   const at=new Date(entry.at),today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago'});
+   kind.textContent=entry.label==='Text sent'?'Text':entry.label==='Follow-up call'?'Follow-up call':'Call';
+   when.setAttribute('datetime',at.toISOString());when.title=at.toLocaleString('en-US',{timeZone:'America/Chicago'})+' Central';
+   when.textContent=(today.format(at)===today.format(new Date())?'Today':at.toLocaleDateString('en-US',{timeZone:'America/Chicago',month:'short',day:'numeric'}))+' · '+at.toLocaleTimeString('en-US',{timeZone:'America/Chicago',hour:'numeric',minute:'2-digit'});
+   heading.className='savedHistoryHeading';heading.append(kind,when);
+   const outcomes={'no-answer':'No answer','refused-appointment':'Declined appointment','virtual-appointment-slot':'Appointment set',connected:'Connected','Awaiting result':'Result pending','No reply reported':'No reply'};
+   meta.className='savedHistoryMeta';meta.textContent=[outcomes[entry.result]||entry.result?.replaceAll('-',' '),entry.number].filter(Boolean).join(' · ');
+   item.append(heading,meta);return item;
+  };
+  for(const entry of rows.slice(0,5))list.append(row(entry));
+  if(rows.length)content.append(list);
+  if(rows.length>5){const older=document.createElement('details'),summary=document.createElement('summary'),more=document.createElement('ol');older.className='savedHistoryOlder';summary.textContent='Show earlier activity';more.className='savedHistoryList';for(const entry of rows.slice(5))more.append(row(entry));older.append(summary,more);content.append(older);}
+
  }).catch(()=>{content.textContent='Saved history is unavailable. Check your connection or run the call-memory SQL update.';leadMemoryCache.delete(key);});
 }
 

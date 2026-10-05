@@ -65,6 +65,15 @@ html body .workspace .navControls button:disabled { background:var(--journal-sof
 @media (max-width:360px) { .profileHero { padding:22px 18px 18px; } html body .workspace .profileHero h2 { font-size:26px; } }
 @media (prefers-reduced-motion:reduce) { html body .workspace .leadCard.profileCard { transition:none; } }
 
-.savedLeadHistory { border-top:1px solid var(--journal-line); margin-top:12px; padding:12px 20px; font-size:13px; }
-.savedLeadHistory > summary { cursor:pointer; color:var(--journal-ink); font-weight:500; }
-.savedLeadHistory p { overflow-wrap:anywhere; }
+.savedLeadHistory { border-top:1px solid var(--journal-line); margin-top:10px; padding:12px 20px; font-size:12px; }
+.savedLeadHistory > summary { cursor:pointer; color:var(--journal-muted); font-weight:500; }
+.savedHistoryBody { padding-top:6px; color:var(--journal-muted); }
+.savedHistoryList { list-style:none; margin:0; padding:0; }
+.savedHistoryList li { padding:10px 0; border-bottom:1px solid var(--journal-line); }
+.savedHistoryList li:last-child { border-bottom:0; }
+.savedHistoryHeading { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+.savedHistoryHeading strong { color:var(--journal-ink); font-size:12px; font-weight:550; }
+.savedHistoryHeading time { font-size:11px; text-align:right; }
+.savedHistoryMeta { margin-top:3px; font-size:11px; overflow-wrap:anywhere; }
+.savedHistoryNotice { margin:0 0 6px; font-size:11px; }
+.savedHistoryOlder > summary { padding:9px 0; cursor:pointer; font-size:11px; }
