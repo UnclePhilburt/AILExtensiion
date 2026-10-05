@@ -55,7 +55,7 @@ test('benefits messages name the actual group without internal codes or generic 
 });
 
 test('Child Safe label variants and old insurance templates always produce kit texts',()=>{
- for(const type of ['Child Safe','Child Safety Kit','CHILD-SAFE KIT','Child–Safe','Child_Safe','CSK','Child Safe Referral','MediaPlex','Media Plex']){
+ for(const type of ['Child Safe Kit Online Inquiry','Child Safe','Child Safety Kit','CHILD-SAFE KIT','Child–Safe','Child_Safe','CSK','Child Safe Referral','MediaPlex','Media Plex']){
   const templates=context.textTemplates(type,{A:context.textTemplates('Life Insurance').A,B:context.textTemplates('Life Insurance').B,topic:'life insurance information'});
   for(const variant of ['A','B','C','D']){
    assert.match(templates[variant],/Child Safe Program/);assert.doesNotMatch(templates[variant],/life insurance|cost-free benefits/i);
