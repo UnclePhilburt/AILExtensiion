@@ -678,7 +678,12 @@
     const pageKey=()=>Array.from(document.querySelectorAll('#LeadTable a[href*="/Lead/InboxDetail?LeadId="]')).map(a=>a.getAttribute('href')).join('|');
     async function changePage(control) {
       const before=pageKey();control.click();
-      for(let i=0;i<80;i++){await pause(150);if(pageKey()&&pageKey()!==before)return;}
+      let last='',stable=0;
+      for(let i=0;i<80;i++){
+        await pause(150);const key=pageKey(),processing=document.querySelector('#LeadTable_processing');
+        const loading=processing&&getComputedStyle(processing).display!=='none'&&getComputedStyle(processing).visibility!=='hidden';
+        if(key&&key!==before&&!loading){stable=key===last?stable+1:1;last=key;if(stable>=3)return;}else{stable=0;last='';}
+      }
       throw new Error('The inbox page did not finish loading. Import again to resume safely.');
     }
     async function scanAllPages(){
@@ -701,11 +706,17 @@
           await changePage(next);
         }
         if(all.size!==total)throw Error('Read '+all.size+' of '+total+' leads. Retry Load all pages.');
+        status.textContent='All '+all.size+' leads loaded. Finishing the Inbox page…';
+        range=info();
+        for(let i=0;range&&range.start>1&&i<100;i++){
+          const prev=document.querySelector('#LeadTable_previous');if(!prev)throw Error('Calling list scanned, but the Inbox could not return to page 1.');
+          await changePage(prev);range=info();
+        }
+        if(!range||range.start!==1)throw Error('The Inbox is still changing pages. Retry Load all pages.');
         await chrome.storage.local.set({[STORAGE_KEYS.inboxQueue]:{capturedAt:new Date().toISOString(),url:scrubCurrentUrl(),complete:true,leads:[...all.values()]}});
         const shared=await chrome.runtime.sendMessage({type:'impact/callingList',leadIds:[...all.keys()]});
         if(!shared?.ok)throw Error('Calling list saved on this computer. Run the shared-call-pass SQL update and click Load all pages again to connect the counter.');
         scanned=true;status.textContent='Calling list ready: '+all.size+' leads across '+pages+' pages. Next and Best Next use the whole list.';
-        const first=document.querySelector('#LeadTable_first');if(first&&!first.classList.contains('disabled')&&!first.closest('.disabled'))await changePage(first);
       }catch(error){status.textContent=error.message;}finally{importing=false;button.disabled=false;scanButton.disabled=false;}
     }
     scanButton.addEventListener('click',()=>void scanAllPages());
