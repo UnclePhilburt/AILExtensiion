@@ -45,7 +45,18 @@ export function createScriptOverlay(parent) {
   parent.append(opener, overlay);
 
   let lead = null;
-  const chosen = () => CALL_SCRIPTS.find((script) => script.id === picker.value) || scriptForRequestType(lead?.requestType) || CALL_SCRIPTS[0];
+  let selectionKey = null;
+  const updateLead = (nextLead) => {
+    const key = nextLead ? String(nextLead.leadId || nextLead.lead_id || nextLead.leadName || "") + "|" + String(nextLead.requestType || "") : null;
+    const changed = key !== selectionKey;
+    lead = nextLead || null;
+    if (changed) {
+      selectionKey = key;
+      picker.value = scriptForRequestType(lead?.requestType)?.id || "";
+    }
+    return changed;
+  };
+  const chosen = () => CALL_SCRIPTS.find((script) => script.id === picker.value) || scriptForRequestType(lead?.requestType) || null;
   const render = () => {
     const script = chosen();
     if (script) picker.value = script.id;
@@ -69,7 +80,7 @@ export function createScriptOverlay(parent) {
     }
   };
   const open = (nextLead) => {
-    lead = nextLead || lead;
+    updateLead(nextLead || lead);
     const match = scriptForRequestType(lead?.requestType);
     if (match) picker.value = match.id;
     overlay.hidden = false;
@@ -85,7 +96,8 @@ export function createScriptOverlay(parent) {
     open,
     hide,
     sync(state) {
-      lead = state.lead || lead;
+      const changed = updateLead(state.lead);
+      if (changed && !overlay.hidden) { render(); body.scrollTop = 0; }
       const show = Boolean(state.enabled && state.calling);
       if (!show) { hide(); opener.hidden = true; return; }
       opener.hidden = !overlay.hidden;

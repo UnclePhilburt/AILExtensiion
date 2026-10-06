@@ -28,3 +28,15 @@ test('association names appear in the phone script without a local number',()=>{
  assert.equal(context.fillScriptText('Your group is {group}',{requestType:'St Louis Bowling Association (SGCOY) (AD&D)'}),'Your group is St Louis Bowling Association');
  assert.equal(context.fillScriptText('{group}',{group:'St Louis Bowling Association'}),'St Louis Bowling Association');
 });
+
+test('an open script follows lead changes and late type updates',()=>{
+ const nodes=[];
+ function node(tag){const n={tag,hidden:false,value:'',children:[],listeners:{},append(...x){this.children.push(...x);},replaceChildren(...x){this.children=x;},setAttribute(){},addEventListener(k,f){this.listeners[k]=f;}};nodes.push(n);return n;}
+ const ctx=vm.createContext({document:{createElement:node},localStorage:{},loadPhoneSettings:()=>({firstName:'Cody'}),CALL_SCRIPTS:context.CALL_SCRIPTS,scriptForRequestType:context.scriptForRequestType,fillScriptText:context.fillScriptText});
+ vm.runInContext(read('script-overlay.js').replace(/^import .*$/gm,''),ctx);
+ const overlay=ctx.createScriptOverlay(node('main')),picker=nodes.find(n=>n.className==='scriptPicker');
+ overlay.open({leadId:'1',requestType:'Union Member Response Card'});assert.equal(picker.value,'RESPONSE');
+ overlay.sync({enabled:true,calling:true,lead:{leadId:'2',requestType:'Child Safe Kit Offer'}});assert.equal(picker.value,'CHILDSAFE');
+ overlay.sync({enabled:true,calling:true,lead:{leadId:'2',requestType:'Free Will Kit'}});assert.equal(picker.value,'WILLKIT');
+ overlay.sync({enabled:true,calling:true,lead:{leadId:'3',requestType:''}});assert.equal(picker.value,'');
+});
