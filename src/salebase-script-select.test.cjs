@@ -156,7 +156,16 @@ test('Phone 2 manual button opens and focuses its window even when IMPACT recove
  const worker=fs.readFileSync('extension/src/background/service-worker.js','utf8');
  const source=worker.slice(worker.indexOf('async function openPhoneScriptWindow'),worker.indexOf('async function reopenPhoneScriptsForLane'));
  let saved,created;
- const ctx=vm.createContext({laneKey:String,SALEBASE_SCRIPTS_URL:'https://salebase.ai/phone_scripts/phone_scripts.php',chrome:{windows:{create:async opts=>{created=opts;return {tabs:[{id:99}]};}}},scriptSlotMap:async()=>({'10':'1','20':'2'}),writeScriptSlotMap:async map=>{saved=map;},reopenPhoneScriptsForLane:()=>new Promise(()=>{})});
+ const ctx=vm.createContext({laneKey:String,SALEBASE_SCRIPTS_URL:'https://salebase.ai/phone_scripts/phone_scripts.php',chrome:{windows:{create:async opts=>{created=opts;return {tabs:[{id:99}]};}}},scriptSlotMap:async()=>({'10':'1','20':'2'}),writeScriptSlotMap:async map=>{saved=map;},laneScriptFields:new Map([['2',{}]]),syncScriptLeadForLane:async()=>{},reopenPhoneScriptsForLane:()=>new Promise(()=>{})});
  vm.runInContext(source,ctx);const result=await ctx.openPhoneScriptWindow('2');
  assert.equal(result.lane,'2');assert.equal(created.focused,true);assert.equal(saved['99'],'2');assert.equal(saved['10'],'1');assert.equal(saved['20'],undefined);
+});
+
+test('new Phone 2 script attaches only Phone 2 saved fields before live recovery',async()=>{
+ const worker=fs.readFileSync('extension/src/background/service-worker.js','utf8');
+ const source=worker.slice(worker.indexOf('async function openPhoneScriptWindow'),worker.indexOf('async function reopenPhoneScriptsForLane'));
+ const fields=new Map(),synced=[],record={slot:'2',fields:{firstName:'Test'},sourceTabId:22};
+ const ctx=vm.createContext({laneKey:String,SALEBASE_SCRIPTS_URL:'url',SCRIPT_LEADS_KEY:'leads',laneScriptFields:fields,chrome:{windows:{create:async()=>({tabs:[{id:99}]})},storage:{session:{get:async()=>({leads:{old:record,other:{slot:'1',fields:{firstName:'Wrong'}}}})}}},scriptSlotMap:async()=>({}),writeScriptSlotMap:async()=>{},syncScriptLeadForLane:async lane=>synced.push([lane,fields.get(lane)]),reopenPhoneScriptsForLane:async()=>true});
+ vm.runInContext(source,ctx);await ctx.openPhoneScriptWindow('2');await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(synced[0][0],'2');assert.equal(synced[0][1].fields.firstName,'Test');assert.equal(fields.has('1'),false);
 });

@@ -43,6 +43,7 @@ const objectionDetector = createObjectionDetector();
 chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
   if (change.status === 'complete' && isSalebaseScriptUrl(tab.url)) {
     void scriptSlotForTab(tabId).then((slot) => {
+      if (slot) void syncScriptLeadForLane(slot);
       const request = pendingSalebaseChoices.get(slot);
       if (request?.label) void selectSalebaseScript(tabId, request, slot);
     });
@@ -745,7 +746,19 @@ async function openPhoneScriptWindow(slot) {
   for (const id of Object.keys(map)) if (map[id] === lane) delete map[id];
   map[String(tab.id)] = lane;
   await writeScriptSlotMap(map);
-  void reopenPhoneScriptsForLane(lane, false).catch(error => {
+  void (async () => {
+    if (!laneScriptFields.has(lane)) {
+      const stored = await chrome.storage.session.get(SCRIPT_LEADS_KEY);
+      const record = Object.values(stored[SCRIPT_LEADS_KEY] || {}).filter(item => item?.slot === lane && item?.fields).sort((a,b) => (b.at || 0) - (a.at || 0))[0];
+      if (record) laneScriptFields.set(lane, { fields: record.fields, sourceTabId: record.sourceTabId, at: record.at });
+    }
+    await syncScriptLeadForLane(lane);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (await reopenPhoneScriptsForLane(lane, false)) return;
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+    await appendLocalLog('warn', 'salebase.scriptRecovery', { slot: lane, reason: 'IMPACT has not supplied a lead after four attempts' });
+  })().catch(error => {
     void appendLocalLog('warn', 'salebase.scriptRecovery', { slot: lane, reason: error.message });
   });
   return { lane };
@@ -763,12 +776,13 @@ async function reopenPhoneScriptsForLane(lane, forceNewWindow = true) {
       await rememberScriptLead(lead, scriptDetails, tab.id, lane);
       await openMatchingSalebaseScript(lead, lane, forceNewWindow);
       await publishLead(lead, { force: true, slot: lane, eventName: 'phoneSync.scriptRecovery' });
-      return;
+      return true;
     }
   }
   // Manual opening remains available from the inbox or while IMPACT is loading.
   // Do not fill another lane's lead into this new window.
   if (forceNewWindow) await openMatchingSalebaseScript(null, lane, true);
+  return false;
 }
 
 async function impactTabForLane(tabs, lane) {
