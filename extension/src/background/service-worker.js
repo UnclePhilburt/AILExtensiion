@@ -721,7 +721,7 @@ async function reopenPhoneScripts() {
   const lanes = [];
   for (const lane of ['1', '2']) {
     try {
-      await reopenPhoneScriptsForLane(lane);
+      await openPhoneScriptWindow(lane);
       lanes.push(lane);
     } catch (error) {
       // Phone 2 is optional. Phone 1 remains required when this is used from
@@ -736,31 +736,39 @@ async function reopenPhoneScripts() {
 
 async function openPhoneScriptWindow(slot) {
   const lane = laneKey(slot);
-  // Use the same live IMPACT refresh as the combined button, then open only
-  // the requested lane. This prevents Phone 1 from ever being reused for the
-  // Phone 2 window.
-  await reopenPhoneScriptsForLane(lane);
+  // Open in the button's workflow before any IMPACT reads or lead syncing.
+  const created = await chrome.windows.create({ url: SALEBASE_SCRIPTS_URL, type: 'popup', focused: true, width: 1080, height: 900 });
+  const tab = created?.tabs?.find(item => item?.id);
+  if (!tab?.id) throw new Error(`Could not open the Phone ${lane} script window.`);
+  const map = await scriptSlotMap();
+  // Replace this lane's old script assignment so subsequent fills reach this window.
+  for (const id of Object.keys(map)) if (map[id] === lane) delete map[id];
+  map[String(tab.id)] = lane;
+  await writeScriptSlotMap(map);
+  void reopenPhoneScriptsForLane(lane, false).catch(error => {
+    void appendLocalLog('warn', 'salebase.scriptRecovery', { slot: lane, reason: error.message });
+  });
   return { lane };
 }
 
-async function reopenPhoneScriptsForLane(lane) {
+async function reopenPhoneScriptsForLane(lane, forceNewWindow = true) {
   const impactTabs = await chrome.tabs.query({ url: 'https://mobile.impact.ailife.com/Lead/*' });
   const tab = await impactTabForLane(impactTabs, lane);
   if (tab?.id) {
-    const response = await chrome.tabs.sendMessage(tab.id, { type: 'impact/readCurrentLead' }).catch(() => null);
+    const response = await Promise.race([chrome.tabs.sendMessage(tab.id, { type: 'impact/readCurrentLead' }).catch(() => null), new Promise(resolve => setTimeout(() => resolve(null), 4000))]);
     if (response?.lead?.available) {
       const { scriptDetails, ...lead } = response.lead;
       noteScriptGroup(lead, scriptDetails);
       slotMemory.set(lane, { ...(slotMemory.get(lane) || {}), lead, leadId: lead.leadId || '' });
       await rememberScriptLead(lead, scriptDetails, tab.id, lane);
-      await openMatchingSalebaseScript(lead, lane, true);
+      await openMatchingSalebaseScript(lead, lane, forceNewWindow);
       await publishLead(lead, { force: true, slot: lane, eventName: 'phoneSync.scriptRecovery' });
       return;
     }
   }
   // Manual opening remains available from the inbox or while IMPACT is loading.
   // Do not fill another lane's lead into this new window.
-  await openMatchingSalebaseScript(null, lane, true);
+  if (forceNewWindow) await openMatchingSalebaseScript(null, lane, true);
 }
 
 async function impactTabForLane(tabs, lane) {

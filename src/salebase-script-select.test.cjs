@@ -151,3 +151,12 @@ test('a delayed dropdown read cannot apply the previous leads script',async()=>{
  const ctx=vm.createContext({laneKey:String,pendingSalebaseChoices:pending,readScriptDropdown(){},chrome:{scripting:{executeScript:async()=>{pending.set('2',latest);return [{result:{found:true,options:['Response Card'],selectedIndex:0}}];}}},matchScriptOption:()=>{applies++;return {index:0};}});
  vm.runInContext(source,ctx);await ctx.selectSalebaseScript(42,old,'2');assert.equal(applies,0);
 });
+
+test('Phone 2 manual button opens and focuses its window even when IMPACT recovery never resolves',async()=>{
+ const worker=fs.readFileSync('extension/src/background/service-worker.js','utf8');
+ const source=worker.slice(worker.indexOf('async function openPhoneScriptWindow'),worker.indexOf('async function reopenPhoneScriptsForLane'));
+ let saved,created;
+ const ctx=vm.createContext({laneKey:String,SALEBASE_SCRIPTS_URL:'https://salebase.ai/phone_scripts/phone_scripts.php',chrome:{windows:{create:async opts=>{created=opts;return {tabs:[{id:99}]};}}},scriptSlotMap:async()=>({'10':'1','20':'2'}),writeScriptSlotMap:async map=>{saved=map;},reopenPhoneScriptsForLane:()=>new Promise(()=>{})});
+ vm.runInContext(source,ctx);const result=await ctx.openPhoneScriptWindow('2');
+ assert.equal(result.lane,'2');assert.equal(created.focused,true);assert.equal(saved['99'],'2');assert.equal(saved['10'],'1');assert.equal(saved['20'],undefined);
+});
