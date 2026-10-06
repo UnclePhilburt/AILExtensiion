@@ -1,6 +1,6 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const context=vm.createContext({Date,Set,Promise,Intl});vm.runInContext(fs.readFileSync('phone-web/public/uncalled-lead.js','utf8').replace(/^export /gm,''),context);
-function client(rows,pass){return {from(table){const q={select:()=>q,eq:(key,user)=>{if(key==='user_id')assert.equal(user,'owner');return q;},gt:()=>q,or:()=>q,order:()=>q,maybeSingle:async()=>({data:pass}),range:async(a,b)=>({data:(rows[table]||[]).slice(a,b+1)})};return q;}};}
+const context=vm.createContext({Date,Set,Promise,Intl});vm.runInContext(fs.readFileSync('phone-web/public/call-pass-progress.js','utf8').replace(/^export /gm,''),context);vm.runInContext(fs.readFileSync('phone-web/public/uncalled-lead.js','utf8').replace(/^import .*$/gm,'').replace(/^export /gm,''),context);
+function client(rows,pass){return {rpc:async(name,args)=>{if(args.p_restart===1)pass.started_at=new Date(now).toISOString();return {data:{pass:1,started_at:pass.started_at,total:pass.lead_ids.length,called:0}};},from(table){const q={select:()=>q,eq:(key,user)=>{if(key==='user_id')assert.equal(user,'owner');return q;},gt:()=>q,or:()=>q,order:()=>q,maybeSingle:async()=>({data:pass}),range:async(a,b)=>({data:(rows[table]||[]).slice(a,b+1)})};return q;}};}
 const now=Date.parse('2026-10-05T22:00:00Z'),start='2026-10-05T14:00:00Z';
 test('direct selection excludes calls from both phones throughout the pass and wraps to uncalled leads',async()=>{
  const rows={followup_workspace_calls:Array.from({length:501},(_,i)=>({id:String(i),lead_id:'2',started_at:start})),followup_actions:[{id:'a',lead_id:'3',kind:'call',started_at:start},{id:'text',lead_id:'6',kind:'text',started_at:start}]};
@@ -31,4 +31,13 @@ test('appointments later today and earlier today stay out of the calling list',a
   const c=client({followup_workspace_calls:[],followup_actions:[],scheduled_events:[{kind:'virtual-appointment',impact_lead_id:'2',starts_at}]},{started_at:start,lead_ids:['1','2','3']});
   assert.equal((await context.findUncalledLead(c,'owner',{currentLeadId:'1',now})).leadId,'3');
  }
+});
+
+test('a stale pass resets before selecting today and still protects the other phone',async()=>{
+ const c=client({followup_workspace_calls:[{lead_id:'2',started_at:'2026-10-04T20:00:00Z'}]},{started_at:'2026-10-04T14:00:00Z',lead_ids:['1','2','3']});
+ assert.equal((await context.findUncalledLead(c,'owner',{currentLeadId:'1',otherLeadIds:['3'],now})).leadId,'2');
+});
+test('skipped leads cannot strand a finished callable pass',async()=>{
+ const c=client({followup_workspace_calls:[{lead_id:'1',started_at:start},{lead_id:'2',started_at:start}]},{started_at:start,lead_ids:['1','2','3']});
+ assert.equal((await context.findUncalledLead(c,'owner',{currentLeadId:'1',missingLeadIds:['3'],now})).leadId,'2');
 });
