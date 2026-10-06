@@ -1,2 +1,2 @@
 import './wake-lock.js';
-await import('./app.js?v=58');
+await import('./app.js?v=59');
