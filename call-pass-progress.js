@@ -1,6 +1,13 @@
-export async function currentCallPass(client){
+function centralPassDay(value){
+ const date=new Date(value);if(!Number.isFinite(+date))return '';
+ const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(date);
+ return ['year','month','day'].map(type=>parts.find(p=>p.type===type).value).join('-');
+}
+export async function currentCallPass(client,now=Date.now()){
  let result=await client.rpc('workspace_pass_progress',{p_restart:null});
- if(!result.error&&!result.data.needs_list&&result.data.total>0&&result.data.called>=result.data.total){
+ const previousDay=centralPassDay(result.data?.started_at);
+ const dailyReset=previousDay&&previousDay<centralPassDay(now);
+ if(!result.error&&!result.data.needs_list&&(dailyReset||(result.data.total>0&&result.data.called>=result.data.total))){
   // The server compares pass numbers under a lock, so both phones can finish together.
   result=await client.rpc('workspace_pass_progress',{p_restart:result.data.pass});
  }
