@@ -17,12 +17,11 @@ const RESPONSE_CARD_CODE_PAIR = /\([A-Z]{2,}\d[A-Z0-9]*\)\s*\([A-Z&]{2,}\)/i;
 // details.group: the lead's group from the IMPACT page (browser-only), used
 // only when the request type alone does not decide.
 export function scriptChoiceForLead(requestType, details = {}) {
-  const type = String(requestType || '').toLowerCase().replace(/[\u00a0\s]+/g, ' ');
+  const type = String(requestType || '').toLowerCase().replace(/[\u00a0\s]+/g, ' ').replace(/[-_]+/g, ' ');
   const rules = [
-    ['response card', /response\s*cards?|reply\s*cards?|\brc\b/, 'Response Card'],
     ['will kit', /will\s*kit/, 'Will Kit'],
     ['mediaplex', /media\s*plex/, 'MediaPlex'],
-    ['child safe referral', /child\s*safe.*referral/, 'Child Safe Referral'],
+    ['child safe referral', /(?:child\s*safe.*referr|referr.*child\s*safe)/, 'Child Safe Referral'],
     ['child safe', /child\s*safe/, 'Child Safe'],
     ['pos beneficiary', /pos.*beneficiar|beneficiar.*pos/, 'POS Beneficiary'],
     ['pos lapsed', /pos.*laps|laps.*pos/, 'POS Lapsed'],
@@ -31,6 +30,7 @@ export function scriptChoiceForLead(requestType, details = {}) {
     ['ailplus non-customer', /ail\s*plus.*non.?customer|non.?customer.*ail\s*plus/, 'AILPlus (Non-Customer)'],
     ['ailplus', /ail\s*plus/, 'AILPlus'],
     ['final expense', /final\s*expense/, 'Final Expense'],
+    ['response card', /response\s*cards?|reply\s*cards?|\brc\b/, 'Response Card'],
     ['union/association member', /\b(?:union|association|assoc)\b\.?/, 'Response Card']
   ];
   for (const [rule, pattern, label] of rules) if (pattern.test(type)) return { label, rule };

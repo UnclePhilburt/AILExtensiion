@@ -18,3 +18,10 @@ test('detached imports read the Group row regardless of its position',()=>{
  }
 });
 test('Group is the program, while generic Type Vendor is not used as the program',()=>{assert.equal(ctx.collectRequestType(typePanel([['Type','Vendor'],['Group','Child Safe Kit Offer']])),'Child Safe Kit Offer');assert.equal(ctx.collectRequestType(typePanel([['Type','Vendor']])),'');assert.equal(ctx.collectRequestType(typePanel([['Request Type','Will Kit']])),'Will Kit');});
+
+test('explicit lead type wins over an association Group row in either order',()=>{
+ for(const rows of [[['Group','St Louis Bowling Association'],['Lead Type','Child Safe Kit Offer']],[['Request Type','Will Kit'],['Group','IBT 610']]]){
+ assert.equal(ctx.collectRequestType(typePanel(rows)),rows.find(r=>r[0]!=='Group')[1]);
+ assert.equal(ctx.collectRequestType(typePanel(rows.slice().reverse())),rows.find(r=>r[0]!=='Group')[1]);
+ }
+});

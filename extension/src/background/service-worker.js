@@ -835,6 +835,8 @@ function scheduleScriptSelectionRetry(tabId, request, slot = '1', attempt = 1) {
 }
 
 async function selectSalebaseScript(tabId, request, slot = '1', attempt = 0) {
+  const isCurrent = () => pendingSalebaseChoices.get(laneKey(slot)) === request;
+  if (!isCurrent()) return;
   let page = null;
   try {
     [{ result: page }] = await chrome.scripting.executeScript({ target: { tabId }, func: readScriptDropdown });
@@ -844,6 +846,7 @@ async function selectSalebaseScript(tabId, request, slot = '1', attempt = 0) {
     scheduleScriptSelectionRetry(tabId, request, slot, attempt + 1);
     return;
   }
+  if (!isCurrent()) return;
   if (!page?.found) {
     await reportScriptSelect(request, { status: 'no-dropdown', reason: 'no #myDropdown with options on the Salebase page' });
     scheduleScriptSelectionRetry(tabId, request, slot, attempt + 1);
@@ -865,6 +868,11 @@ async function selectSalebaseScript(tabId, request, slot = '1', attempt = 0) {
     [{ result: applied }] = await chrome.scripting.executeScript({ target: { tabId }, func: applyScriptOption, args: [match.index, match.text] });
   } catch (error) {
     applied = { ok: false, reason: error.message };
+  }
+  if (!isCurrent()) {
+    const latest = pendingSalebaseChoices.get(laneKey(slot));
+    if (latest?.label) scheduleScriptSelectionRetry(tabId, latest, slot, 0);
+    return;
   }
   await reportScriptSelect(request, { ...base, status: applied?.ok ? 'selected' : 'select-failed', chosen: match.text, how: match.how, reason: applied?.reason || '' });
   if (applied?.ok || page.selectedIndex === match.index) await syncScriptLeadForLane(slot);

@@ -135,3 +135,19 @@ test('manual script opening works without a mapped type and without a loaded lea
  const recovery=worker.slice(worker.indexOf('async function reopenPhoneScriptsForLane'),worker.indexOf('async function impactTabForLane'));
  assert.match(recovery,/openMatchingSalebaseScript\(null, lane, true\)/);
 });
+
+test('specific programs win over reply-card wording and accept separators and reversed referrals',()=>{
+ const choose=load().scriptChoiceForLead;
+ for(const type of ['Child Safe Kit Reply Card','Child-Safe Kit Offer','Child_Safe Online Inquiry'])assert.equal(choose(type).label,'Child Safe',type);
+ assert.equal(choose('Referral Child Safe Kit').label,'Child Safe Referral');
+ assert.equal(choose('Will Kit Response Card').label,'Will Kit');
+ assert.equal(choose('Globe Lapsed Response Card').label,'Globe Lapse');
+});
+
+test('a delayed dropdown read cannot apply the previous leads script',async()=>{
+ const worker=fs.readFileSync('extension/src/background/service-worker.js','utf8');
+ const source=worker.slice(worker.indexOf('async function selectSalebaseScript'),worker.indexOf('async function reportScriptSelect'));
+ const pending=new Map(),old={label:'Response Card'},latest={label:'Child Safe'};pending.set('2',old);let applies=0;
+ const ctx=vm.createContext({laneKey:String,pendingSalebaseChoices:pending,readScriptDropdown(){},chrome:{scripting:{executeScript:async()=>{pending.set('2',latest);return [{result:{found:true,options:['Response Card'],selectedIndex:0}}];}}},matchScriptOption:()=>{applies++;return {index:0};}});
+ vm.runInContext(source,ctx);await ctx.selectSalebaseScript(42,old,'2');assert.equal(applies,0);
+});

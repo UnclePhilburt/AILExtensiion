@@ -311,11 +311,13 @@
 
 
     const isTypeLabel = (text) => /^(?:group|(?:request|lead)\s*type)(?:\s*\/\s*(?:request|lead)\s*type)?\s*:?$/i.test(sanitizeText(text));
+    let groupType = "";
     for (const row of Array.from(panel.querySelectorAll("tr"))) {
       const cells = Array.from(row.querySelectorAll(":scope > th, :scope > td"));
       for (let index = 0; index < cells.length - 1; index += 1) {
         if (!isTypeLabel(value(cells[index]))) continue;
         const type = value(cells[index + 1]);
+        if (type && /^group\s*:?$/i.test(value(cells[index]))) { groupType ||= type; continue; }
         if (type) return type;
       }
     }
@@ -330,6 +332,7 @@
       if (type) return type;
     }
 
+    if (groupType) return groupType;
     // Final fallback for a plain-text card such as "Lead Type: Referral".
     const match = value(panel).match(/(?:^|\n)\s*(?:group|(?:request|lead)\s*type)\s*:\s*([^\n]+)/i);
     return sanitizeText(match?.[1] || "");
