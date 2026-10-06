@@ -7,7 +7,7 @@ import { buildLeadProfile } from './lead-profile.js';
 import { createTextingMode } from './texting-mode.js?v=26';
 import { textTracking } from './text-tracking.js?v=2';
 import { installLeadSwipe } from './lead-swipe.js?v=5';
-import { createScriptOverlay } from './script-overlay.js?v=5';
+import { createScriptOverlay } from './script-overlay.js?v=6';
 import { client, accessToken } from './auth-runtime.js';
 import { cloudEnabled, cloudState, cloudTouchPhone, cloudSend, watchCloud, visibleLead, slotView, isOnline } from './cloud-sync.js';
 import { NETWORK_MESSAGE, SIGN_IN_MESSAGE, RESULT_COMMANDS, checkBeforeSend, isStateFresh, isAuthFailure, isNetworkFailure, friendlySendError, withTimeout } from './phone-actions.js';
