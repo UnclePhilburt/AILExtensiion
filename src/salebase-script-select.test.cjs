@@ -124,3 +124,14 @@ test('IMPACT page logs what group it read, once per lead', () => {
   assert.match(impact, /"impact\.groupRead", \{\r?\n\s*requestType: lead\.requestType \|\| "", group: details\.group \|\| "", source: details\.groupSource \|\| "none"/);
   assert.equal((impact.match(/logGroupRead\(lead\);/g) || []).length, 2);
 });
+
+test('manual script opening works without a mapped type and without a loaded lead',async()=>{
+ const worker=fs.readFileSync('extension/src/background/service-worker.js','utf8');
+ const source=worker.slice(worker.indexOf('async function openMatchingSalebaseScript'),worker.indexOf('async function reopenPhoneScripts()'));
+ const created=[],bound=[];
+ const ctx=vm.createContext({laneKey:String,scriptGroupsByLead:new Map(),pendingSalebaseChoices:new Map(),scriptChoiceForLead:()=>({label:'',rule:'no request type'}),SALEBASE_SCRIPTS_URL:'https://salebase.ai/scripts',chrome:{windows:{create:async opts=>{created.push(opts);return {tabs:[{id:42}]};}}},bindScriptTab:async(id,lane)=>bound.push([id,lane])});
+ vm.runInContext(source,ctx);await ctx.openMatchingSalebaseScript(null,'2',true);
+ assert.equal(created.length,1);assert.deepEqual(bound,[[42,'2']]);
+ const recovery=worker.slice(worker.indexOf('async function reopenPhoneScriptsForLane'),worker.indexOf('async function impactTabForLane'));
+ assert.match(recovery,/openMatchingSalebaseScript\(null, lane, true\)/);
+});

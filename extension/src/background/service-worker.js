@@ -656,15 +656,15 @@ async function openMatchingSalebaseScript(lead, slot = '1', forceNewWindow = fal
   const request = { label: choice.label, rule: choice.rule, requestType, leadKey, slot: lane };
   pendingSalebaseChoices.set(lane, request);
   const option = choice.label;
-  if (!option) {
-    await reportScriptSelect(request, { status: 'no-mapping', reason: choice.rule });
-    return;
-  }
   if (forceNewWindow) {
     const created = await chrome.windows.create({ url: SALEBASE_SCRIPTS_URL, type: 'popup', focused: false, width: 1080, height: 900 });
     const tab = created?.tabs?.find((item) => item?.id);
     if (!tab?.id) throw new Error(`Could not open the Phone ${lane} script window.`);
     await bindScriptTab(tab.id, lane);
+    return;
+  }
+  if (!option) {
+    await reportScriptSelect(request, { status: 'no-mapping', reason: choice.rule });
     return;
   }
   const tabs = await findSalebaseScriptTabs(chrome).catch(() => []);
@@ -717,7 +717,6 @@ async function reopenPhoneScripts() {
   // left behind if the extension worker restarted while both IMPACT windows
   // stayed open.
   const impactTabs = await chrome.tabs.query({ url: 'https://mobile.impact.ailife.com/Lead/*' });
-  if (!impactTabs.length) throw new Error('Open an IMPACT lead first, then reopen its script.');
 
   const lanes = [];
   for (const lane of ['1', '2']) {
@@ -759,7 +758,9 @@ async function reopenPhoneScriptsForLane(lane) {
       return;
     }
   }
-  throw new Error(`Phone ${lane} has no open IMPACT lead. Open its IMPACT window first.`);
+  // Manual opening remains available from the inbox or while IMPACT is loading.
+  // Do not fill another lane's lead into this new window.
+  await openMatchingSalebaseScript(null, lane, true);
 }
 
 async function impactTabForLane(tabs, lane) {
