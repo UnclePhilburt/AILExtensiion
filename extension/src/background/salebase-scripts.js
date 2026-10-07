@@ -38,7 +38,7 @@ export function scriptChoiceForLead(requestType, details = {}) {
   // Response Card leads show their group where the request type is read, e.g.
   // "IBT 610 (SGCOY) (AD&D)": a name and number followed by bracketed codes.
   if (GROUP_CODE_TYPE.test(String(requestType || '')) || RESPONSE_CARD_CODE_PAIR.test(String(requestType || ''))) return { label: 'Response Card', rule: 'group code in request type' };
-  if (String(details?.group || '').trim()) return { label: 'Response Card', rule: 'has group' };
+  if (!type.trim() || /^(?:member request|member inquiry|union member|association member)$/.test(type.trim())) if (String(details?.group || '').trim()) return { label: 'Response Card', rule: 'has group' };
   return { label: '', rule: type ? 'no rule for this request type' : 'no request type' };
 }
 

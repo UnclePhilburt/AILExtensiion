@@ -18,7 +18,7 @@ function loadHelpers() {
     Event: class { constructor(type) { this.type = type; } },
     MutationObserver: class { observe() {} disconnect() {} takeRecords() { return []; } },
     NodeFilter: { SHOW_TEXT: 4, FILTER_ACCEPT: 1, FILTER_REJECT: 2 },
-    setTimeout, clearTimeout,
+    setTimeout, clearTimeout, setInterval:()=>0,
     document: { dispatchEvent() {}, addEventListener() {}, documentElement: {}, body: null, querySelectorAll: () => [] },
     chrome: { storage: { onChanged: { addListener() {} }, local: { get: async () => ({}) } }, runtime: { sendMessage: async () => ({}) } }
   });

@@ -109,7 +109,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'impact/getScriptLead') {
     Promise.resolve(allowScriptLeadInContentScripts()).then(async () => {
       const slot = await scriptSlotForTab(sender.tab?.id);
-      const record = await readScriptLead(sender.tab?.id);
+      if (slot) await refreshScriptLane(slot);
+      const saved = await readScriptLead(sender.tab?.id);
+      const record = saved?.slot === slot ? saved : null;
       return { fields: record?.fields || laneScriptFields.get(slot)?.fields || null, slot: record?.slot || slot || '', scriptType: record?.scriptType || pendingSalebaseChoices.get(slot)?.label || '' };
     }).then((result) => sendResponse({ ok: true, ...result })).catch(() => sendResponse({ ok: false, fields: null, slot: '' }));
     return true;
@@ -490,6 +492,7 @@ async function autoPublishLead(incoming, senderTab) {
   if (skip) return { skipped: true, reason: skip };
   noteScriptGroup(lead, scriptDetails);
   await rememberScriptLead(lead, scriptDetails, senderTab.id, slot).catch(() => {});
+  await openMatchingSalebaseScript(lead, slot);
   const result = await chrome.storage.local.get(STORAGE_KEYS.autoPublish);
   const autoPublish = result[STORAGE_KEYS.autoPublish] !== false;
 
@@ -1029,6 +1032,27 @@ async function followAfterCommand(tabId, fromLeadId, slot = '1') {
 }
 
 // ---- Lead details for the Salebase phone script ----
+// Script details come directly from the lane's IMPACT tab, independently of cloud publishing.
+const scriptLaneRefreshes = new Map();
+function refreshScriptLane(slot) {
+  const lane = laneKey(slot);
+  if (scriptLaneRefreshes.has(lane)) return scriptLaneRefreshes.get(lane);
+  const run = (async () => {
+    const tabs = await chrome.tabs.query({url:'https://mobile.impact.ailife.com/Lead/*'});
+    const tab = await impactTabForLane(tabs, lane);
+    if (!tab?.id) return;
+    const response = await Promise.race([chrome.tabs.sendMessage(tab.id,{type:'impact/readCurrentLead'}).catch(()=>null),new Promise(resolve=>setTimeout(()=>resolve(null),3000))]);
+    if (!response?.lead?.available) return;
+    const {scriptDetails,...lead}=response.lead;
+    noteScriptGroup(lead,scriptDetails);
+    await rememberScriptLead(lead,scriptDetails,tab.id,lane);
+    await openMatchingSalebaseScript(lead,lane);
+    await syncScriptLeadForLane(lane);
+  })().finally(()=>scriptLaneRefreshes.delete(lane));
+  scriptLaneRefreshes.set(lane,run);
+  return run;
+}
+
 async function readScriptLead(scriptTabId) {
   const stored = await chrome.storage.session.get(SCRIPT_LEADS_KEY).catch(() => ({}));
   const records = stored[SCRIPT_LEADS_KEY] || {};

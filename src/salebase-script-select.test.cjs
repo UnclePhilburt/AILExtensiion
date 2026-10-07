@@ -180,3 +180,14 @@ test('actual saved Salebase dropdown IDs select every lead program despite label
  assert.equal(values[match.index],id,type);assert.equal(match.how,'script-id');
  }
 });
+
+test('script refresh reads the assigned IMPACT lead and updates name and type without cloud',async()=>{
+ const worker=fs.readFileSync('extension/src/background/service-worker.js','utf8');
+ const source=worker.slice(worker.indexOf('const scriptLaneRefreshes'),worker.indexOf('async function readScriptLead'));
+ const remembered=[],selected=[];let lead={available:true,leadId:'22',leadName:'TEST, SECOND',requestType:'Child Safe Kit Offer',scriptDetails:{group:''}};
+ const ctx=vm.createContext({Map,Promise,laneKey:String,setTimeout:()=>0,chrome:{tabs:{query:async()=>[{id:202}],sendMessage:async(id)=>{assert.equal(id,202);return {lead};}}},impactTabForLane:async(tabs,lane)=>{assert.equal(lane,'2');return tabs[0];},noteScriptGroup(){},rememberScriptLead:async(l,d,id,lane)=>remembered.push([l.leadName,id,lane]),openMatchingSalebaseScript:async(l,lane)=>selected.push([l.requestType,lane]),syncScriptLeadForLane:async()=>{}});
+ vm.runInContext(source,ctx);await ctx.refreshScriptLane('2');
+ lead={...lead,leadId:'23',leadName:'TEST, NEXT',requestType:'Will Kit'};await ctx.refreshScriptLane('2');
+ assert.deepEqual(remembered,[['TEST, SECOND',202,'2'],['TEST, NEXT',202,'2']]);assert.deepEqual(selected,[['Child Safe Kit Offer','2'],['Will Kit','2']]);
+ assert.equal(load().scriptChoiceForLead('Unrecognized program',{group:'Some unrelated text'}).label,'');
+});

@@ -201,6 +201,11 @@
     return;
   }
   start();
+  // Keep the assigned lead current even when phone publishing is paused or unchanged.
+  setInterval(() => {
+    if (stopped || document.hidden) return;
+    chrome.runtime.sendMessage({ type: "impact/getScriptLead" }).then(response => { setLead(response?.fields); setLane(response?.slot, response?.scriptType); }).catch(() => {});
+  }, 4000);
 
   globalThis.__impactScriptFill = { findPlaceholders, refresh, setLead, PLACEHOLDER_FIELDS };
 })();
