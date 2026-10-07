@@ -69,7 +69,7 @@ test('in the Salebase page: reads the options (waiting for them) and selects lik
   let dropdown = null;
   const ctx = load({ document: { querySelector: () => dropdown }, Event: class { constructor(type) { this.type = type; } }, Date });
   setTimeout(() => { dropdown = fakeDropdown(['Select a script', 'Response Card', 'Will Kit'], 2).dropdown; }, 350);
-  assert.deepEqual(plain(await ctx.readScriptDropdown(2000)), { found: true, options: ['Select a script', 'Response Card', 'Will Kit'], selectedIndex: 2 });
+  assert.deepEqual(plain(await ctx.readScriptDropdown(2000)), { found: true, options: ['Select a script', 'Response Card', 'Will Kit'], selectedIndex: 2, values:[null,null,null] });
   dropdown = null;
   assert.deepEqual(plain(await ctx.readScriptDropdown(0)), { found: false, options: [], selectedIndex: -1 });
   const good = fakeDropdown(['Select a script', 'Response Card', 'Will Kit'], 2);
@@ -168,4 +168,15 @@ test('new Phone 2 script attaches only Phone 2 saved fields before live recovery
  const ctx=vm.createContext({laneKey:String,SALEBASE_SCRIPTS_URL:'url',SCRIPT_LEADS_KEY:'leads',laneScriptFields:fields,chrome:{windows:{create:async()=>({tabs:[{id:99}]})},storage:{session:{get:async()=>({leads:{old:record,other:{slot:'1',fields:{firstName:'Wrong'}}}})}}},scriptSlotMap:async()=>({}),writeScriptSlotMap:async()=>{},syncScriptLeadForLane:async lane=>synced.push([lane,fields.get(lane)]),reopenPhoneScriptsForLane:async()=>true});
  vm.runInContext(source,ctx);await ctx.openPhoneScriptWindow('2');await new Promise(resolve=>setImmediate(resolve));
  assert.equal(synced[0][0],'2');assert.equal(synced[0][1].fields.firstName,'Test');assert.equal(fields.has('1'),false);
+});
+
+test('actual saved Salebase dropdown IDs select every lead program despite label differences',()=>{
+ const html=fs.readFileSync('htmls/Phone Scripts - Salebase.html','utf8');
+ const dropdown=html.match(/<select id="myDropdown"[\s\S]*?<\/select>/)[0];
+ const options=[...dropdown.matchAll(/<option value="([^"]+)"[^>]*>\s*([^<]+)<\/option>/g)];
+ const values=options.map(o=>o[1]),labels=options.map(o=>o[2].trim()),ctx=load();
+ for(const [type,id] of [['Child Safe Kit Online Inquiry','CHILDSAFE'],['Child Safe Referral','REFERRAL'],['POS Beneficiary','BENEFICIARY'],['Lapsed POS','LAPSED-POS'],['POS','POS'],['MediaPlex Child Safe','MPCHILDSAFE'],['Globe Lapse','GLOBELAPSE'],['Will Kit','WILLKIT']]){
+ const choice=ctx.scriptChoiceForLead(type),match=ctx.matchScriptOption(choice.label,labels,type,values);
+ assert.equal(values[match.index],id,type);assert.equal(match.how,'script-id');
+ }
 });

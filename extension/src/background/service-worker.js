@@ -875,7 +875,7 @@ async function selectSalebaseScript(tabId, request, slot = '1', attempt = 0) {
     return;
   }
   const options = page.options || [];
-  const match = matchScriptOption(request.label, options, request.requestType);
+  const match = matchScriptOption(request.label, options, request.requestType, page.values || []);
   const base = { options, selectedBefore: options[page.selectedIndex] ?? '' };
   if (match.index < 0) {
     await reportScriptSelect(request, { ...base, status: match.how === 'ambiguous' ? 'ambiguous' : 'no-match', reason: match.reason });

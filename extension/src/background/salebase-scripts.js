@@ -31,6 +31,7 @@ export function scriptChoiceForLead(requestType, details = {}) {
     ['ailplus', /ail\s*plus/, 'AILPlus'],
     ['final expense', /final\s*expense/, 'Final Expense'],
     ['response card', /response\s*cards?|reply\s*cards?|\brc\b/, 'Response Card'],
+    ['pos', /\bpos\b/, 'POS'],
     ['union/association member', /\b(?:union|association|assoc)\b\.?/, 'Response Card']
   ];
   for (const [rule, pattern, label] of rules) if (pattern.test(type)) return { label, rule };
@@ -58,7 +59,11 @@ const PLACEHOLDER_OPTION = /^(?:select|choose|pick)\b|^-+$|^$/;
 // equally good options, and never picks an option that is itself another
 // known script (a "Child Safe" lead never gets "Child Safe Referral").
 // hints: extra text (the request type) used only to break a tie.
-export function matchScriptOption(wanted, optionTexts, hints = '') {
+const SCRIPT_IDS = {'Response Card':'RESPONSE','Will Kit':'WILLKIT','MediaPlex':'MPCHILDSAFE','Child Safe Referral':'REFERRAL','Child Safe':'CHILDSAFE','POS Beneficiary':'BENEFICIARY','POS Lapsed':'LAPSED-POS','POS':'POS','Globe Lapse':'GLOBELAPSE','Globe':'GLOBE','AILPlus (Non-Customer)':'AILPLUS-NONCUST','AILPlus':'APLUS','Final Expense':'FE'};
+export function matchScriptOption(wanted, optionTexts, hints = '', optionValues = []) {
+  const id = SCRIPT_IDS[wanted];
+  const matches = id ? optionValues.map((value,index)=>String(value).toUpperCase()===id?index:-1).filter(index=>index>=0) : [];
+  if (matches.length === 1) return {index:matches[0],text:String(optionTexts[matches[0]]),how:'script-id'};
   const options = (optionTexts || []).map((text, index) => ({ index, text: String(text ?? ''), norm: normalizeScriptLabel(text) }))
     .filter((option) => !PLACEHOLDER_OPTION.test(option.norm));
   const want = normalizeScriptLabel(wanted);
@@ -100,7 +105,7 @@ export async function readScriptDropdown(waitMs = 6000) {
   for (;;) {
     const dropdown = document.querySelector('#myDropdown');
     if (dropdown && dropdown.tagName === 'SELECT' && dropdown.options.length) {
-      return { found: true, options: Array.from(dropdown.options, (option) => option.text), selectedIndex: dropdown.selectedIndex };
+      return { found: true, options: Array.from(dropdown.options, (option) => option.text), selectedIndex: dropdown.selectedIndex, values: Array.from(dropdown.options, option => option.value) };
     }
     if (Date.now() - started >= waitMs) return { found: false, options: [], selectedIndex: -1 };
     await new Promise((resolve) => setTimeout(resolve, 300));
