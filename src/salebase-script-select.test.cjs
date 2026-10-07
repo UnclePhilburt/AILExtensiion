@@ -191,3 +191,10 @@ test('script refresh reads the assigned IMPACT lead and updates name and type wi
  assert.deepEqual(remembered,[['TEST, SECOND',202,'2'],['TEST, NEXT',202,'2']]);assert.deepEqual(selected,[['Child Safe Kit Offer','2'],['Will Kit','2']]);
  assert.equal(load().scriptChoiceForLead('Unrecognized program',{group:'Some unrelated text'}).label,'');
 });
+
+test('script lane recovers from saved per-tab ownership after its assignment map is lost',async()=>{
+ const worker=fs.readFileSync('extension/src/background/service-worker.js','utf8');
+ const source=worker.slice(worker.indexOf('async function scriptSlotForTab'),worker.indexOf('async function scriptTabForLane'));
+ let saved;const ctx=vm.createContext({scriptSlotMap:async()=>({}),readScriptLead:async id=>id===99?{slot:'2'}:null,writeScriptSlotMap:async map=>saved=map});
+ vm.runInContext(source,ctx);assert.equal(await ctx.scriptSlotForTab(99),'2');assert.equal(saved['99'],'2');assert.equal(await ctx.scriptSlotForTab(98),'');
+});

@@ -108,8 +108,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message?.type === 'impact/getScriptLead') {
     Promise.resolve(allowScriptLeadInContentScripts()).then(async () => {
-      const slot = await scriptSlotForTab(sender.tab?.id);
-      if (slot) await refreshScriptLane(slot);
+      let slot = await scriptSlotForTab(sender.tab?.id);
+      const marker = String(sender.tab?.url || "").match(/[#&]impact-phone=([12])(?:&|$)/)?.[1];
+      if (marker && marker !== slot) {
+        slot = marker;
+        const map = await scriptSlotMap();
+        map[String(sender.tab.id)] = slot;
+        await writeScriptSlotMap(map);
+      }
+      if (slot) await refreshScriptLane(slot).catch(error => { void appendLocalLog("warn", "salebase.scriptRefresh", {slot,reason:error.message}); });
       const saved = await readScriptLead(sender.tab?.id);
       const record = saved?.slot === slot ? saved : null;
       return { fields: record?.fields || laneScriptFields.get(slot)?.fields || null, slot: record?.slot || slot || '', scriptType: record?.scriptType || pendingSalebaseChoices.get(slot)?.label || '' };
@@ -622,7 +629,14 @@ async function writeScriptSlotMap(map) {
 
 async function scriptSlotForTab(tabId) {
   const map = await scriptSlotMap();
-  return map[String(tabId)] === '1' || map[String(tabId)] === '2' ? map[String(tabId)] : '';
+  if (map[String(tabId)] === '1' || map[String(tabId)] === '2') return map[String(tabId)];
+  const record = await readScriptLead(tabId);
+  if (record?.slot === '1' || record?.slot === '2') {
+    map[String(tabId)] = record.slot;
+    await writeScriptSlotMap(map);
+    return record.slot;
+  }
+  return '';
 }
 
 async function scriptTabForLane(slot, tabs) {
@@ -661,7 +675,7 @@ async function openMatchingSalebaseScript(lead, slot = '1', forceNewWindow = fal
   pendingSalebaseChoices.set(lane, request);
   const option = choice.label;
   if (forceNewWindow) {
-    const created = await chrome.windows.create({ url: SALEBASE_SCRIPTS_URL, type: 'popup', focused: false, width: 1080, height: 900 });
+    const created = await chrome.windows.create({ url: SALEBASE_SCRIPTS_URL + "#impact-phone=" + lane, type: 'popup', focused: false, width: 1080, height: 900 });
     const tab = created?.tabs?.find((item) => item?.id);
     if (!tab?.id) throw new Error(`Could not open the Phone ${lane} script window.`);
     await bindScriptTab(tab.id, lane);
@@ -741,7 +755,7 @@ async function reopenPhoneScripts() {
 async function openPhoneScriptWindow(slot) {
   const lane = laneKey(slot);
   // Open in the button's workflow before any IMPACT reads or lead syncing.
-  const created = await chrome.windows.create({ url: SALEBASE_SCRIPTS_URL, type: 'popup', focused: true, width: 1080, height: 900 });
+  const created = await chrome.windows.create({ url: SALEBASE_SCRIPTS_URL + "#impact-phone=" + lane, type: 'popup', focused: true, width: 1080, height: 900 });
   const tab = created?.tabs?.find(item => item?.id);
   if (!tab?.id) throw new Error(`Could not open the Phone ${lane} script window.`);
   const map = await scriptSlotMap();
