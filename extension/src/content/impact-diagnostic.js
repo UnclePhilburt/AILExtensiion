@@ -59,6 +59,16 @@
       return true;
     }
 
+    if (message?.type === "impact/readScriptLead") {
+      // Script fields are already on this page; do not wait for quiet-hours or next-lead work.
+      const lead = location.pathname === "/Lead/InboxDetail" ? collectLocalLeadPreview() : null;
+      if (lead?.available && lead.leadId && lead.leadName) {
+        lead.scriptDetails = collectScriptDetails(document.querySelector("#primaryPanel"), lead.requestType, lead.leadName);
+        sendResponse({ok:true,lead});
+      } else sendResponse({ok:true,lead:null});
+      return false;
+    }
+
     if (message?.type === "impact/readCurrentLead") {
       // The service worker asks after a phone result/Previous/Next, to publish
       // the lead IMPACT moved to without waiting for this page's own check.

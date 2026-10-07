@@ -198,3 +198,11 @@ test('script lane recovers from saved per-tab ownership after its assignment map
  let saved;const ctx=vm.createContext({scriptSlotMap:async()=>({}),readScriptLead:async id=>id===99?{slot:'2'}:null,writeScriptSlotMap:async map=>saved=map});
  vm.runInContext(source,ctx);assert.equal(await ctx.scriptSlotForTab(99),'2');assert.equal(saved['99'],'2');assert.equal(await ctx.scriptSlotForTab(98),'');
 });
+
+test('script updates use a local-only IMPACT read without phone quiet-hours work',()=>{
+ const impact=fs.readFileSync('extension/src/content/impact-diagnostic.js','utf8');
+ const fast=impact.slice(impact.indexOf('if (message?.type === "impact/readScriptLead")'),impact.indexOf('if (message?.type === "impact/readCurrentLead")'));
+ assert.match(fast,/collectLocalLeadPreview/);assert.match(fast,/collectScriptDetails/);assert.doesNotMatch(fast,/await|addQuietHoursContext|leadReadyForPhone/);
+ const worker=fs.readFileSync('extension/src/background/service-worker.js','utf8');
+ assert.match(worker.slice(worker.indexOf('function refreshScriptLane'),worker.indexOf('async function readScriptLead')),/impact\/readScriptLead/);
+});

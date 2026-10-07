@@ -205,7 +205,7 @@
   setInterval(() => {
     if (stopped || document.hidden) return;
     chrome.runtime.sendMessage({ type: "impact/getScriptLead" }).then(response => { setLead(response?.fields); setLane(response?.slot, response?.scriptType); }).catch(() => {});
-  }, 4000);
+  }, 1000);
 
   globalThis.__impactScriptFill = { findPlaceholders, refresh, setLead, PLACEHOLDER_FIELDS };
 })();

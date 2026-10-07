@@ -785,7 +785,7 @@ async function reopenPhoneScriptsForLane(lane, forceNewWindow = true) {
   const impactTabs = await chrome.tabs.query({ url: 'https://mobile.impact.ailife.com/Lead/*' });
   const tab = await impactTabForLane(impactTabs, lane);
   if (tab?.id) {
-    const response = await Promise.race([chrome.tabs.sendMessage(tab.id, { type: 'impact/readCurrentLead' }).catch(() => null), new Promise(resolve => setTimeout(() => resolve(null), 4000))]);
+    const response = await Promise.race([chrome.tabs.sendMessage(tab.id, { type: 'impact/readScriptLead' }).catch(() => null), new Promise(resolve => setTimeout(() => resolve(null), 4000))]);
     if (response?.lead?.available) {
       const { scriptDetails, ...lead } = response.lead;
       noteScriptGroup(lead, scriptDetails);
@@ -1055,7 +1055,7 @@ function refreshScriptLane(slot) {
     const tabs = await chrome.tabs.query({url:'https://mobile.impact.ailife.com/Lead/*'});
     const tab = await impactTabForLane(tabs, lane);
     if (!tab?.id) return;
-    const response = await Promise.race([chrome.tabs.sendMessage(tab.id,{type:'impact/readCurrentLead'}).catch(()=>null),new Promise(resolve=>setTimeout(()=>resolve(null),3000))]);
+    const response = await Promise.race([chrome.tabs.sendMessage(tab.id,{type:'impact/readScriptLead'}).catch(()=>null),new Promise(resolve=>setTimeout(()=>resolve(null),3000))]);
     if (!response?.lead?.available) return;
     const {scriptDetails,...lead}=response.lead;
     noteScriptGroup(lead,scriptDetails);
@@ -1076,7 +1076,7 @@ async function readScriptLead(scriptTabId) {
 async function rememberScriptLead(lead, details, sourceTabId, slot = '1') {
   if (!lead?.available || !lead.leadName) return;
   let user = null;
-  try { user = (await client.auth.getSession()).data?.session?.user || null; } catch (_error) {}
+  try { user = (await Promise.race([client.auth.getSession(),new Promise(resolve=>setTimeout(()=>resolve(null),250))]))?.data?.session?.user || null; } catch (_error) {}
   const fields = scriptFieldsFromLead(lead, details || {}, user);
   if (!fields) return;
   const lane = laneKey(slot);
